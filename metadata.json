@@ -1,0 +1,6 @@
+{
+  "name": "SISCOM",
+  "description": "Sistema Integrado da Seção de Comunicação Social — Gestão operacional, trilha de auditoria e PWA instalável.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

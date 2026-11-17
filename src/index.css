@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-canvas: #0b0e0d;
+    --bg-surface: #121715;
+    --bg-elevated: #181f1c;
+    --bg-input: #0e1211;
+    --border-hairline: rgba(198, 212, 204, 0.11);
+    --border-strong: rgba(198, 212, 204, 0.2);
+    --accent-primary: #2d5a43;
+    --accent-hover: #376c51;
+    --accent-text: #83b499;
+    --text-primary: #e4eae6;
+    --text-secondary: #98a89f;
+    --text-muted: #697870;
+  }
+
+  html {
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    color-scheme: dark;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: "Manrope", "Plus Jakarta Sans", system-ui, sans-serif;
+  }
+
+  .font-mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-prisma {
+    font-family: "Open Sans", Arial, sans-serif;
+  }
+}
+
+.metal-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028) 0%, rgba(255, 255, 255, 0.004) 100%),
+    var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.metal-elevated {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.008) 100%),
+    var(--bg-elevated);
+  border: 1px solid var(--border-hairline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.tactical-plate {
+  background: linear-gradient(165deg, #16231c 0%, #101714 58%, #0c110f 100%);
+  border: 1px solid rgba(198, 212, 204, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    0 12px 28px -12px rgba(0, 0, 0, 0.65);
+}
+
+.tactical-plate:hover {
+  background: linear-gradient(165deg, #1b2b22 0%, #121c18 58%, #0e1411 100%);
+  border-color: #3c7557;
+  box-shadow:
+    inset 0 1px 0 rgba(131, 180, 153, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 18px 34px -14px rgba(15, 45, 30, 0.55);
+}
+
+.alteracao-editor p {
+  margin: 0;
+}
+
+.alteracao-editor ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.25rem 0;
+}
+
+.alteracao-editor ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.25rem 0;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 210mm !important;
+    height: auto !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-wrapper {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .print-page-item {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-page-item:last-child {
+    break-after: auto;
+    page-break-after: avoid;
+  }
+
+  .print-a4-sheet {
+    width: 210mm !important;
+    height: 297mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+    break-inside: avoid;
+  }
+
+  .print-a4-landscape {
+    width: 297mm !important;
+    height: 210mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+    break-inside: avoid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
