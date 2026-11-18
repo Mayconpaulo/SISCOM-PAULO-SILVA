@@ -45,7 +45,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                   Recuperação automática disponível
                 </h1>
                 <p className="text-sm text-[#98A89F] leading-relaxed">
-                  A visualização encontrou um estado inesperado. Clique abaixo para restaurar o Gerador de Prisma.
+                  A visualização encontrou um estado inesperado. Clique abaixo para restaurar o SISCOM.
                 </p>
               </div>
             </div>

@@ -7,9 +7,10 @@ import {
   Layers,
   Printer,
   RotateCcw,
-  Scissors,
 } from 'lucide-react';
 import { AniversarioCardWorkspace } from './AniversarioCardWorkspace';
+import { PesamesCardWorkspace } from './PesamesCardWorkspace';
+import { PinchZoomSheetFrame } from './PinchZoomSheetFrame';
 import { BOAS_VINDAS_TITLE_PATH, BOAS_VINDAS_TITLE_VIEWBOX } from '../lib/boasVindasVectorTitle';
 import {
   A4_H_MM,
@@ -43,7 +44,12 @@ function loadInitialCartoesState(): StoredCartoesState {
       return { model: 'boas_vindas', boasVindas: DEFAULT_BOAS_VINDAS_CONFIG };
     }
     const parsed = JSON.parse(raw) as Partial<StoredCartoesState>;
-    const model: CartaoModel = parsed.model === 'aniversario' ? 'aniversario' : 'boas_vindas';
+    const model: CartaoModel =
+      parsed.model === 'aniversario'
+        ? 'aniversario'
+        : parsed.model === 'pesames'
+          ? 'pesames'
+          : 'boas_vindas';
     const bv = parsed.boasVindas;
     const widthMm =
       typeof bv?.cardWidthMm === 'number' && bv.cardWidthMm >= 45
@@ -342,6 +348,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [capNotice, setCapNotice] = useState<string | null>(null);
   const [anivDownloadSignal, setAnivDownloadSignal] = useState(0);
+  const [pesamesDownloadSignal, setPesamesDownloadSignal] = useState(0);
 
   useEffect(() => {
     onModelChange?.(model);
@@ -451,8 +458,10 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
     if (externalDownloadSignal <= 0) return;
     if (model === 'boas_vindas') {
       void handleDownloadPdf();
-    } else {
+    } else if (model === 'aniversario') {
       setAnivDownloadSignal((prev) => prev + 1);
+    } else {
+      setPesamesDownloadSignal((prev) => prev + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalDownloadSignal]);
@@ -461,7 +470,18 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
     return (
       <AniversarioCardWorkspace
         onSwitchToBoasVindas={() => setModel('boas_vindas')}
+        onSwitchToPesames={() => setModel('pesames')}
         externalDownloadSignal={anivDownloadSignal}
+      />
+    );
+  }
+
+  if (model === 'pesames') {
+    return (
+      <PesamesCardWorkspace
+        onSwitchToBoasVindas={() => setModel('boas_vindas')}
+        onSwitchToAniversario={() => setModel('aniversario')}
+        externalDownloadSignal={pesamesDownloadSignal}
       />
     );
   }
@@ -480,25 +500,29 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
       {/* Left Configuration Panel */}
       <aside className="no-print bg-[#121715] border border-white/10 rounded-xl p-4 sm:p-5 space-y-5">
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-base font-semibold text-[#E4EAE6]">Modelo de Cartão</h2>
-            <span className="font-mono text-[11px] text-[#83B499]">A4 · 210 × 297 mm</span>
-          </div>
+          <span className="block text-xs font-medium text-[#C6D4CC]">Modelo</span>
 
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-[#0B0E0D] border border-white/10">
+          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[#0B0E0D] border border-white/10">
             <button
               type="button"
               onClick={() => setModel('boas_vindas')}
-              className="min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-colors px-2 bg-[#2D5A43] text-white"
+              className="min-h-[38px] rounded-md text-xs font-medium transition-colors px-1.5 bg-[#2D5A43] text-white whitespace-nowrap"
             >
               Boas-Vindas
             </button>
             <button
               type="button"
               onClick={() => setModel('aniversario')}
-              className="min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-colors px-2 text-[#98A89F] hover:text-[#E4EAE6]"
+              className="min-h-[38px] rounded-md text-xs font-medium transition-colors px-1.5 text-[#98A89F] hover:text-[#E4EAE6] whitespace-nowrap"
             >
               Aniversário
+            </button>
+            <button
+              type="button"
+              onClick={() => setModel('pesames')}
+              className="min-h-[38px] rounded-md text-xs font-medium transition-colors px-1.5 text-[#98A89F] hover:text-[#E4EAE6] whitespace-nowrap"
+            >
+              Pêsames
             </button>
           </div>
         </div>
@@ -506,8 +530,8 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
         {/* Size Controls */}
         <section className="space-y-3 border-t border-white/10 pt-4">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#98A89F]">
-                  1. Tamanho do Cartão (mm)
+                <span className="text-xs font-medium text-[#C6D4CC]">
+                  Tamanho (mm)
                 </span>
                 <button
                   type="button"
@@ -523,13 +547,13 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                   className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC]"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  Padrão (134×95)
+                  Padrão
                 </button>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1">
-                  <span className="block text-xs text-[#98A89F]">Largura (mm)</span>
+                  <span className="block text-xs text-[#98A89F]">Largura</span>
                   <input
                     type="number"
                     min={45}
@@ -542,7 +566,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                 </label>
 
                 <label className="space-y-1">
-                  <span className="block text-xs text-[#98A89F]">Altura (mm)</span>
+                  <span className="block text-xs text-[#98A89F]">Altura</span>
                   <input
                     type="number"
                     min={35}
@@ -556,9 +580,9 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
               </div>
 
               <div className="flex items-center justify-between rounded-lg bg-[#0B0E0D] border border-white/8 px-3 py-2 text-xs">
-                <span className="text-[#98A89F]">Limite nesta medida:</span>
+                <span className="text-[#98A89F]">Máx. A4</span>
                 <span className="font-mono font-semibold text-[#83B499]">
-                  até {layout.maxPerPage} {layout.maxPerPage === 1 ? 'cartão' : 'cartões'} / A4
+                  {layout.maxPerPage} {layout.maxPerPage === 1 ? 'cartão' : 'cartões'}
                 </span>
               </div>
 
@@ -573,9 +597,9 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
             {/* Count Per Page Controls */}
             <section className="space-y-3 border-t border-white/10 pt-4">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#98A89F] flex items-center gap-1.5">
+                <span className="text-xs font-medium text-[#C6D4CC] flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-[#83B499]" />
-                  2. Cartões por Página
+                  Por página
                 </span>
                 <span className="font-mono text-xs text-[#83B499]">
                   {layout.effectiveCount} / {layout.maxPerPage}
@@ -623,26 +647,17 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
               {capNotice && (
                 <p className="text-[11px] text-amber-300 leading-snug">{capNotice}</p>
               )}
-
-              <div className="flex items-start gap-2 rounded-lg bg-[#0E1613] border border-[#2D5A43]/40 px-3 py-2 text-[11px] text-[#B7C9BF]">
-                <Scissors className="w-3.5 h-3.5 text-[#83B499] shrink-0 mt-0.5" />
-                <span>
-                  Grade {layout.cols}×{layout.rows} ({layout.rotated90 ? 'rotacionada 90°' : 'em pé'})
-                  com <strong>0 mm de espaço</strong> entre cartões: corte único com estilete nas
-                  linhas divisórias.
-                </span>
-              </div>
             </section>
 
-            {/* Editable Date (always needed) */}
+            {/* Editable Date */}
             <section className="space-y-2.5 border-t border-white/10 pt-4">
               <div className="flex items-center justify-between gap-2">
                 <label
                   htmlFor="cartao-data-input"
-                  className="text-xs font-semibold uppercase tracking-wider text-[#98A89F] flex items-center gap-1.5"
+                  className="text-xs font-medium text-[#C6D4CC] flex items-center gap-1.5"
                 >
                   <Calendar className="w-3.5 h-3.5 text-[#83B499]" />
-                  3. Data do Cartão
+                  Data
                 </label>
                 <button
                   type="button"
@@ -651,7 +666,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                   }
                   className="text-[11px] text-[#83B499] hover:text-[#A8D6BC]"
                 >
-                  Usar data de hoje
+                  Hoje
                 </button>
               </div>
 
@@ -670,9 +685,9 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <label
                   htmlFor="cartao-texto-input"
-                  className="text-xs font-semibold uppercase tracking-wider text-[#98A89F]"
+                  className="text-xs font-medium text-[#C6D4CC]"
                 >
-                  4. Texto de Boas-Vindas
+                  Texto
                 </label>
                 <button
                   type="button"
@@ -682,7 +697,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                   className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC]"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  Texto original
+                  Padrão
                 </button>
               </div>
 
@@ -695,8 +710,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
               />
               {bodyFitInfo.shrunk && (
                 <p className="text-[11px] text-[#83B499]">
-                  Texto ajustado automaticamente ({bodyFitInfo.lineCount} linhas) para não encostar
-                  na data.
+                  Ajustado ({bodyFitInfo.lineCount} linhas)
                 </p>
               )}
             </section>
@@ -710,7 +724,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                 className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] disabled:opacity-60 px-4 text-sm font-medium text-white transition-colors"
               >
                 <Download className="w-4 h-4" />
-                {isExportingPdf ? 'Gerando PDF...' : 'Baixar PDF (A4)'}
+                {isExportingPdf ? 'Gerando...' : 'PDF'}
               </button>
 
               <div className="grid grid-cols-2 gap-2">
@@ -721,7 +735,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                   className="min-h-[38px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/12 bg-[#161D1A] hover:bg-[#1E2824] disabled:opacity-60 px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
                 >
                   <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
-                  {isExportingPng ? 'Gerando...' : 'PNG 300 DPI'}
+                  {isExportingPng ? 'Gerando...' : 'PNG'}
                 </button>
                 <button
                   type="button"
@@ -729,7 +743,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                   className="min-h-[38px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/12 bg-[#161D1A] hover:bg-[#1E2824] px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
                 >
                   <Printer className="w-3.5 h-3.5 text-[#83B499]" />
-                  Imprimir A4
+                  Imprimir
                 </button>
               </div>
 
@@ -742,18 +756,19 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
       </aside>
 
       {/* Right Live A4 Preview */}
-      <section className="flex flex-col items-center">
+      <section className="min-w-0 w-full flex flex-col items-center">
         <div className="w-full max-w-[680px]">
             <div className="no-print flex items-center justify-between text-xs text-[#98A89F] mb-2.5 px-1">
               <span>
-                Folha A4 (210 × 297 mm) · {layout.effectiveCount}{' '}
-                {layout.effectiveCount === 1 ? 'cartão' : 'cartões'} de {layout.cardW} ×{' '}
-                {layout.cardH} mm
+                A4 · {layout.effectiveCount}× ({layout.cardW} × {layout.cardH} mm)
               </span>
-              <span className="font-mono text-[#83B499]">Espaçamento: 0 mm (grudados)</span>
+              <span className="font-mono text-[#83B499]">210 × 297 mm</span>
             </div>
 
-            <div className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-white">
+            <PinchZoomSheetFrame
+              maxWidthClass="max-w-[680px]"
+              className="rounded-xl shadow-2xl border border-white/10 bg-white"
+            >
               <svg
                 viewBox={`0 0 ${A4_W_MM} ${A4_H_MM}`}
                 className="print-a4-sheet w-full h-auto bg-white block select-none"
@@ -824,7 +839,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
                   ))}
                 </g>
               </svg>
-            </div>
+            </PinchZoomSheetFrame>
           </div>
       </section>
     </main>

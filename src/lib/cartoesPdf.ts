@@ -1,6 +1,6 @@
 import { BOAS_VINDAS_TITLE_PATH, BOAS_VINDAS_TITLE_VIEWBOX } from './boasVindasVectorTitle';
 
-export type CartaoModel = 'boas_vindas' | 'aniversario';
+export type CartaoModel = 'boas_vindas' | 'aniversario' | 'pesames';
 
 export interface BoasVindasConfig {
   cardWidthMm: number;

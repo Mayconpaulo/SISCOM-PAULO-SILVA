@@ -1,0 +1,298 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUsernameId(id) {
+      return id is string && id.size() >= 2 && id.size() <= 40 && id.matches('^[a-z0-9._-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'mayconpaulo6000@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidAdminMarker(data, targetUid) {
+      return data.keys().hasAll(['uid', 'createdBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'createdBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.uid == targetUid
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserAccount(data, targetUid) {
+      return data.keys().hasAll([
+          'uid',
+          'username',
+          'displayName',
+          'role',
+          'active',
+          'emailVerified',
+          'permPrismas',
+          'permCrachas',
+          'permAlteracao',
+          'permDocumentos',
+          'permCartoes',
+          'adminUids',
+          'createdBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'username',
+          'displayName',
+          'role',
+          'active',
+          'emailVerified',
+          'mustChangePassword',
+          'securityQuestionSetup',
+          'permPrismas',
+          'permCrachas',
+          'permAlteracao',
+          'permDocumentos',
+          'permCartoes',
+          'adminUids',
+          'createdBy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == targetUid
+        && isValidUsernameId(data.username)
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && data.role in ['admin', 'user']
+        && data.active is bool
+        && data.emailVerified is bool
+        && (!('mustChangePassword' in data) || data.mustChangePassword is bool)
+        && (!('securityQuestionSetup' in data) || data.securityQuestionSetup is bool)
+        && data.permPrismas is bool
+        && data.permCrachas is bool
+        && data.permAlteracao is bool
+        && data.permDocumentos is bool
+        && data.permCartoes is bool
+        && data.adminUids is list
+        && data.adminUids.size() >= 1
+        && data.adminUids.size() <= 10
+        && data.adminUids[0] is string
+        && data.adminUids[0].size() >= 1
+        && data.adminUids[0].size() <= 128
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRecoveryDoc(data, targetUsername) {
+      return data.keys().hasAll([
+          'uid',
+          'username',
+          'question',
+          'salt',
+          'iv',
+          'encryptedPassword',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'username',
+          'question',
+          'salt',
+          'iv',
+          'encryptedPassword',
+          'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidUsernameId(data.username)
+        && data.username == targetUsername
+        && data.question is string
+        && data.question.size() >= 3
+        && data.question.size() <= 160
+        && data.salt is string
+        && data.salt.size() >= 12
+        && data.salt.size() <= 64
+        && data.iv is string
+        && data.iv.size() >= 12
+        && data.iv.size() <= 64
+        && data.encryptedPassword is string
+        && data.encryptedPassword.size() >= 16
+        && data.encryptedPassword.size() <= 512
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidAuthLookupDoc(data, targetUsername) {
+      return data.keys().hasAll(['uid', 'username', 'authEmail', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'username', 'authEmail', 'updatedAt'])
+        && isValidId(data.uid)
+        && isValidUsernameId(data.username)
+        && data.username == targetUsername
+        && data.authEmail is string
+        && data.authEmail.size() >= 6
+        && data.authEmail.size() <= 120
+        && data.authEmail.matches('^[a-z0-9._-]+@siscom\\.app$')
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isAdmin()
+        && isValidId(userId)
+        && isValidAdminMarker(incoming(), userId)
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin()
+        || request.auth.uid in resource.data.adminUids
+        || resource.data.uid == request.auth.uid
+      );
+      allow create: if isAdmin()
+        && isValidId(userId)
+        && isValidUserAccount(incoming(), userId)
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && isValidUserAccount(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'permPrismas',
+              'permCrachas',
+              'permAlteracao',
+              'permDocumentos',
+              'permCartoes',
+              'updatedAt'
+            ])
+            || incoming().diff(existing()).affectedKeys().hasOnly([
+              'username',
+              'displayName',
+              'role',
+              'active',
+              'emailVerified',
+              'mustChangePassword',
+              'securityQuestionSetup',
+              'adminUids',
+              'permPrismas',
+              'permCrachas',
+              'permAlteracao',
+              'permDocumentos',
+              'permCartoes',
+              'updatedAt'
+            ])
+          ))
+          || (
+            isOwner(userId)
+            && existing().active == true
+            && (!('mustChangePassword' in incoming()) || incoming().mustChangePassword == false)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'mustChangePassword',
+              'securityQuestionSetup',
+              'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    match /recovery/{username} {
+      allow get: if isValidUsernameId(username);
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidUsernameId(username)
+        && isValidRecoveryDoc(incoming(), username)
+        && incoming().uid == request.auth.uid
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+      allow update: if isSignedIn()
+        && isValidUsernameId(username)
+        && isValidRecoveryDoc(incoming(), username)
+        && incoming().uid == existing().uid
+        && incoming().username == existing().username
+        && isOwner(existing().uid)
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+      allow delete: if isSignedIn()
+        && isValidUsernameId(username)
+        && (isOwner(existing().uid) || isAdmin());
+    }
+
+    match /auth_lookup/{username} {
+      allow get: if isValidUsernameId(username);
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidUsernameId(username)
+        && isValidAuthLookupDoc(incoming(), username)
+        && (
+          isAdmin()
+          || (
+            incoming().uid == request.auth.uid
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username
+          )
+        );
+      allow update: if isSignedIn()
+        && isValidUsernameId(username)
+        && isValidAuthLookupDoc(incoming(), username)
+        && (
+          isAdmin()
+          || (
+            incoming().uid == existing().uid
+            && isOwner(existing().uid)
+          )
+        );
+      allow delete: if isSignedIn()
+        && isValidUsernameId(username)
+        && (isAdmin() || isOwner(existing().uid));
+    }
+
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+  }
+}

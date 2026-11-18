@@ -132,6 +132,38 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
     }
   }, [documents]);
 
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as { siscomDocId?: unknown } | null;
+      const nextDocId = typeof state?.siscomDocId === 'string' ? state.siscomDocId : null;
+      setSelectedDocId(nextDocId);
+      setNotice(null);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const openDocument = (docId: string, nextNotice: string | null = null) => {
+    const nextUrl = `${window.location.pathname}${window.location.search}#documentos/${encodeURIComponent(docId)}`;
+    window.history.pushState(
+      { siscomScreen: 'documentos', siscomDocId: docId, siscomDepth: 2 },
+      '',
+      nextUrl
+    );
+    setSelectedDocId(docId);
+    setNotice(nextNotice);
+  };
+
+  const closeDocumentToFolder = () => {
+    setNotice(null);
+    const state = window.history.state as { siscomDocId?: unknown } | null;
+    if (typeof state?.siscomDocId === 'string') {
+      window.history.back();
+      return;
+    }
+    setSelectedDocId(null);
+  };
+
   const updateActiveDoc = (updater: (doc: StoredTableDocument) => StoredTableDocument) => {
     if (!selectedDocId) return;
     setDocuments((prev) =>
@@ -154,9 +186,9 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       a.download = `${slug}-a4-horizontal.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice('PDF A4 horizontal (1 página) gerado com sucesso.');
+      setNotice('PDF gerado.');
     } catch {
-      setNotice('Não foi possível gerar o PDF. Utilize Imprimir A4 como alternativa imediata.');
+      setNotice('Erro ao gerar PDF.');
     } finally {
       setExporting(null);
     }
@@ -182,9 +214,9 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       a.download = `${slug}.doc`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice('Arquivo Word (.doc) em A4 horizontal exportado.');
+      setNotice('Word (.doc) exportado.');
     } catch {
-      setNotice('Não foi possível gerar o .doc. Use Baixar PDF ou Imprimir A4.');
+      setNotice('Erro ao gerar .doc.');
     } finally {
       setExporting(null);
     }
@@ -202,7 +234,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       a.download = `${slug}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice('Planilha .csv exportada.');
+      setNotice('CSV exportado.');
     } finally {
       setExporting(null);
     }
@@ -211,8 +243,8 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
   const handleCreateNewDoc = () => {
     const newDoc: StoredTableDocument = {
       id: `doc-${Date.now()}`,
-      folderName: 'Documentos Personalizados',
-      title: 'NOVO CONTROLE / RELAÇÃO',
+      folderName: 'Personalizados',
+      title: 'NOVO DOCUMENTO',
       subtitle: '',
       orientation: 'landscape',
       rowCount: 20,
@@ -232,8 +264,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       isBuiltIn: false,
     };
     setDocuments((prev) => [newDoc, ...prev]);
-    setSelectedDocId(newDoc.id);
-    setNotice('Novo documento A4 horizontal criado na pasta.');
+    openDocument(newDoc.id, 'Documento criado.');
   };
 
   const handleDuplicateDoc = (doc: StoredTableDocument) => {
@@ -247,13 +278,12 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       cellValues: { ...doc.cellValues },
     };
     setDocuments((prev) => [copy, ...prev]);
-    setSelectedDocId(copy.id);
-    setNotice('Cópia criada na pasta de documentos.');
+    openDocument(copy.id, 'Cópia criada.');
   };
 
   const handleDeleteDoc = (docId: string) => {
     setDocuments((prev) => prev.filter((d) => d.id !== docId));
-    if (selectedDocId === docId) setSelectedDocId(null);
+    if (selectedDocId === docId) closeDocumentToFolder();
   };
 
   const handleImportCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -265,10 +295,9 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
         const text = String(reader.result || '');
         const imported = importCsvAsDocument(file.name, text);
         setDocuments((prev) => [imported, ...prev]);
-        setSelectedDocId(imported.id);
-        setNotice(`Arquivo "${file.name}" importado e salvo na pasta.`);
+        openDocument(imported.id, `"${file.name}" importado.`);
       } catch {
-        setNotice('Não foi possível ler o arquivo CSV.');
+        setNotice('Erro ao ler CSV.');
       }
     };
     reader.readAsText(file, 'utf-8');
@@ -279,19 +308,14 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
   if (!activeDoc) {
     return (
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        <div className="metal-surface rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-lg bg-[#2D5A43]/25 border border-[#83B499]/30 flex items-center justify-center text-[#83B499] shrink-0">
+        <div className="metal-surface rounded-xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#2D5A43]/25 border border-[#83B499]/30 flex items-center justify-center text-[#83B499] shrink-0">
               <FolderOpen className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="font-display text-lg sm:text-xl font-semibold text-[#E4EAE6]">
-                Pasta de Documentos
-              </h2>
-              <p className="text-xs sm:text-sm text-[#98A89F]">
-                Armazenamento local com modelos prontos, editáveis como planilha/Word em folha A4 horizontal.
-              </p>
-            </div>
+            <h2 className="font-display text-base sm:text-lg font-semibold text-[#E4EAE6]">
+              Arquivos
+            </h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -305,24 +329,24 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="min-h-[40px] inline-flex items-center gap-2 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3.5 text-xs font-medium text-[#E4EAE6] transition-colors"
+              className="min-h-[38px] inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
             >
-              <Upload className="w-4 h-4 text-[#83B499]" />
-              <span>Importar CSV</span>
+              <Upload className="w-3.5 h-3.5 text-[#83B499]" />
+              <span>CSV</span>
             </button>
             <button
               type="button"
               onClick={handleCreateNewDoc}
-              className="min-h-[40px] inline-flex items-center gap-2 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] px-3.5 text-xs font-medium text-white transition-colors"
+              className="min-h-[38px] inline-flex items-center gap-1.5 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] px-3.5 text-xs font-medium text-white transition-colors"
             >
-              <FilePlus2 className="w-4 h-4" />
-              <span>Novo Documento</span>
+              <FilePlus2 className="w-3.5 h-3.5" />
+              <span>Novo</span>
             </button>
           </div>
         </div>
 
         {notice && (
-          <p className="text-xs text-[#83B499] bg-[#2D5A43]/15 border border-[#83B499]/25 rounded-lg px-3.5 py-2.5">
+          <p className="text-xs text-[#83B499] bg-[#2D5A43]/15 border border-[#83B499]/25 rounded-lg px-3.5 py-2">
             {notice}
           </p>
         )}
@@ -335,36 +359,26 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             >
               <div className="space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="w-10 h-10 rounded-lg bg-[#0E1211] border border-white/10 flex items-center justify-center text-[#83B499] shrink-0">
-                    <FileSpreadsheet className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-lg bg-[#0E1211] border border-white/10 flex items-center justify-center text-[#83B499] shrink-0">
+                    <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <span className="font-mono text-[11px] text-[#83B499]">
-                    A4 Horizontal · {doc.rowCount} linhas
+                    {doc.rowCount} linhas
                   </span>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="block text-[11px] text-[#98A89F]">{doc.folderName}</span>
-                  <h3 className="font-display text-sm sm:text-base font-semibold text-[#E4EAE6] leading-snug">
-                    {doc.title}
-                  </h3>
-                  <p className="text-xs text-[#98A89F]">
-                    {doc.columns.length} colunas ({doc.columns.map((c) => c.label).slice(0, 4).join(', ')}
-                    {doc.columns.length > 4 ? '...' : ''})
-                  </p>
-                </div>
+                <h3 className="font-display text-sm sm:text-base font-semibold text-[#E4EAE6] leading-snug">
+                  {doc.title}
+                </h3>
               </div>
 
               <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedDocId(doc.id);
-                    setNotice(null);
-                  }}
+                  onClick={() => openDocument(doc.id)}
                   className="flex-1 min-h-[38px] inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] px-3 text-xs font-medium text-white transition-colors"
                 >
-                  <span>Abrir / Editar</span>
+                  <span>Abrir</span>
                 </button>
 
                 <button
@@ -435,7 +449,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
     if (!activeDoc.isBuiltIn) return;
     const restored = createDefaultRelacaoDocument();
     updateActiveDoc(() => restored);
-    setNotice('Modelo original da Relação de Entrada e Saída restaurado.');
+    setNotice('Padrão restaurado.');
   };
 
   return (
@@ -448,14 +462,11 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
         <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3.5">
           <button
             type="button"
-            onClick={() => {
-              setSelectedDocId(null);
-              setNotice(null);
-            }}
+            onClick={closeDocumentToFolder}
             className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Voltar à Pasta</span>
+            <span>Pasta</span>
           </button>
 
           {activeDoc.isBuiltIn && (
@@ -465,16 +476,16 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
               className="min-h-[36px] inline-flex items-center gap-1 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-2.5 text-[11px] text-[#C6D4CC] transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#83B499]" />
-              <span>Restaurar</span>
+              <span>Padrão</span>
             </button>
           )}
         </div>
 
-        {/* 1. Quantidade de Linhas + Auto-resize Alert */}
+        {/* 1. Linhas */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="doc-row-count" className="text-xs font-medium text-[#C6D4CC]">
-              Quantidade de linhas (Folha A4 Horizontal)
+              Linhas
             </label>
             <span className="font-mono text-[11px] text-[#83B499]">
               {metrics.rowHMm.toFixed(1)} mm/linha
@@ -514,26 +525,22 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             </div>
           </div>
 
-          <p
-            className={`text-[11px] rounded-lg px-3 py-2 border ${
-              metrics.isCompressed
-                ? 'text-[#E5C17B] bg-[#3B2E17]/40 border-[#E5C17B]/25'
-                : 'text-[#83B499] bg-[#2D5A43]/15 border-[#83B499]/25'
-            }`}
-          >
-            {metrics.resizeNotice}
-          </p>
+          {metrics.isCompressed && (
+            <p className="text-[11px] rounded-lg px-3 py-1.5 border text-[#E5C17B] bg-[#3B2E17]/40 border-[#E5C17B]/25">
+              {metrics.resizeNotice}
+            </p>
+          )}
         </div>
 
-        {/* 2. Cabeçalho Superior e Rodapé (Data e Assinatura) */}
+        {/* 2. Textos */}
         <div className="space-y-2.5 pt-3 border-t border-white/10">
           <span className="block text-xs font-medium text-[#C6D4CC]">
-            Cabeçalho Superior e Rodapé
+            Textos
           </span>
 
           <div className="space-y-1">
             <label htmlFor="doc-title" className="block text-[11px] text-[#98A89F]">
-              Título em cima
+              Título
             </label>
             <input
               id="doc-title"
@@ -546,21 +553,21 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
 
           <div className="space-y-1">
             <label htmlFor="doc-subtitle" className="block text-[11px] text-[#98A89F]">
-              Subtítulo superior (opcional)
+              Subtítulo
             </label>
             <input
               id="doc-subtitle"
               type="text"
               value={activeDoc.subtitle}
               onChange={(e) => updateActiveDoc((d) => ({ ...d, subtitle: e.target.value }))}
-              placeholder="Ex.: 1º BI Mec (Es) — Seção de Relações Públicas"
+              placeholder="Opcional"
               className="w-full min-h-[36px] rounded-lg bg-[#0E1211] border border-white/12 px-3 text-xs text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
             />
           </div>
 
           <div className="space-y-1">
             <label htmlFor="doc-date" className="block text-[11px] text-[#98A89F]">
-              Texto da data (embaixo)
+              Data
             </label>
             <input
               id="doc-date"
@@ -574,7 +581,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2 space-y-1">
               <label htmlFor="doc-sig" className="block text-[11px] text-[#98A89F]">
-                Assinatura / Apoio (embaixo)
+                Assinatura
               </label>
               <input
                 id="doc-sig"
@@ -586,7 +593,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             </div>
             <div className="space-y-1">
               <label htmlFor="doc-sig-lines" className="block text-[11px] text-[#98A89F]">
-                Linhas ass.
+                Linhas
               </label>
               <input
                 id="doc-sig-lines"
@@ -606,11 +613,11 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
           </div>
         </div>
 
-        {/* 3. Colunas Editáveis */}
+        {/* 3. Colunas */}
         <div className="space-y-2.5 pt-3 border-t border-white/10">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-[#C6D4CC]">
-              Colunas da tabela ({activeDoc.columns.length})
+              Colunas ({activeDoc.columns.length})
             </span>
             <button
               type="button"
@@ -618,7 +625,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
               className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A3D4B9] transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Adicionar coluna</span>
+              <span>Coluna</span>
             </button>
           </div>
 
@@ -701,12 +708,12 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
                 {!col.autoNumber && (
                   <input
                     type="text"
-                    aria-label={`Texto padrão das linhas da coluna ${col.label}`}
+                    aria-label={`Texto padrão da coluna ${col.label}`}
                     value={col.defaultCellText}
                     onChange={(e) =>
                       handleUpdateColumn(col.id, { defaultCellText: e.target.value })
                     }
-                    placeholder="Texto padrão em todas as linhas (opcional; use | para dividir)"
+                    placeholder="Texto padrão (| divide)"
                     className="w-full h-7 rounded bg-[#121715] border border-white/12 px-2 text-[11px] text-[#C6D4CC] placeholder:text-[#697870]"
                   />
                 )}
@@ -724,7 +731,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] disabled:opacity-50 px-3 text-xs font-medium text-white transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{exporting === 'pdf' ? 'Gerando...' : 'Baixar PDF'}</span>
+            <span>{exporting === 'pdf' ? 'Gerando...' : 'PDF'}</span>
           </button>
 
           <button
@@ -734,7 +741,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] disabled:opacity-50 px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
           >
             <FileText className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Baixar Word (.doc)</span>
+            <span>Word (.doc)</span>
           </button>
 
           <button
@@ -743,7 +750,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
           >
             <Printer className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Imprimir A4</span>
+            <span>Imprimir</span>
           </button>
 
           <button
@@ -752,7 +759,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3 text-xs font-medium text-[#E4EAE6] transition-colors"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Baixar CSV</span>
+            <span>CSV</span>
           </button>
         </div>
 
@@ -793,7 +800,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
                   : 'bg-[#0E1211] border-white/12 text-[#98A89F]'
               }`}
             >
-              Cabeçalho Negrito
+              Negrito
             </button>
 
             {Object.keys(activeDoc.cellValues).length > 0 && (
@@ -802,13 +809,12 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
                 onClick={() => updateActiveDoc((d) => ({ ...d, cellValues: {} }))}
                 className="h-8 px-2.5 rounded border border-white/12 bg-[#0E1211] text-xs text-[#98A89F] hover:text-[#E4EAE6]"
               >
-                Limpar células digitadas
+                Limpar células
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-2 text-xs text-[#98A89F]">
-            <span className="hidden sm:inline">Clique em qualquer célula para editar</span>
             <select
               aria-label="Zoom da folha A4"
               value={zoom}

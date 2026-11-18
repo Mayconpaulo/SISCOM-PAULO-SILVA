@@ -20,6 +20,7 @@ export default defineConfig(() => {
           'pwa-maskable-512x512.png',
           'assets/brasao_exercito.png',
           'assets/brasao_1bimec.png',
+          'assets/logo_arma_comunicacoes.png',
           'assets/cartoes/marca_dagua.png',
           'assets/cartoes/brasao_republica.png',
           'assets/cartoes/distintivo_1bimec.png',
@@ -29,9 +30,9 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'Artes A4 — Prismas e Crachás',
-          short_name: 'Artes A4',
-          description: 'Gerador institucional em folha A4 para prismas centralizados e crachás de identificação ou RP com frente e verso dobrável.',
+          name: 'SISCOM',
+          short_name: 'SISCOM',
+          description: 'Sistema auxiliar institucional para geração, edição e armazenamento de documentos e cartões.',
           theme_color: '#101413',
           background_color: '#0B0E0D',
           display: 'standalone',
@@ -60,6 +61,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           globIgnores: ['**/aistudio/**'],
           navigateFallback: '/index.html',

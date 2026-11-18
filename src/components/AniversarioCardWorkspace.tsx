@@ -30,14 +30,17 @@ import {
   MONTHS_PT,
   formatAniversarianteRecipientLine,
   formatBirthdayCardDate,
+  inferPortugueseRecipientPrefix,
   parseAniversariantesPdf,
 } from '../lib/aniversariantesParser';
 import { CARTOES_ASSETS } from '../lib/cartoesPdf';
+import { PinchZoomSheetFrame } from './PinchZoomSheetFrame';
 
 const ANIV_STORAGE_KEY = 'siscom_aniversario_state_v1';
 
 interface IndividualCardForm {
   prefix: string;
+  prefixAuto?: boolean;
   sigla: string;
   qualificacao: string;
   nome: string;
@@ -64,6 +67,7 @@ function getDefaultIndividual(): IndividualCardForm {
   const now = new Date();
   return {
     prefix: 'AO',
+    prefixAuto: true,
     sigla: 'SD',
     qualificacao: 'INF',
     nome: 'JOSUE GAIBA COELHO',
@@ -79,7 +83,7 @@ function loadInitialAnivState(): StoredAnivState {
     audience: 'batalhao',
     inputMode: 'relacao',
     customBodyText: null,
-    relationPrefix: 'AO',
+    relationPrefix: 'AUTO',
     relationMonth: 'Setembro',
     relationYear: new Date().getFullYear(),
     entries: [],
@@ -93,13 +97,26 @@ function loadInitialAnivState(): StoredAnivState {
     if (!raw) return fallback;
     const p = JSON.parse(raw) as Partial<StoredAnivState>;
     const entries = Array.isArray(p.entries) ? p.entries : [];
+    const savedIndiv = {
+      ...getDefaultIndividual(),
+      ...(p.individual || {}),
+    };
+    const isAutoIndiv =
+      typeof p.individual?.prefixAuto === 'boolean' ? p.individual.prefixAuto : true;
     return {
       audience: p.audience === 'eterno_comandante' ? 'eterno_comandante' : 'batalhao',
       inputMode: p.inputMode === 'individual' ? 'individual' : 'relacao',
       customBodyText: typeof p.customBodyText === 'string' ? p.customBodyText : null,
-      relationPrefix: typeof p.relationPrefix === 'string' && p.relationPrefix ? p.relationPrefix : 'AO',
-      relationMonth: typeof p.relationMonth === 'string' && p.relationMonth ? p.relationMonth : 'Setembro',
-      relationYear: typeof p.relationYear === 'number' && p.relationYear > 1990 ? p.relationYear : new Date().getFullYear(),
+      relationPrefix:
+        typeof p.relationPrefix === 'string' && p.relationPrefix && p.relationPrefix !== 'AO'
+          ? p.relationPrefix
+          : 'AUTO',
+      relationMonth:
+        typeof p.relationMonth === 'string' && p.relationMonth ? p.relationMonth : 'Setembro',
+      relationYear:
+        typeof p.relationYear === 'number' && p.relationYear > 1990
+          ? p.relationYear
+          : new Date().getFullYear(),
       entries,
       selectedEntryId:
         typeof p.selectedEntryId === 'string' && entries.some((e) => e.id === p.selectedEntryId)
@@ -107,8 +124,9 @@ function loadInitialAnivState(): StoredAnivState {
           : entries[0]?.id ?? null,
       sourceFileName: typeof p.sourceFileName === 'string' ? p.sourceFileName : null,
       individual: {
-        ...getDefaultIndividual(),
-        ...(p.individual || {}),
+        ...savedIndiv,
+        prefixAuto: isAutoIndiv,
+        prefix: isAutoIndiv ? inferPortugueseRecipientPrefix(savedIndiv.nome) : savedIndiv.prefix,
       },
     };
   } catch {
@@ -129,11 +147,13 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 
 interface AniversarioWorkspaceProps {
   onSwitchToBoasVindas: () => void;
+  onSwitchToPesames: () => void;
   externalDownloadSignal?: number;
 }
 
 export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
   onSwitchToBoasVindas,
+  onSwitchToPesames,
   externalDownloadSignal = 0,
 }) => {
   const [initial] = useState<StoredAnivState>(() => loadInitialAnivState());
@@ -197,15 +217,22 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
     [entries, selectedEntryId]
   );
 
+  const resolveEntryPrefix = (entry: AniversarianteEntry): string =>
+    entry.prefix?.trim() ? entry.prefix : relationPrefix || 'AUTO';
+
   // Build active card data for live preview and single-card PNG export
   const activeCardData: AniversarioCardData = useMemo(() => {
     if (inputMode === 'individual') {
+      const effectivePrefix =
+        individual.prefixAuto !== false
+          ? inferPortugueseRecipientPrefix(individual.nome)
+          : individual.prefix || inferPortugueseRecipientPrefix(individual.nome);
       const recipientLine =
         formatAniversarianteRecipientLine(
           individual.sigla,
           individual.qualificacao,
           individual.nome,
-          individual.prefix || 'AO'
+          effectivePrefix
         ) || 'AO MILITAR DO BATALHÃO';
       const dateLine = individual.customDateOverride.trim()
         ? individual.customDateOverride.trim()
@@ -222,7 +249,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
         selectedEntry.sigla,
         selectedEntry.qualificacao,
         selectedEntry.nome,
-        relationPrefix || 'AO'
+        resolveEntryPrefix(selectedEntry)
       );
       const dateLine = formatBirthdayCardDate(selectedEntry.dia, relationMonth, relationYear);
       return {
@@ -367,7 +394,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
           entry.sigla,
           entry.qualificacao,
           entry.nome,
-          relationPrefix || 'AO'
+          resolveEntryPrefix(entry)
         );
         return {
           filenameBase: `${recipientLine}_dia_${entry.dia}`,
@@ -407,32 +434,36 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
       <aside className="no-print bg-[#121715] border border-white/10 rounded-xl p-4 sm:p-5 space-y-5">
         {/* Card Model Switcher */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-base font-semibold text-[#E4EAE6]">Modelo de Cartão</h2>
-            <span className="font-mono text-[11px] text-[#83B499]">Digital · {ANIV_W_PX}×{ANIV_H_PX} px</span>
-          </div>
+          <span className="block text-xs font-medium text-[#C6D4CC]">Modelo</span>
 
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-[#0B0E0D] border border-white/10">
+          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[#0B0E0D] border border-white/10">
             <button
               type="button"
               onClick={onSwitchToBoasVindas}
-              className="min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-colors px-2 text-[#98A89F] hover:text-[#E4EAE6]"
+              className="min-h-[38px] rounded-md text-xs font-medium transition-colors px-1.5 text-[#98A89F] hover:text-[#E4EAE6] whitespace-nowrap"
             >
               Boas-Vindas
             </button>
             <button
               type="button"
-              className="min-h-[38px] rounded-md text-xs sm:text-sm font-medium transition-colors px-2 bg-[#2D5A43] text-white"
+              className="min-h-[38px] rounded-md text-xs font-medium transition-colors px-1.5 bg-[#2D5A43] text-white whitespace-nowrap"
             >
               Aniversário
+            </button>
+            <button
+              type="button"
+              onClick={onSwitchToPesames}
+              className="min-h-[38px] rounded-md text-xs font-medium transition-colors px-1.5 text-[#98A89F] hover:text-[#E4EAE6] whitespace-nowrap"
+            >
+              Pêsames
             </button>
           </div>
         </div>
 
-        {/* 1. Audience Option (Militares do Batalhão vs Eterno Comandante) */}
+        {/* Audience Option */}
         <section className="space-y-2.5 border-t border-white/10 pt-4">
-          <span className="block text-xs font-semibold uppercase tracking-wider text-[#98A89F]">
-            1. Destinatário do Texto
+          <span className="block text-xs font-medium text-[#C6D4CC]">
+            Destinatário
           </span>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -445,7 +476,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               }`}
             >
               <Users className="w-3.5 h-3.5 shrink-0" />
-              <span>Militares do Batalhão</span>
+              <span>Militares</span>
             </button>
             <button
               type="button"
@@ -457,15 +488,15 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               }`}
             >
               <Award className="w-3.5 h-3.5 shrink-0" />
-              <span>Eterno Comandante</span>
+              <span>Eterno Cmt</span>
             </button>
           </div>
         </section>
 
-        {/* 2. Mode Switcher (Por Relação PDF vs Individual) */}
+        {/* Mode Switcher */}
         <section className="space-y-3 border-t border-white/10 pt-4">
-          <span className="block text-xs font-semibold uppercase tracking-wider text-[#98A89F]">
-            2. Modo de Preenchimento
+          <span className="block text-xs font-medium text-[#C6D4CC]">
+            Modo
           </span>
           <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-[#0B0E0D] border border-white/10">
             <button
@@ -478,7 +509,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               }`}
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Por Relação (PDF)</span>
+              <span>Relação (PDF)</span>
             </button>
             <button
               type="button"
@@ -516,10 +547,10 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 <FileUp className="w-4 h-4 text-[#83B499] shrink-0" />
                 <span>
                   {parseProgress
-                    ? 'Processando relação...'
+                    ? 'Lendo PDF...'
                     : sourceFileName
-                      ? `Trocar PDF (${sourceFileName})`
-                      : 'Enviar Relação de Aniversariantes (PDF)'}
+                      ? `Trocar (${sourceFileName})`
+                      : 'Enviar PDF da relação'}
                 </span>
               </button>
 
@@ -539,7 +570,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               )}
 
               {/* Month, Year & Prefix controls */}
-              <div className="grid grid-cols-[1fr_92px_68px] gap-2">
+              <div className="grid grid-cols-[1fr_76px_118px] gap-2">
                 <label className="space-y-1">
                   <span className="block text-[11px] text-[#98A89F]">Mês</span>
                   <select
@@ -571,12 +602,15 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
 
                 <label className="space-y-1">
                   <span className="block text-[11px] text-[#98A89F]">Prefixo</span>
-                  <input
-                    type="text"
+                  <select
                     value={relationPrefix}
                     onChange={(e) => setRelationPrefix(e.target.value)}
-                    className="w-full h-9 rounded-lg bg-[#0B0E0D] border border-white/12 px-2 text-xs font-mono uppercase text-[#E4EAE6] focus:outline-none focus:border-[#83B499]"
-                  />
+                    className="w-full h-9 rounded-lg bg-[#0B0E0D] border border-white/12 px-2 text-xs text-[#E4EAE6] focus:outline-none focus:border-[#83B499]"
+                  >
+                    <option value="AUTO">Auto (AO / A)</option>
+                    <option value="AO">Sempre AO</option>
+                    <option value="A">Sempre A</option>
+                  </select>
                 </label>
               </div>
 
@@ -584,7 +618,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-[#98A89F]">
-                    Militares ({entries.length})
+                    Lista ({entries.length})
                   </span>
                   <button
                     type="button"
@@ -597,11 +631,8 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 </div>
 
                 {entries.length === 0 ? (
-                  <p className="rounded-lg bg-[#0B0E0D] border border-white/8 p-3 text-xs text-[#98A89F] leading-relaxed">
-                    Envie o PDF mensal da relação. A tabela será lida automaticamente aplicando a
-                    regra de <strong className="text-[#E4EAE6]">SD + RS / RSCT</strong> sem
-                    qualificação e <strong className="text-[#E4EAE6]">SD + INF / INT / SAU</strong>{' '}
-                    com qualificação.
+                  <p className="rounded-lg bg-[#0B0E0D] border border-white/8 p-3 text-xs text-[#98A89F]">
+                    Envie o PDF mensal da relação.
                   </p>
                 ) : (
                   <div className="max-h-56 overflow-y-auto rounded-lg bg-[#0B0E0D] border border-white/10 divide-y divide-white/8">
@@ -611,7 +642,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                         entry.sigla,
                         entry.qualificacao,
                         entry.nome,
-                        relationPrefix || 'AO'
+                        resolveEntryPrefix(entry)
                       );
                       return (
                         <button
@@ -641,8 +672,8 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               {selectedEntry && (
                 <div className="rounded-lg bg-[#0B0E0D] border border-white/10 p-3 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#83B499]">
-                      Editar Militar Selecionado
+                    <span className="text-[11px] font-medium text-[#83B499]">
+                      Selecionado
                     </span>
                     <button
                       type="button"
@@ -687,43 +718,79 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                     </label>
                   </div>
 
-                  <label className="block space-y-1">
-                    <span className="block text-[10px] text-[#98A89F]">Nome Completo</span>
-                    <input
-                      type="text"
-                      value={selectedEntry.nome}
-                      onChange={(e) => handleUpdateSelectedEntry({ nome: e.target.value })}
-                      className="w-full h-8 rounded bg-[#121715] border border-white/12 px-2 text-xs text-[#E4EAE6]"
-                    />
-                  </label>
+                  <div className="grid grid-cols-[72px_1fr] gap-2">
+                    <label className="block space-y-1">
+                      <span className="block text-[10px] text-[#98A89F]">Prefixo</span>
+                      <input
+                        type="text"
+                        value={selectedEntry.prefix ?? ''}
+                        onChange={(e) => handleUpdateSelectedEntry({ prefix: e.target.value })}
+                        placeholder={inferPortugueseRecipientPrefix(selectedEntry.nome)}
+                        className="w-full h-8 rounded bg-[#121715] border border-white/12 px-2 text-xs uppercase text-[#E4EAE6]"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="block text-[10px] text-[#98A89F]">Nome</span>
+                      <input
+                        type="text"
+                        value={selectedEntry.nome}
+                        onChange={(e) => handleUpdateSelectedEntry({ nome: e.target.value })}
+                        className="w-full h-8 rounded bg-[#121715] border border-white/12 px-2 text-xs text-[#E4EAE6]"
+                      />
+                    </label>
+                  </div>
                 </div>
               )}
             </div>
           ) : (
             /* Individual Mode Inputs */
             <div className="space-y-3">
-              <div className="grid grid-cols-[68px_1fr_1fr] gap-2">
-                <label className="space-y-1">
-                  <span className="block text-[11px] text-[#98A89F]">Prefixo</span>
+              <div className="grid grid-cols-[84px_1fr_1fr] gap-2">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <label htmlFor="aniv-indiv-prefix" className="text-[11px] text-[#98A89F]">
+                      Prefixo
+                    </label>
+                    {individual.prefixAuto === false && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIndividual((prev) => ({
+                            ...prev,
+                            prefixAuto: true,
+                            prefix: inferPortugueseRecipientPrefix(prev.nome),
+                          }))
+                        }
+                        className="text-[10px] text-[#83B499] hover:text-[#A8D6BC]"
+                      >
+                        Auto
+                      </button>
+                    )}
+                  </div>
                   <input
+                    id="aniv-indiv-prefix"
                     type="text"
                     value={individual.prefix}
                     onChange={(e) =>
-                      setIndividual((prev) => ({ ...prev, prefix: e.target.value }))
+                      setIndividual((prev) => ({
+                        ...prev,
+                        prefixAuto: false,
+                        prefix: e.target.value,
+                      }))
                     }
-                    placeholder="AO"
+                    placeholder="AO / A"
                     className="w-full h-9 rounded-lg bg-[#0B0E0D] border border-white/12 px-2.5 text-xs uppercase text-[#E4EAE6] focus:outline-none focus:border-[#83B499]"
                   />
-                </label>
+                </div>
                 <label className="space-y-1">
-                  <span className="block text-[11px] text-[#98A89F]">Graduação / Sigla</span>
+                  <span className="block text-[11px] text-[#98A89F]">Sigla</span>
                   <input
                     type="text"
                     value={individual.sigla}
                     onChange={(e) =>
                       setIndividual((prev) => ({ ...prev, sigla: e.target.value }))
                     }
-                    placeholder="SD, CB, 3º SGT, TC"
+                    placeholder="SD, CB, SGT"
                     className="w-full h-9 rounded-lg bg-[#0B0E0D] border border-white/12 px-2.5 text-xs uppercase text-[#E4EAE6] focus:outline-none focus:border-[#83B499]"
                   />
                 </label>
@@ -735,26 +802,32 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                     onChange={(e) =>
                       setIndividual((prev) => ({ ...prev, qualificacao: e.target.value }))
                     }
-                    placeholder="INF, INT, SAU..."
+                    placeholder="INF, INT, SAU"
                     className="w-full h-9 rounded-lg bg-[#0B0E0D] border border-white/12 px-2.5 text-xs uppercase text-[#E4EAE6] focus:outline-none focus:border-[#83B499]"
                   />
                 </label>
               </div>
 
               <label className="block space-y-1">
-                <span className="block text-[11px] text-[#98A89F]">Nome Completo</span>
+                <span className="block text-[11px] text-[#98A89F]">Nome</span>
                 <input
                   type="text"
                   value={individual.nome}
-                  onChange={(e) => setIndividual((prev) => ({ ...prev, nome: e.target.value }))}
-                  placeholder="EX.: JOSUE GAIBA COELHO"
+                  onChange={(e) => {
+                    const nextNome = e.target.value;
+                    setIndividual((prev) => ({
+                      ...prev,
+                      nome: nextNome,
+                      prefix:
+                        prev.prefixAuto !== false
+                          ? inferPortugueseRecipientPrefix(nextNome)
+                          : prev.prefix,
+                    }));
+                  }}
+                  placeholder="JOSUE GAIBA COELHO"
                   className="w-full h-9 rounded-lg bg-[#0B0E0D] border border-white/12 px-3 text-xs uppercase text-[#E4EAE6] focus:outline-none focus:border-[#83B499]"
                 />
               </label>
-
-              <p className="text-[11px] text-[#83B49F]">
-                Prévia da linha: <strong className="text-[#E4EAE6]">{activeCardData.recipientLine}</strong>
-              </p>
 
               <div className="grid grid-cols-[70px_1fr_82px] gap-2">
                 <label className="space-y-1">
@@ -814,7 +887,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
               <label className="block space-y-1">
                 <span className="flex items-center gap-1 text-[11px] text-[#98A89F]">
                   <Calendar className="w-3 h-3 text-[#83B499]" />
-                  Data personalizada (opcional)
+                  Data livre (opcional)
                 </span>
                 <input
                   type="text"
@@ -830,14 +903,14 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
           )}
         </section>
 
-        {/* 3. Editable Body Paragraph */}
+        {/* Editable Body Paragraph */}
         <section className="space-y-2.5 border-t border-white/10 pt-4">
           <div className="flex items-center justify-between gap-2">
             <label
               htmlFor="aniv-texto-input"
-              className="text-xs font-semibold uppercase tracking-wider text-[#98A89F]"
+              className="text-xs font-medium text-[#C6D4CC]"
             >
-              3. Texto do Cartão
+              Texto
             </label>
             {customBodyText !== null && (
               <button
@@ -846,7 +919,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC]"
               >
                 <RotateCcw className="w-3 h-3" />
-                Restaurar padrão
+                Padrão
               </button>
             )}
           </div>
@@ -860,7 +933,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
           />
         </section>
 
-        {/* 4. Digital PNG / ZIP Export Actions */}
+        {/* Digital PNG / ZIP Export Actions */}
         <section className="space-y-2.5 border-t border-white/10 pt-4">
           <button
             type="button"
@@ -869,7 +942,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
             className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] disabled:opacity-60 px-4 text-sm font-medium text-white transition-colors"
           >
             <Download className="w-4 h-4" />
-            {isExportingPng ? 'Gerando PNG...' : 'Baixar Cartão Atual (PNG)'}
+            {isExportingPng ? 'Gerando...' : 'Baixar PNG'}
           </button>
 
           {inputMode === 'relacao' && entries.length > 0 && (
@@ -881,8 +954,8 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
             >
               <Archive className="w-4 h-4 text-[#83B499]" />
               {zipProgress
-                ? `Gerando ${zipProgress.current} de ${zipProgress.total}...`
-                : `Baixar Todos em ZIP (${entries.length} cartões)`}
+                ? `${zipProgress.current} / ${zipProgress.total}...`
+                : `Baixar ZIP (${entries.length})`}
             </button>
           )}
 
@@ -895,16 +968,19 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
       </aside>
 
       {/* Right Digital Card Preview (1600 x 1135) */}
-      <section className="flex flex-col items-center">
+      <section className="min-w-0 w-full flex flex-col items-center">
         <div className="w-full max-w-[820px]">
           <div className="no-print flex items-center justify-between text-xs text-[#98A89F] mb-2.5 px-1">
             <span>
-              Cartão Digital de Aniversário · {audience === 'eterno_comandante' ? 'Eterno Comandante' : 'Militares do Batalhão'}
+              {audience === 'eterno_comandante' ? 'Eterno Comandante' : 'Militares'}
             </span>
-            <span className="font-mono text-[#83B499]">Formato Digital · {ANIV_W_PX} × {ANIV_H_PX} px (PNG)</span>
+            <span className="font-mono text-[#83B499]">{ANIV_W_PX} × {ANIV_H_PX} PNG</span>
           </div>
 
-          <div className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-white">
+          <PinchZoomSheetFrame
+            maxWidthClass="max-w-[820px]"
+            className="rounded-xl shadow-2xl border border-white/10 bg-white"
+          >
             <svg
               viewBox={`0 0 ${ANIV_W_PX} ${ANIV_H_PX}`}
               className="w-full h-auto bg-white block select-none"
@@ -1047,7 +1123,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 Comandante do 1º Batalhão de Infantaria Mecanizado (Escola)
               </text>
             </svg>
-          </div>
+          </PinchZoomSheetFrame>
         </div>
       </section>
     </main>

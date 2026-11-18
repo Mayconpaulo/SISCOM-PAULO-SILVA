@@ -1,0 +1,247 @@
+{
+  "entities": {
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Marcador de privilégio administrativo vinculado ao UID do Firebase Auth.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário administrador"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do administrador que concedeu o acesso"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora de criação no servidor"
+        }
+      },
+      "required": ["uid", "createdBy", "createdAt"]
+    },
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Conta de acesso do SISCOM com permissões em tempo real por módulo e controle de primeiro acesso.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário no Firebase Auth"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[a-z0-9._-]+$",
+          "description": "Nome de usuário para login"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Posto/graduação + nome de guerra de exibição"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "Perfil de acesso"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Indica se o login está ativo"
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Compatibilidade legada de verificação"
+        },
+        "mustChangePassword": {
+          "type": "boolean",
+          "description": "Exige definição de nova senha no primeiro acesso"
+        },
+        "securityQuestionSetup": {
+          "type": "boolean",
+          "description": "Indica se a pergunta de segurança já foi configurada"
+        },
+        "permPrismas": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Prismas"
+        },
+        "permCrachas": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Crachás"
+        },
+        "permAlteracao": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Alterações"
+        },
+        "permDocumentos": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Documentos"
+        },
+        "permCartoes": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Cartões"
+        },
+        "adminUids": {
+          "type": "array",
+          "description": "Lista limitada (máx. 10) de UIDs de administradores gerenciadores"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do administrador criador"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora de criação no servidor"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora da última atualização no servidor"
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "displayName",
+        "role",
+        "active",
+        "emailVerified",
+        "permPrismas",
+        "permCrachas",
+        "permAlteracao",
+        "permDocumentos",
+        "permCartoes",
+        "adminUids",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RecoverySecret": {
+      "title": "RecoverySecret",
+      "description": "Pergunta de segurança e credencial cifrada com AES-GCM (derivada da resposta via PBKDF2) para redefinição de senha sem e-mail.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário dono da pergunta"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[a-z0-9._-]+$",
+          "description": "Nome de usuário associado"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "Pergunta de segurança definida pelo usuário"
+        },
+        "salt": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 64,
+          "description": "Salt Base64 para derivação PBKDF2"
+        },
+        "iv": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 64,
+          "description": "Vetor de inicialização Base64 para AES-GCM"
+        },
+        "encryptedPassword": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 512,
+          "description": "Senha cifrada em Base64 usando AES-256-GCM"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora da última atualização no servidor"
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "question",
+        "salt",
+        "iv",
+        "encryptedPassword",
+        "updatedAt"
+      ]
+    },
+    "AuthLookup": {
+      "title": "AuthLookup",
+      "description": "Mapeamento interno não-PII entre nome de usuário e identificador de autenticação para permitir reutilização imediata de logins excluídos.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário ativo"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[a-z0-9._-]+$",
+          "description": "Nome de usuário normalizado"
+        },
+        "authEmail": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 120,
+          "description": "Identificador sintético interno no Firebase Auth"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora da última atualização no servidor"
+        }
+      },
+      "required": ["uid", "username", "authEmail", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Documentos marcadores de administradores autorizados"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Perfis de usuários e matriz de permissões por módulo em tempo real"
+    },
+    "/recovery/{username}": {
+      "schema": { "$ref": "#/entities/RecoverySecret" },
+      "description": "Pergunta de segurança e envelope criptográfico por usuário"
+    },
+    "/auth_lookup/{username}": {
+      "schema": { "$ref": "#/entities/AuthLookup" },
+      "description": "Mapeamento interno de login por usuário ativo"
+    }
+  }
+}

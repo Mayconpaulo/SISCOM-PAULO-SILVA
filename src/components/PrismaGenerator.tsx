@@ -16,9 +16,9 @@ import {
   RIGHT_CREST,
   STANDARD_FONT_PT,
   TEXT_CENTER_X_MM,
-  TEXT_SAFE_WIDTH_MM,
   type PrismaData,
 } from '../lib/prismaPdf';
+import { PinchZoomSheetFrame } from './PinchZoomSheetFrame';
 
 const DEFAULT_PRISMAS: [PrismaData, PrismaData] = [
   { nome: 'TEN NETO', funcao: 'CHEFE COMSOC' },
@@ -281,9 +281,9 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
       a.download = `prismas-a4-${count}x.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice('PDF A4 gerado com os prismas centralizados.');
+      setNotice('PDF gerado.');
     } catch {
-      setNotice('Não foi possível gerar o arquivo PDF. Use Imprimir A4 como alternativa imediata.');
+      setNotice('Erro ao gerar PDF.');
     } finally {
       setExporting(null);
     }
@@ -307,9 +307,9 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
       a.download = `prismas-a4-${count}x.png`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice('Imagem A4 em 300 DPI baixada.');
+      setNotice('PNG gerado.');
     } catch {
-      setNotice('Não foi possível gerar o PNG. Utilize Baixar PDF ou Imprimir A4.');
+      setNotice('Erro ao gerar PNG.');
     } finally {
       setExporting(null);
     }
@@ -324,19 +324,10 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
     <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print-wrapper">
       {/* Left Control Column */}
       <section className="no-print lg:col-span-5 metal-surface rounded-xl p-5 sm:p-6 space-y-5">
-        <div className="space-y-1 border-b border-white/10 pb-4">
-          <h2 className="font-display text-lg font-semibold text-[#E4EAE6]">
-            Gerador de Prisma — Folha A4
-          </h2>
-          <p className="text-xs text-[#98A89F]">
-            Formato A4 (210 × 297 mm) com retângulos centralizados e brasões oficiais.
-          </p>
-        </div>
-
         {/* 1 or 2 Prismas per Page */}
         <div className="space-y-2">
           <span className="block text-xs font-medium text-[#C6D4CC]">
-            Quantidade por página
+            Quantidade
           </span>
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[#0E1211] border border-white/10">
             <button
@@ -348,7 +339,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
                   : 'text-[#98A89F] hover:text-[#E4EAE6]'
               }`}
             >
-              1 Prisma por página
+              1 Prisma
             </button>
             <button
               type="button"
@@ -359,7 +350,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
                   : 'text-[#98A89F] hover:text-[#E4EAE6]'
               }`}
             >
-              2 Prismas por página
+              2 Prismas
             </button>
           </div>
         </div>
@@ -368,25 +359,25 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
         <div className="space-y-3 pt-2 border-t border-white/10">
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="font-medium text-[#E4EAE6]">
-              {count === 1 ? 'Dados do Prisma' : 'Prisma Superior (1)'}
+              {count === 1 ? 'Prisma' : 'Prisma 1'}
             </span>
             <span className="font-mono text-[#83B499]">
               {sizeDiagnostics[0].adjusted
-                ? `Nome ${sizeDiagnostics[0].nomePt}pt · Função ${sizeDiagnostics[0].funcaoPt}pt`
-                : `Padrão ${STANDARD_FONT_PT}pt`}
+                ? `${sizeDiagnostics[0].nomePt} / ${sizeDiagnostics[0].funcaoPt} pt`
+                : `${STANDARD_FONT_PT} pt`}
             </span>
           </div>
 
           <div className="space-y-1.5">
             <label htmlFor="p1-nome" className="block text-xs text-[#98A89F]">
-              Nome (sempre em negrito)
+              Nome
             </label>
             <input
               id="p1-nome"
               type="text"
               value={prismas[0].nome}
               onChange={(e) => updatePrisma(0, 'nome', e.target.value)}
-              placeholder="Ex.: TEN NETO"
+              placeholder="TEN NETO"
               className="w-full min-h-[42px] rounded-lg bg-[#0E1211] border border-white/12 px-3.5 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
             />
           </div>
@@ -400,7 +391,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
               type="text"
               value={prismas[0].funcao}
               onChange={(e) => updatePrisma(0, 'funcao', e.target.value)}
-              placeholder="Ex.: CHEFE COMSOC"
+              placeholder="CHEFE COMSOC"
               className="w-full min-h-[42px] rounded-lg bg-[#0E1211] border border-white/12 px-3.5 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
             />
           </div>
@@ -410,24 +401,24 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
         {count === 2 && (
           <div className="space-y-3 pt-4 border-t border-white/10">
             <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="font-medium text-[#E4EAE6]">Prisma Inferior (2)</span>
+              <span className="font-medium text-[#E4EAE6]">Prisma 2</span>
               <span className="font-mono text-[#83B499]">
                 {sizeDiagnostics[1]?.adjusted
-                  ? `Nome ${sizeDiagnostics[1].nomePt}pt · Função ${sizeDiagnostics[1].funcaoPt}pt`
-                  : `Padrão ${STANDARD_FONT_PT}pt`}
+                  ? `${sizeDiagnostics[1].nomePt} / ${sizeDiagnostics[1].funcaoPt} pt`
+                  : `${STANDARD_FONT_PT} pt`}
               </span>
             </div>
 
             <div className="space-y-1.5">
               <label htmlFor="p2-nome" className="block text-xs text-[#98A89F]">
-                Nome (sempre em negrito)
+                Nome
               </label>
               <input
                 id="p2-nome"
                 type="text"
                 value={prismas[1].nome}
                 onChange={(e) => updatePrisma(1, 'nome', e.target.value)}
-                placeholder="Ex.: CEL SANSEVERINO"
+                placeholder="CEL SANSEVERINO"
                 className="w-full min-h-[42px] rounded-lg bg-[#0E1211] border border-white/12 px-3.5 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
               />
             </div>
@@ -441,7 +432,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
                 type="text"
                 value={prismas[1].funcao}
                 onChange={(e) => updatePrisma(1, 'funcao', e.target.value)}
-                placeholder="Ex.: ANTIGO COMANDANTE"
+                placeholder="ANTIGO COMANDANTE"
                 className="w-full min-h-[42px] rounded-lg bg-[#0E1211] border border-white/12 px-3.5 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
               />
             </div>
@@ -451,7 +442,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
         {/* Uppercase option */}
         <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3">
           <label htmlFor="uppercase-toggle" className="text-xs text-[#C6D4CC] cursor-pointer">
-            Converter texto automaticamente para maiúsculas
+            Sempre maiúsculas
           </label>
           <input
             id="uppercase-toggle"
@@ -471,7 +462,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
             className="min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] disabled:opacity-50 px-3 py-2 text-xs font-medium text-white transition-colors whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{exporting === 'pdf' ? 'Gerando...' : 'Baixar PDF'}</span>
+            <span>{exporting === 'pdf' ? 'Gerando...' : 'PDF'}</span>
           </button>
 
           <button
@@ -481,7 +472,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
             className="min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] disabled:opacity-50 px-3 py-2 text-xs font-medium text-[#E4EAE6] transition-colors whitespace-nowrap"
           >
             <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>{exporting === 'png' ? 'Gerando...' : 'Baixar PNG'}</span>
+            <span>{exporting === 'png' ? 'Gerando...' : 'PNG'}</span>
           </button>
 
           <button
@@ -490,7 +481,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
             className="min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3 py-2 text-xs font-medium text-[#E4EAE6] transition-colors whitespace-nowrap"
           >
             <Printer className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Imprimir A4</span>
+            <span>Imprimir</span>
           </button>
         </div>
 
@@ -502,19 +493,20 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
       </section>
 
       {/* Right Live A4 Sheet Preview */}
-      <section className="lg:col-span-7 flex flex-col items-center space-y-3 print-wrapper">
-        <div className="no-print w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>
-            Pré-visualização A4 · {count === 1 ? '1 prisma centralizado' : '2 prismas centralizados'}
-          </span>
-          <span className="font-mono">
-            210 × 297 mm · área livre {TEXT_SAFE_WIDTH_MM.toFixed(1)} mm
-          </span>
+      <section className="lg:col-span-7 min-w-0 w-full flex flex-col items-center space-y-3 print-wrapper">
+        <div className="no-print w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
+          <span>A4 · {count === 1 ? '1 prisma' : '2 prismas'}</span>
+          <span className="font-mono">210 × 297 mm</span>
         </div>
 
-        <div className="print-page-item w-full max-w-[620px] rounded-lg overflow-hidden border border-white/15 shadow-2xl bg-white">
-          <PrismaSheetPreview count={count} prismas={prismas} uppercase={uppercase} />
-        </div>
+        <PinchZoomSheetFrame
+          maxWidthClass="max-w-[620px]"
+          className="rounded-lg border border-white/15 shadow-2xl bg-white"
+        >
+          <div className="print-page-item w-full bg-white">
+            <PrismaSheetPreview count={count} prismas={prismas} uppercase={uppercase} />
+          </div>
+        </PinchZoomSheetFrame>
       </section>
     </main>
   );

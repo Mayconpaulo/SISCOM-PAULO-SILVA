@@ -36,8 +36,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ compact = fa
           compact ? 'px-3 py-2 text-xs font-medium' : 'w-full px-3.5 py-2 text-xs font-medium'
         }`}
       >
-        {isIOS ? <Smartphone className="w-4 h-4 text-[#83B499] shrink-0" /> : <Download className="w-4 h-4 text-[#83B499] shrink-0" />}
-        <span>Instalar App</span>
+        {isIOS ? <Smartphone className="w-4 h-4 text-[#C8A461] shrink-0" /> : <Download className="w-4 h-4 text-[#C8A461] shrink-0" />}
+        <span>Instalar</span>
       </button>
 
       {showGuide && (
@@ -49,35 +49,29 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ compact = fa
         >
           <div className="metal-elevated w-full max-w-sm rounded-xl p-6 space-y-4">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 id="pwa-guide-title" className="font-display text-base font-semibold text-[#E4EAE6]">
-                  Instalar SISCOM no dispositivo
-                </h2>
-                <p className="text-xs text-[#98A89F] mt-1">
-                  Acesso direto na tela inicial com suporte offline.
-                </p>
-              </div>
+              <h2 id="pwa-guide-title" className="font-display text-base font-semibold text-[#E4EAE6]">
+                Instalar SISCOM
+              </h2>
               <button
                 type="button"
                 onClick={() => setShowGuide(false)}
                 className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#98A89F] hover:text-[#E4EAE6] hover:bg-white/5"
-                aria-label="Fechar instruções"
+                aria-label="Fechar"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {isIOS ? (
-              <ol className="space-y-2.5 text-sm text-[#C6D4CC]">
-                <li>1. Toque no botão Compartilhar na barra do Safari.</li>
-                <li>2. Role as opções e selecione Adicionar à Tela de Início.</li>
-                <li>3. Confirme em Adicionar para abrir o SISCOM em janela dedicada.</li>
+              <ol className="space-y-2 text-sm text-[#C6D4CC]">
+                <li>1. Toque em Compartilhar no Safari.</li>
+                <li>2. Selecione Adicionar à Tela de Início.</li>
+                <li>3. Confirme em Adicionar.</li>
               </ol>
             ) : (
-              <ol className="space-y-2.5 text-sm text-[#C6D4CC]">
-                <li>1. Abra o menu do navegador (três pontos no canto superior) ou o ícone de instalação na barra de endereço.</li>
+              <ol className="space-y-2 text-sm text-[#C6D4CC]">
+                <li>1. Abra o menu do navegador.</li>
                 <li>2. Selecione Instalar SISCOM ou Adicionar à tela inicial.</li>
-                <li>3. Caso esteja em janela incorporada, abra o endereço principal em uma aba dedicada para habilitar o prompt nativo.</li>
               </ol>
             )}
 
@@ -86,7 +80,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ compact = fa
               onClick={() => setShowGuide(false)}
               className="w-full min-h-[42px] rounded-lg bg-[#2D5A43] hover:bg-[#376C51] text-sm font-medium text-white transition-colors"
             >
-              Entendi
+              Fechar
             </button>
           </div>
         </div>
@@ -106,7 +100,7 @@ export const OfflineIndicator: React.FC = () => {
       className="fixed bottom-20 md:bottom-4 left-4 z-40 flex items-center gap-2 rounded-lg bg-[#262015] border border-[#B8862D]/50 px-3 py-2 text-xs font-medium text-[#E8C57B] shadow-lg"
     >
       <WifiOff className="w-3.5 h-3.5 shrink-0" />
-      <span>Modo offline — dados locais e alternativas internas ativos</span>
+      <span>Offline</span>
     </div>
   );
 };

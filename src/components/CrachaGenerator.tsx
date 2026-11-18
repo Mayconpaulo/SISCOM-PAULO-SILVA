@@ -18,6 +18,7 @@ import {
   type CrachaSidedness,
   type PlacedBadgeUnit,
 } from '../lib/crachaPdf';
+import { PinchZoomSheetFrame } from './PinchZoomSheetFrame';
 
 const STORAGE_KEY = 'siscom_cracha_state_v2';
 
@@ -774,7 +775,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
       );
       return { ...prev, entries: nextEntries };
     });
-    setNotice('Conteúdo do Crachá 1 replicado para todos os crachás.');
+    setNotice('Crachá 1 copiado.');
   };
 
   const handleSequenceRpNumbers = () => {
@@ -788,7 +789,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
       }));
       return { ...prev, entries: nextEntries };
     });
-    setNotice('Numeração sequencial aplicada a partir do Crachá 1.');
+    setNotice('Sequência aplicada.');
   };
 
   const handleRestoreColors = () => {
@@ -799,7 +800,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           ? { ...DEFAULT_IDENTIFICACAO_COLORS }
           : { ...DEFAULT_RP_COLORS },
     }));
-    setNotice('Cores originais do modelo restauradas.');
+    setNotice('Cores restauradas.');
   };
 
   const updateColor = (field: keyof CrachaColors, value: string) => {
@@ -828,11 +829,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
       a.download = `crachas-${config.mode}-${config.perPage}x-${config.sidedness}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice(
-        `PDF A4 gerado (${layout.pages.length} ${layout.pages.length === 1 ? 'página' : 'páginas'}).`
-      );
+      setNotice('PDF gerado.');
     } catch {
-      setNotice('Não foi possível gerar o PDF. Utilize Imprimir A4 como alternativa imediata.');
+      setNotice('Erro ao gerar PDF.');
     } finally {
       setExporting(null);
     }
@@ -859,13 +858,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
         a.click();
         URL.revokeObjectURL(url);
       }
-      setNotice(
-        layout.pages.length > 1
-          ? `${layout.pages.length} imagens PNG em 300 DPI baixadas.`
-          : 'Imagem A4 em 300 DPI baixada.'
-      );
+      setNotice('PNG gerado.');
     } catch {
-      setNotice('Não foi possível gerar o PNG. Utilize Baixar PDF ou Imprimir A4.');
+      setNotice('Erro ao gerar PNG.');
     } finally {
       setExporting(null);
     }
@@ -889,18 +884,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
     <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print-wrapper">
       {/* Left Configuration Column */}
       <section className="no-print lg:col-span-5 metal-surface rounded-xl p-5 sm:p-6 space-y-5">
-        <div className="space-y-1 border-b border-white/10 pb-4">
-          <h2 className="font-display text-lg font-semibold text-[#E4EAE6]">
-            Gerador de Crachás — Folha A4
-          </h2>
-          <p className="text-xs text-[#98A89F]">
-            Configure quantidade, dimensões em milímetros, frente/verso dobrável, cores e textos.
-          </p>
-        </div>
-
         {/* Mode Switcher: Identificação | RP */}
         <div className="space-y-2">
-          <span className="block text-xs font-medium text-[#C6D4CC]">Modelo do crachá</span>
+          <span className="block text-xs font-medium text-[#C6D4CC]">Modelo</span>
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[#0E1211] border border-white/10">
             <button
               type="button"
@@ -928,19 +914,19 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   : 'text-[#98A89F] hover:text-[#E4EAE6]'
               }`}
             >
-              Crachá RP
+              RP
             </button>
           </div>
         </div>
 
-        {/* 1. Quantidade de crachás por página */}
+        {/* Quantidade */}
         <div className="space-y-2 pt-3 border-t border-white/10">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="cracha-per-page" className="text-xs font-medium text-[#C6D4CC]">
-              1. Quantidade de crachás
+              Quantidade
             </label>
             <span className="font-mono text-[11px] text-[#83B499]">
-              {layout.pages.length} {layout.pages.length === 1 ? 'folha A4' : 'folhas A4'}
+              {layout.pages.length} A4
             </span>
           </div>
 
@@ -973,11 +959,11 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           </div>
         </div>
 
-        {/* 2. Tamanho dos crachás (Largura e Altura) */}
+        {/* Tamanho */}
         <div className="space-y-2 pt-3 border-t border-white/10">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-[#C6D4CC]">
-              2. Tamanho de cada crachá (mm)
+              Tamanho (mm)
             </span>
             <button
               type="button"
@@ -986,14 +972,14 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
               }
               className="text-[11px] text-[#83B499] hover:text-[#A3D4B9] transition-colors"
             >
-              Padrão 95 × 70 mm
+              Padrão
             </button>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label htmlFor="cracha-width" className="block text-[11px] text-[#98A89F]">
-                Largura (mm)
+                Largura
               </label>
               <input
                 id="cracha-width"
@@ -1014,7 +1000,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
             <div className="space-y-1">
               <label htmlFor="cracha-height" className="block text-[11px] text-[#98A89F]">
-                Altura (mm)
+                Altura
               </label>
               <input
                 id="cracha-height"
@@ -1041,9 +1027,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           )}
         </div>
 
-        {/* 3. Só frente ou Frente e verso */}
+        {/* Lados */}
         <div className="space-y-2 pt-3 border-t border-white/10">
-          <span className="block text-xs font-medium text-[#C6D4CC]">3. Lados do crachá</span>
+          <span className="block text-xs font-medium text-[#C6D4CC]">Lados</span>
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-[#0E1211] border border-white/10">
             <button
               type="button"
@@ -1067,27 +1053,22 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   : 'text-[#98A89F] hover:text-[#E4EAE6]'
               }`}
             >
-              Frente e verso (dobrável)
+              Frente e verso
             </button>
           </div>
-          {config.sidedness === 'frente_verso' && (
-            <p className="text-[11px] text-[#98A89F]">
-              Os dois lados ficam colados um no outro para recortar o contorno e dobrar ao meio.
-            </p>
-          )}
         </div>
 
-        {/* 4. Textos das faixas (Cima e Baixo) */}
+        {/* Faixas */}
         <div className="space-y-3 pt-3 border-t border-white/10">
           <span className="block text-xs font-medium text-[#C6D4CC]">
-            4. Textos das faixas (cima e baixo)
+            Faixas
           </span>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {activeMode === 'identificacao' ? (
               <div className="space-y-1">
                 <label htmlFor="cracha-top-text" className="block text-[11px] text-[#98A89F]">
-                  Parte de cima
+                  Superior
                 </label>
                 <input
                   id="cracha-top-text"
@@ -1096,14 +1077,14 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   onChange={(e) =>
                     updateCurrentConfig((prev) => ({ ...prev, topText: e.target.value }))
                   }
-                  placeholder="Ex.: OBRA"
+                  placeholder="OBRA"
                   className="w-full min-h-[40px] rounded-lg bg-[#0E1211] border border-white/12 px-3 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
                 />
               </div>
             ) : (
               <div className="space-y-1">
                 <label htmlFor="cracha-rp-header" className="block text-[11px] text-[#98A89F]">
-                  Parte de cima (opcional)
+                  Superior (opcional)
                 </label>
                 <input
                   id="cracha-rp-header"
@@ -1112,7 +1093,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   onChange={(e) =>
                     updateCurrentConfig((prev) => ({ ...prev, rpHeaderText: e.target.value }))
                   }
-                  placeholder="Ex.: 1º BI MEC (ES)"
+                  placeholder="1º BI MEC (ES)"
                   className="w-full min-h-[40px] rounded-lg bg-[#0E1211] border border-white/12 px-3 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
                 />
               </div>
@@ -1120,7 +1101,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
             <div className="space-y-1">
               <label htmlFor="cracha-bottom-text" className="block text-[11px] text-[#98A89F]">
-                Parte de baixo
+                Inferior
               </label>
               <input
                 id="cracha-bottom-text"
@@ -1130,7 +1111,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   updateCurrentConfig((prev) => ({ ...prev, bottomText: e.target.value }))
                 }
                 placeholder={
-                  activeMode === 'identificacao' ? 'Ex.: PERMISSIONÁRIO' : 'Ex.: MILITAR ATIVA'
+                  activeMode === 'identificacao' ? 'PERMISSIONÁRIO' : 'MILITAR ATIVA'
                 }
                 className="w-full min-h-[40px] rounded-lg bg-[#0E1211] border border-white/12 px-3 text-sm text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
               />
@@ -1139,7 +1120,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
           <div className="flex items-center justify-between gap-3 pt-1">
             <label htmlFor="cracha-uppercase" className="text-xs text-[#C6D4CC] cursor-pointer">
-              Converter textos para maiúsculas
+              Sempre maiúsculas
             </label>
             <input
               id="cracha-uppercase"
@@ -1153,11 +1134,11 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           </div>
         </div>
 
-        {/* 5. Conteúdo de cada crachá */}
+        {/* Crachás */}
         <div className="space-y-3 pt-3 border-t border-white/10">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-medium text-[#C6D4CC]">
-              5. Conteúdo dos crachás ({config.perPage})
+              Crachás ({config.perPage})
             </span>
             <div className="flex items-center gap-2">
               {activeMode === 'rp' && config.perPage > 1 && (
@@ -1167,7 +1148,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A3D4B9] transition-colors"
                 >
                   <ListOrdered className="w-3.5 h-3.5" />
-                  <span>Numerar sequência</span>
+                  <span>Sequenciar</span>
                 </button>
               )}
               {config.perPage > 1 && (
@@ -1195,7 +1176,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-medium text-[#83B499]">
-                      Crachá #{idx + 1}
+                      #{idx + 1}
                     </span>
                     <span
                       className={`font-mono text-[11px] ${
@@ -1213,7 +1194,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                         onChange={(e) => handleEntryChange(idx, 'versoIgual', e.target.checked)}
                         className="h-3.5 w-3.5 accent-[#2D5A43] rounded cursor-pointer"
                       />
-                      <span>Verso igual à frente</span>
+                      <span>Verso igual</span>
                     </label>
                   )}
                 </div>
@@ -1225,7 +1206,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                       aria-label={`Nome completo do crachá ${idx + 1}`}
                       value={entry.nomeCompleto}
                       onChange={(e) => handleEntryChange(idx, 'nomeCompleto', e.target.value)}
-                      placeholder="Nome completo"
+                      placeholder="Nome"
                       className="w-full min-h-[38px] rounded-md bg-[#121715] border border-white/12 px-3 text-xs text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
                     />
                     <input
@@ -1233,7 +1214,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                       aria-label={`CPF do crachá ${idx + 1}`}
                       value={entry.cpf}
                       onChange={(e) => handleEntryChange(idx, 'cpf', e.target.value)}
-                      placeholder="CPF (ex.: 000.000.000-00)"
+                      placeholder="CPF"
                       className="w-full min-h-[38px] rounded-md bg-[#121715] border border-white/12 px-3 font-mono text-xs text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095]"
                     />
                   </div>
@@ -1243,7 +1224,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     aria-label={`Texto do crachá RP ${idx + 1}`}
                     value={entry.rpTexto}
                     onChange={(e) => handleEntryChange(idx, 'rpTexto', e.target.value)}
-                    placeholder="Digite o número ou texto do crachá (ex.: 15)"
+                    placeholder="Número ou texto"
                     className="w-full rounded-md bg-[#121715] border border-white/12 px-3 py-2 text-xs text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095] resize-y"
                   />
                 )}
@@ -1251,10 +1232,10 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 {config.sidedness === 'frente_verso' && !entry.versoIgual && (
                   <textarea
                     rows={2}
-                    aria-label={`Texto personalizado do verso do crachá ${idx + 1}`}
+                    aria-label={`Texto do verso do crachá ${idx + 1}`}
                     value={entry.versoTexto}
                     onChange={(e) => handleEntryChange(idx, 'versoTexto', e.target.value)}
-                    placeholder="Texto personalizado do verso (ex.: uso exclusivo em serviço)"
+                    placeholder="Texto do verso"
                     className="w-full rounded-md bg-[#121715] border border-[#83B499]/30 px-3 py-2 text-xs text-[#E4EAE6] placeholder:text-[#697870] focus:outline-none focus:border-[#7FB095] resize-y"
                   />
                 )}
@@ -1264,17 +1245,17 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           </div>
         </div>
 
-        {/* 6. Cores do crachá */}
+        {/* Cores */}
         <div className="space-y-2.5 pt-3 border-t border-white/10">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-[#C6D4CC]">6. Cores do crachá</span>
+            <span className="text-xs font-medium text-[#C6D4CC]">Cores</span>
             <button
               type="button"
               onClick={handleRestoreColors}
               className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A3D4B9] transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Restaurar cores</span>
+              <span>Restaurar</span>
             </button>
           </div>
 
@@ -1293,7 +1274,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             />
             <ColorField
               id="color-divider"
-              label="Faixa divisória"
+              label="Divisória"
               value={config.colors.divider}
               onChange={(v) => updateColor('divider', v)}
             />
@@ -1335,7 +1316,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             className="min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] disabled:opacity-50 px-3 py-2 text-xs font-medium text-white transition-colors whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{exporting === 'pdf' ? 'Gerando...' : 'Baixar PDF'}</span>
+            <span>{exporting === 'pdf' ? 'Gerando...' : 'PDF'}</span>
           </button>
 
           <button
@@ -1345,7 +1326,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             className="min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] disabled:opacity-50 px-3 py-2 text-xs font-medium text-[#E4EAE6] transition-colors whitespace-nowrap"
           >
             <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>{exporting === 'png' ? 'Gerando...' : 'Baixar PNG'}</span>
+            <span>{exporting === 'png' ? 'Gerando...' : 'PNG'}</span>
           </button>
 
           <button
@@ -1354,7 +1335,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             className="min-h-[42px] inline-flex items-center justify-center gap-2 rounded-lg border border-white/12 bg-[#181F1C] hover:bg-[#222B27] px-3 py-2 text-xs font-medium text-[#E4EAE6] transition-colors whitespace-nowrap"
           >
             <Printer className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Imprimir A4</span>
+            <span>Imprimir</span>
           </button>
         </div>
 
@@ -1366,30 +1347,34 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
       </section>
 
       {/* Right Live A4 Sheet Preview (Supports multi-page) */}
-      <section className="lg:col-span-7 flex flex-col items-center space-y-4 print-wrapper">
+      <section className="lg:col-span-7 min-w-0 w-full flex flex-col items-center space-y-4 print-wrapper">
         <div className="no-print w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
           <span>
-            Pré-visualização A4 · {activeMode === 'identificacao' ? 'Identificação' : 'RP'} ·{' '}
-            {config.sidedness === 'frente_verso' ? 'Frente e verso colados' : 'Só frente'}
+            A4 · {activeMode === 'identificacao' ? 'Identificação' : 'RP'} ·{' '}
+            {config.sidedness === 'frente_verso' ? 'Frente e verso' : 'Frente'}
           </span>
           <span className="font-mono">
-            {config.widthMm} × {config.heightMm} mm · {layout.pages.length}{' '}
-            {layout.pages.length === 1 ? 'página' : 'páginas'}
+            {config.widthMm} × {config.heightMm} mm · {layout.pages.length} pág.
           </span>
         </div>
 
-        <div className="w-full flex flex-col items-center gap-5 print-wrapper">
+        <div className="w-full min-w-0 flex flex-col items-center gap-5 print-wrapper">
           {layout.pages.map((pageUnits, pageIndex) => (
             <div key={`sheet-${pageIndex}`} className="print-page-item w-full max-w-[620px] space-y-1.5">
               {layout.pages.length > 1 && (
                 <div className="no-print flex items-center justify-between text-[11px] text-[#98A89F] px-0.5">
-                  <span className="font-mono">Página {pageIndex + 1} de {layout.pages.length}</span>
-                  <span>{pageUnits.length} {pageUnits.length === 1 ? 'crachá' : 'crachás'} nesta folha</span>
+                  <span className="font-mono">Pág. {pageIndex + 1}/{layout.pages.length}</span>
+                  <span>{pageUnits.length} {pageUnits.length === 1 ? 'crachá' : 'crachás'}</span>
                 </div>
               )}
-              <div className="w-full rounded-lg overflow-hidden border border-white/15 shadow-2xl bg-white print-wrapper">
-                <CrachaSheetSvg config={config} pageUnits={pageUnits} pageIndex={pageIndex} />
-              </div>
+              <PinchZoomSheetFrame
+                maxWidthClass="max-w-[620px]"
+                className="rounded-lg border border-white/15 shadow-2xl bg-white"
+              >
+                <div className="w-full bg-white print-wrapper">
+                  <CrachaSheetSvg config={config} pageUnits={pageUnits} pageIndex={pageIndex} />
+                </div>
+              </PinchZoomSheetFrame>
             </div>
           ))}
         </div>

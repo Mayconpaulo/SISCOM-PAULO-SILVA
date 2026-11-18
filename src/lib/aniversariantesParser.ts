@@ -1,6 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { createWorker, PSM } from 'tesseract.js';
+import { inferPortugueseRecipientPrefix } from './portugueseGender';
+
+export { inferPortugueseRecipientPrefix };
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -11,6 +14,7 @@ export interface AniversarianteEntry {
   nome: string;
   dia: string;
   mes: string;
+  prefix?: string;
   rawDataNasc?: string;
 }
 
@@ -133,14 +137,20 @@ export function normalizeSiglaAndQualificacao(
   };
 }
 
+
 export function formatAniversarianteRecipientLine(
   sigla: string,
   qualificacao: string,
   nome: string,
-  prefix = 'AO'
+  prefix = 'AUTO'
 ): string {
   const norm = normalizeSiglaAndQualificacao(sigla, qualificacao);
-  const parts = [prefix.trim().toUpperCase(), norm.sigla, norm.qualificacao, nome.trim().toUpperCase()].filter(
+  const trimmedPrefix = prefix.trim().toUpperCase();
+  const resolvedPrefix =
+    !trimmedPrefix || trimmedPrefix === 'AUTO'
+      ? inferPortugueseRecipientPrefix(nome)
+      : trimmedPrefix;
+  const parts = [resolvedPrefix, norm.sigla, norm.qualificacao, nome.trim().toUpperCase()].filter(
     Boolean
   );
   return parts.join(' ');
@@ -192,7 +202,7 @@ function detectRowBandsAndColumns(canvas: HTMLCanvasElement): {
   const scanXEnd = Math.round(w * 0.93);
   const sampleCountX = Math.floor((scanXEnd - scanXStart) / 3);
 
-  for (let y = Math.round(h * 0.08); y < Math.round(h * 0.96); y++) {
+  for (let y = Math.round(h * 0.08); y < h - 6; y++) {
     let grayCnt = 0;
     for (let x = scanXStart; x < scanXEnd; x += 3) {
       const idx = (y * w + x) * 4;
@@ -205,7 +215,7 @@ function detectRowBandsAndColumns(canvas: HTMLCanvasElement): {
     }
   }
 
-  const hLines = clusterIndices(yHits, 5);
+  const hLines = clusterIndices(yHits, 2);
   const firstTableY = hLines.length > 0 ? hLines[0] : Math.round(h * 0.14);
 
   // Pair consecutive borders forming data rows (data rows are >= 3.8% of page height; empty filter bar is ~1.5%)
@@ -216,6 +226,30 @@ function detectRowBandsAndColumns(canvas: HTMLCanvasElement): {
     const gap = hLines[i + 1] - hLines[i];
     if (gap >= minDataRowH && gap <= maxDataRowH) {
       rowBands.push({ top: hLines[i], bottom: hLines[i + 1] });
+    }
+  }
+
+  // Handle a table row split across a page break (top border exists at bottom of page, bottom border spilled to next page)
+  if (hLines.length >= 2 && rowBands.length > 0) {
+    const lastLine = hLines[hLines.length - 1];
+    const remainingH = h - 6 - lastLine;
+    if (remainingH >= minDataRowH) {
+      const typicalH = Math.round(
+        rowBands.reduce((acc, b) => acc + (b.bottom - b.top), 0) / rowBands.length
+      );
+      const checkBottom = Math.min(h - 6, lastLine + typicalH);
+      let darkTextPixels = 0;
+      for (let y = lastLine + 8; y < checkBottom - 4; y += 3) {
+        for (let x = Math.round(w * 0.56); x < Math.round(w * 0.69); x += 2) {
+          const idx = (y * w + x) * 4;
+          if (data[idx] < 130 && data[idx + 1] < 130 && data[idx + 2] < 130) {
+            darkTextPixels++;
+          }
+        }
+      }
+      if (darkTextPixels >= 12) {
+        rowBands.push({ top: lastLine, bottom: checkBottom });
+      }
     }
   }
 
@@ -235,12 +269,12 @@ function detectRowBandsAndColumns(canvas: HTMLCanvasElement): {
           grayCnt++;
         }
       }
-      if (grayCnt > sampleCountY * 0.52) {
+      if (grayCnt > sampleCountY * 0.48) {
         xHits.push(x);
       }
     }
 
-    const vLines = clusterIndices(xHits, 5);
+    const vLines = clusterIndices(xHits, 2);
     if (vLines.length >= 18) {
       colBounds = vLines;
     }
