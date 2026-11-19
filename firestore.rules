@@ -135,6 +135,7 @@ service cloud.firestore {
           'permCartoes',
           'permRelatorio',
           'permAgenda',
+          'permInstagram',
           'adminUids',
           'createdBy',
           'createdAt',
@@ -158,6 +159,7 @@ service cloud.firestore {
         && data.permCartoes is bool
         && (!('permRelatorio' in data) || data.permRelatorio is bool)
         && (!('permAgenda' in data) || data.permAgenda is bool)
+        && (!('permInstagram' in data) || data.permInstagram is bool)
         && data.adminUids is list
         && data.adminUids.size() >= 1
         && data.adminUids.size() <= 10

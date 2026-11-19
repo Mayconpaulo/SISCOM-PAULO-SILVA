@@ -521,6 +521,11 @@ export function AgendaComsoc() {
       }
 
       await performInstitutionalMirror(chosen.id, chosen.summary, activeEmail);
+
+      // If non-admin users (or offline edits) queued events, immediately prompt admin to send them to Google!
+      if (pendingPushEvents.length > 0) {
+        openPushQueueConfirmation(chosen.id, chosen.summary);
+      }
     } catch (err) {
       if (err instanceof CalendarUnauthorizedDomainError) {
         setUnauthorizedDomainHelp({
@@ -574,12 +579,8 @@ export function AgendaComsoc() {
   };
 
   // Admin-only: Push queued events created/edited while offline from Google (with MANDATORY confirmation modal)
-  const handleAdminRequestPushQueue = () => {
+  const openPushQueueConfirmation = (targetCalendarId: string, targetCalendarSummary: string) => {
     if (!account || !isAdmin || pendingPushEvents.length === 0) return;
-    if (!googleSession.connected) {
-      setErrorMsg('Clique primeiro em "Sincronizar com Google" para autenticar esta sessão.');
-      return;
-    }
 
     setPendingConfirm({
       type: 'push_queue',
@@ -587,7 +588,7 @@ export function AgendaComsoc() {
         pendingPushEvents.length === 1
           ? pendingPushEvents[0].title
           : `${pendingPushEvents.length} atividades criadas/editadas no SISCOM`,
-      calendarSummary: linkedCalendarSummary,
+      calendarSummary: targetCalendarSummary,
       isSynced: false,
       queueCount: pendingPushEvents.length,
       onConfirm: async () => {
@@ -598,8 +599,8 @@ export function AgendaComsoc() {
         try {
           for (const ev of pendingPushEvents) {
             try {
-              const targetCal = ev.googleCalendarId || linkedCalendarId;
-              const targetSummary = ev.googleCalendarSummary || linkedCalendarSummary;
+              const targetCal = ev.googleCalendarId || targetCalendarId;
+              const targetSummary = ev.googleCalendarSummary || targetCalendarSummary;
               if (ev.googleEventId && ev.googleCalendarId) {
                 const res = await updateGoogleCalendarEvent(targetCal, ev.googleEventId, ev);
                 await updateAgendaEvent(
@@ -641,13 +642,13 @@ export function AgendaComsoc() {
             void recordAgendaAudit({
               actor: account,
               action: 'sync_push',
-              summary: `Fila sincronizada com Google Calendar ("${linkedCalendarSummary}"): ${pushed} enviada(s)${failed > 0 ? `, ${failed} com erro` : ''}.`,
+              summary: `Fila sincronizada com Google Calendar ("${targetCalendarSummary}"): ${pushed} enviada(s)${failed > 0 ? `, ${failed} com erro` : ''}.`,
             });
           }
           setNotice(
             failed > 0
               ? `${pushed} atividade(s) enviada(s) ao Google Calendar; ${failed} falhou(aram).`
-              : `${pushed} atividade(s) pendente(s) enviada(s) com sucesso para "${linkedCalendarSummary}".`
+              : `${pushed} atividade(s) pendente(s) enviada(s) com sucesso para "${targetCalendarSummary}".`
           );
           setPendingConfirm(null);
         } finally {
@@ -655,6 +656,14 @@ export function AgendaComsoc() {
         }
       },
     });
+  };
+
+  const handleAdminRequestPushQueue = () => {
+    if (!googleSession.connected) {
+      setErrorMsg('Clique primeiro em "Sincronizar com Google" para autenticar esta sessão.');
+      return;
+    }
+    openPushQueueConfirmation(linkedCalendarId, linkedCalendarSummary);
   };
 
   // Triage classification (Swipe Right = COMSOC, Swipe Left = General)

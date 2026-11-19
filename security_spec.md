@@ -37,3 +37,4 @@
 23. **Non-Admin Calendar Binding Tampering**: Usuário comum (mesmo com `permAgenda == true`) tentando alterar `/agenda_config/google_calendar` para trocar o calendário institucional -> `PERMISSION_DENIED`.
 
 
+

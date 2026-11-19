@@ -178,7 +178,7 @@ function buildInitialValues(
       reminders: [{ method: 'popup', minutes: 30 }],
       transparency: 'opaque',
       visibility: 'default',
-      syncWithGoogle: googleConnected,
+      syncWithGoogle: true,
     };
   }
 
@@ -219,7 +219,10 @@ function buildInitialValues(
       editingEvent.visibility === 'public' || editingEvent.visibility === 'private'
         ? editingEvent.visibility
         : 'default',
-    syncWithGoogle: editingEvent.syncStatus === 'synced' || googleConnected,
+    syncWithGoogle:
+      editingEvent.syncStatus === 'synced' ||
+      Boolean(editingEvent.pendingGoogleSync) ||
+      googleConnected,
   };
 }
 
