@@ -1,27 +1,38 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence } from 'motion/react';
 import {
   Bell,
   BellRing,
   Calendar as CalendarIcon,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock,
   Cloud,
   CloudOff,
+  CloudUpload,
+  Copy,
   ExternalLink,
+  FileText,
   History,
+  Layers,
   Link2,
+  Lock,
   MapPin,
+  Paperclip,
   Pencil,
   Plus,
   RefreshCw,
+  Repeat,
   RotateCcw,
   Search,
+  Settings2,
   ShieldAlert,
   Trash2,
   Unlink,
+  Users,
+  Video,
 } from 'lucide-react';
 import { useAuth } from '../../core/auth/AuthContext';
 import {
@@ -34,13 +45,16 @@ import {
   CategoryDotLabel,
   EventFormValues,
   GoogleActionConfirmModal,
-  GoogleRemoteEventModal,
   PendingGoogleConfirmation,
   ResponsibleInline,
+  ScopeBadge,
 } from './AgendaEventModal';
+import { AgendaTriageDeck } from './AgendaTriageDeck';
 import {
+  AgendaEventInput,
   createAgendaEvent,
   deleteAgendaEvent,
+  mirrorGoogleEventsToFirestore,
   recordAgendaAudit,
   saveSelectedGoogleCalendarConfig,
   subscribeAgendaAudit,
@@ -56,26 +70,35 @@ import {
   AgendaCategory,
   AgendaEvent,
   AgendaIntegrationConfig,
+  DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL,
   GoogleCalendarListItem,
-  GoogleCalendarRemoteEvent,
-  UnifiedCalendarEntry,
+  GoogleContactSuggestion,
   formatLocalDateKey,
   formatTimeShort,
+  getEffectiveComsocScope,
+  getGoogleColorHex,
+  parseAttachmentsJson,
+  parseAttendeesJson,
+  parseContactsCacheJson,
   parseEventDate,
+  parseRemindersJson,
 } from './agendaTypes';
 import {
+  CalendarUnauthorizedDomainError,
   GoogleCalendarSession,
   connectGoogleCalendar,
   createGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
   disconnectGoogleCalendarSession,
   fetchGoogleCalendarEvents,
+  fetchGoogleContacts,
   listGoogleCalendars,
   subscribeGoogleCalendarSession,
   updateGoogleCalendarEvent,
 } from './googleCalendarService';
 
 type AgendaViewMode = 'month' | 'week' | 'day' | 'history';
+type CalendarScopeView = 'comsoc' | 'general';
 
 const VIEW_OPTIONS: readonly { value: AgendaViewMode; label: string }[] = [
   { value: 'month', label: 'Mensal' },
@@ -123,10 +146,12 @@ function buildWeekDays(anchor: Date): Date[] {
   return days;
 }
 
-function entryOverlapsDay(entry: UnifiedCalendarEntry, day: Date): boolean {
+function eventOverlapsDay(ev: AgendaEvent, day: Date): boolean {
   const dStart = startOfDay(day).getTime();
   const dEnd = endOfDay(day).getTime();
-  return entry.startDate.getTime() <= dEnd && entry.endDate.getTime() >= dStart;
+  const evStart = parseEventDate(ev.startAt, ev.allDay, false).getTime();
+  const evEnd = parseEventDate(ev.endAt, ev.allDay, true).getTime();
+  return evStart <= dEnd && evEnd >= dStart;
 }
 
 function formatMonthTitle(date: Date): string {
@@ -144,6 +169,18 @@ function formatFullDayTitle(date: Date): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+function formatSyncTimestamp(iso?: string): string {
+  if (!iso) return 'Ainda não sincronizado';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return 'Sincronizado';
+  return dt.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function formValuesToIsoRange(values: EventFormValues): { startAt: string; endAt: string } {
   if (values.allDay) {
     return {
@@ -154,6 +191,38 @@ function formValuesToIsoRange(values: EventFormValues): { startAt: string; endAt
   return {
     startAt: new Date(`${values.startDate}T${values.startTime}:00`).toISOString(),
     endAt: new Date(`${values.endDate}T${values.endTime}:00`).toISOString(),
+  };
+}
+
+function formValuesToEventInput(values: EventFormValues): AgendaEventInput {
+  const { startAt, endAt } = formValuesToIsoRange(values);
+  const primaryReminder = values.reminders[0]?.minutes ?? 0;
+
+  return {
+    title: values.title,
+    comsocScope: values.comsocScope,
+    category: values.category,
+    status: values.status,
+    colorId: values.colorId,
+    startAt,
+    endAt,
+    allDay: values.allDay,
+    recurrenceRule: values.recurrenceRule,
+    location: values.location,
+    createMeet: values.createMeet,
+    meetLink: values.meetLink,
+    responsibles: values.responsibles,
+    attendeesJson: JSON.stringify(values.attendees),
+    guestsCanModify: values.guestsCanModify,
+    guestsCanInviteOthers: values.guestsCanInviteOthers,
+    guestsCanSeeOtherGuests: values.guestsCanSeeOtherGuests,
+    sendUpdates: values.sendUpdates,
+    description: values.description,
+    attachmentsJson: JSON.stringify(values.attachments),
+    remindersJson: JSON.stringify(values.reminders),
+    reminderMinutes: primaryReminder,
+    transparency: values.transparency,
+    visibility: values.visibility,
   };
 }
 
@@ -182,8 +251,10 @@ function GoogleGIcon({ className = 'w-4 h-4' }: { className?: string }) {
 
 export function AgendaComsoc() {
   const { account } = useAuth();
+  const isAdmin = account?.role === 'admin';
 
   // View & Navigation state
+  const [calendarScope, setCalendarScope] = useState<CalendarScopeView>('comsoc');
   const [viewMode, setViewMode] = useState<AgendaViewMode>('month');
   const [anchorDate, setAnchorDate] = useState<Date>(() => startOfDay(new Date()));
   const [selectedDay, setSelectedDay] = useState<Date>(() => startOfDay(new Date()));
@@ -197,17 +268,20 @@ export function AgendaComsoc() {
   const [savedGoogleConfig, setSavedGoogleConfig] = useState<AgendaIntegrationConfig | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(true);
 
-  // Google Calendar runtime state (token strictly in-memory via googleCalendarService)
+  // Admin Google runtime state (in-memory OAuth token only)
   const [googleSession, setGoogleSession] = useState<GoogleCalendarSession>({
     connected: false,
     email: null,
     displayName: null,
   });
   const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarListItem[]>([]);
-  const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
-  const [googleRemoteEvents, setGoogleRemoteEvents] = useState<GoogleCalendarRemoteEvent[]>([]);
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
-  const [loadingGoogleEvents, setLoadingGoogleEvents] = useState(false);
+  const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [showAdminCalPicker, setShowAdminCalPicker] = useState(false);
+
+  // Triage Deck (Tinder-style) state
+  const [triageOpen, setTriageOpen] = useState(false);
+  const [triageBusyId, setTriageBusyId] = useState<string | null>(null);
+  const hasAutoOpenedTriageRef = useRef(false);
 
   // Modals & Alerts
   const [modalOpen, setModalOpen] = useState(false);
@@ -216,12 +290,14 @@ export function AgendaComsoc() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingGoogleConfirmation | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
-  const [selectedRemoteEvent, setSelectedRemoteEvent] =
-    useState<GoogleCalendarRemoteEvent | null>(null);
-  const [importingRemote, setImportingRemote] = useState(false);
 
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+  const [unauthorizedDomainHelp, setUnauthorizedDomainHelp] = useState<{
+    domain: string;
+    consoleUrl: string;
+  } | null>(null);
 
   // Browser notification state
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(
@@ -251,7 +327,7 @@ export function AgendaComsoc() {
     const unsubAudit = subscribeAgendaAudit(
       (list) => setAuditLogs(list),
       () => {
-        // Keep audit non-blocking
+        // Non-blocking
       }
     );
     const unsubConfig = subscribeAgendaGoogleConfig(
@@ -267,248 +343,422 @@ export function AgendaComsoc() {
     };
   }, [account]);
 
-  // Subscribe to in-memory Google Calendar OAuth session
+  // Subscribe to in-memory Google OAuth session
   useEffect(() => {
     return subscribeGoogleCalendarSession((session) => {
       setGoogleSession(session);
       if (!session.connected) {
         setGoogleCalendars([]);
-        setGoogleRemoteEvents([]);
       }
     });
   }, []);
 
-  // Currently selected Google Calendar metadata
-  const selectedCalendar = useMemo(() => {
-    if (!selectedCalendarId) return null;
-    return googleCalendars.find((c) => c.id === selectedCalendarId) || null;
-  }, [googleCalendars, selectedCalendarId]);
+  // Locked institutional calendar metadata (available to ALL profiles from Firestore)
+  const lockedAccountEmail =
+    savedGoogleConfig?.lockedAccountEmail || DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL;
+  const linkedCalendarId =
+    savedGoogleConfig?.selectedCalendarId || DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL;
+  const linkedCalendarSummary =
+    savedGoogleConfig?.selectedCalendarSummary || DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL;
 
-  const secondaryCalendars = useMemo(
-    () => googleCalendars.filter((c) => !c.primary),
-    [googleCalendars]
+  // Derived scope counts & pending lists
+  const pendingTriageEvents = useMemo(
+    () => events.filter((ev) => getEffectiveComsocScope(ev) === 'pending'),
+    [events]
   );
-  const primaryCalendar = useMemo(
-    () => googleCalendars.find((c) => c.primary) || null,
-    [googleCalendars]
+
+  const comsocEventsCount = useMemo(
+    () => events.filter((ev) => getEffectiveComsocScope(ev) === 'comsoc').length,
+    [events]
   );
 
-  // Visible time window for Google Calendar remote event queries
-  const visibleRange = useMemo(() => {
-    const start = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1);
-    const end = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 2, 0, 23, 59, 59);
-    return { timeMin: start.toISOString(), timeMax: end.toISOString() };
-  }, [anchorDate]);
+  const pendingPushEvents = useMemo(
+    () => events.filter((ev) => Boolean(ev.pendingGoogleSync)),
+    [events]
+  );
 
-  const loadRemoteEventsForCalendar = useCallback(
-    async (calendar: GoogleCalendarListItem) => {
-      setLoadingGoogleEvents(true);
-      try {
-        const list = await fetchGoogleCalendarEvents(
-          calendar.id,
-          calendar.summary,
-          visibleRange.timeMin,
-          visibleRange.timeMax
+  // Automatically open Tinder-style Triage Deck once when entering Agenda with pending items
+  useEffect(() => {
+    if (!loadingEvents && !hasAutoOpenedTriageRef.current && pendingTriageEvents.length > 0) {
+      hasAutoOpenedTriageRef.current = true;
+      setTriageOpen(true);
+    }
+  }, [loadingEvents, pendingTriageEvents.length]);
+
+  // Close Triage Deck automatically once queue is emptied
+  useEffect(() => {
+    if (triageOpen && pendingTriageEvents.length === 0) {
+      setTriageOpen(false);
+    }
+  }, [triageOpen, pendingTriageEvents.length]);
+
+  // Shared Google Contacts autocomplete suggestions (from Firestore cache + past attendees)
+  const contactSuggestions = useMemo<GoogleContactSuggestion[]>(() => {
+    const byEmail = new Map<string, GoogleContactSuggestion>();
+    parseContactsCacheJson(savedGoogleConfig?.contactsCacheJson).forEach((c) => {
+      byEmail.set(c.email.toLowerCase(), c);
+    });
+    events.forEach((ev) => {
+      parseAttendeesJson(ev.attendeesJson).forEach((att) => {
+        const key = att.email.toLowerCase();
+        if (!byEmail.has(key)) {
+          byEmail.set(key, {
+            email: key,
+            displayName: att.displayName || key,
+          });
+        }
+      });
+    });
+    return Array.from(byEmail.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, 'pt-BR')
+    );
+  }, [savedGoogleConfig?.contactsCacheJson, events]);
+
+  // Location autocomplete suggestions from existing events
+  const locationSuggestions = useMemo<string[]>(() => {
+    const seen = new Map<string, string>();
+    events.forEach((ev) => {
+      const clean = ev.location.trim();
+      if (!clean) return;
+      const key = clean.toLowerCase();
+      if (!seen.has(key)) seen.set(key, clean);
+    });
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [events]);
+
+  // Helper: fetch Google events + contacts and mirror everything into Firestore
+  const performInstitutionalMirror = useCallback(
+    async (
+      targetCalendarId: string,
+      targetCalendarSummary: string,
+      accountEmail: string
+    ) => {
+      if (!account) return;
+      const now = new Date();
+      const timeMin = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      const timeMax = new Date(now.getFullYear(), now.getMonth() + 6, 0, 23, 59, 59).toISOString();
+
+      const [remoteEvents, contactsResult] = await Promise.all([
+        fetchGoogleCalendarEvents(targetCalendarId, targetCalendarSummary, timeMin, timeMax),
+        fetchGoogleContacts().catch(() => [] as GoogleContactSuggestion[]),
+      ]);
+
+      const { createdPending, updatedMirrored } = await mirrorGoogleEventsToFirestore({
+        remoteEvents,
+        existingEvents: events,
+        actor: account,
+      });
+
+      await saveSelectedGoogleCalendarConfig({
+        calendarId: targetCalendarId,
+        calendarSummary: targetCalendarSummary,
+        lockedAccountEmail: accountEmail,
+        lastSyncAt: new Date().toISOString(),
+        contactsCache: contactsResult.length > 0 ? contactsResult : undefined,
+        existingContactsCacheJson: savedGoogleConfig?.contactsCacheJson,
+        actor: account,
+      });
+
+      const summaryParts: string[] = [];
+      if (createdPending > 0) {
+        summaryParts.push(
+          `${createdPending} nova(s) atividade(s) adicionada(s) à triagem`
         );
-        setGoogleRemoteEvents(list);
-      } catch (err) {
-        setErrorMsg(
-          err instanceof Error
-            ? err.message
-            : 'Não foi possível consultar eventos do Google Calendar.'
-        );
-      } finally {
-        setLoadingGoogleEvents(false);
+      }
+      if (updatedMirrored > 0) {
+        summaryParts.push(`${updatedMirrored} evento(s) atualizado(s)`);
+      }
+      if (contactsResult.length > 0) {
+        summaryParts.push(`${contactsResult.length} contato(s) sincronizado(s)`);
+      }
+
+      setNotice(
+        summaryParts.length > 0
+          ? `Sincronização concluída (${targetCalendarSummary}): ${summaryParts.join(' · ')}.`
+          : `Agenda sincronizada com "${targetCalendarSummary}". Nenhuma novidade pendente.`
+      );
+
+      if (createdPending > 0) {
+        setTriageOpen(true);
       }
     },
-    [visibleRange.timeMax, visibleRange.timeMin]
+    [account, events, savedGoogleConfig?.contactsCacheJson]
   );
 
-  // Refresh remote Google Calendar events when calendar or month range changes
-  useEffect(() => {
-    if (!googleSession.connected || !selectedCalendar) {
-      setGoogleRemoteEvents([]);
-      return;
-    }
-    void loadRemoteEventsForCalendar(selectedCalendar);
-  }, [googleSession.connected, selectedCalendar, loadRemoteEventsForCalendar]);
-
-  const handleConnectGoogle = async () => {
-    if (!account) return;
-    setConnectingGoogle(true);
+  // Admin-only: Connect & Sync institutional Google Calendar (comsoc1bimeces@gmail.com)
+  const handleAdminSyncGoogle = async () => {
+    if (!account || !isAdmin) return;
+    setSyncingGoogle(true);
     setErrorMsg(null);
     setNotice(null);
+    setUnauthorizedDomainHelp(null);
     try {
-      const session = await connectGoogleCalendar();
+      let activeEmail = googleSession.email || lockedAccountEmail;
+      if (!googleSession.connected) {
+        const session = await connectGoogleCalendar(lockedAccountEmail);
+        activeEmail = session.email || lockedAccountEmail;
+        void recordAgendaAudit({
+          actor: account,
+          action: 'google_connect',
+          summary: `Administrador conectou conta institucional Google (${activeEmail}).`,
+        });
+      }
+
       const calendars = await listGoogleCalendars();
       setGoogleCalendars(calendars);
 
-      // Prefer saved secondary calendar -> else first writable secondary calendar -> else none forced
+      // Prefer saved calendar -> else institutional email calendar -> else primary -> else first
       const savedId = savedGoogleConfig?.selectedCalendarId;
       const savedMatch = savedId ? calendars.find((c) => c.id === savedId) : undefined;
-      const firstSecondary = calendars.find(
-        (c) => !c.primary && (c.accessRole === 'owner' || c.accessRole === 'writer')
+      const instMatch = calendars.find(
+        (c) => c.id.toLowerCase() === lockedAccountEmail.toLowerCase()
       );
-      const fallbackSecondary = calendars.find((c) => !c.primary);
-      const chosen = savedMatch || firstSecondary || fallbackSecondary || calendars[0] || null;
+      const primaryMatch = calendars.find((c) => c.primary);
+      const chosen = savedMatch || instMatch || primaryMatch || calendars[0];
 
-      if (chosen) {
-        setSelectedCalendarId(chosen.id);
-        if (!savedMatch && !chosen.primary) {
-          await saveSelectedGoogleCalendarConfig({
-            calendarId: chosen.id,
-            calendarSummary: chosen.summary,
-            actor: account,
-          });
-        }
+      if (!chosen) {
+        throw new Error('Nenhum calendário foi encontrado na conta Google conectada.');
       }
 
-      void recordAgendaAudit({
-        actor: account,
-        action: 'google_connect',
-        summary: `Integração Google Calendar conectada (${session.email || 'conta Google'}).`,
-      });
-
-      if (calendars.every((c) => c.primary)) {
-        setNotice(
-          'Conta Google conectada. Dica: crie um calendário secundário no Google Calendar (ex: "COMSOC") e clique em Atualizar para separar da sua agenda pessoal.'
-        );
-      } else {
-        setNotice(
-          `Google Calendar conectado (${session.email || 'conta institucional'}). Confira o calendário secundário selecionado.`
-        );
-      }
+      await performInstitutionalMirror(chosen.id, chosen.summary, activeEmail);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Erro ao conectar Google Calendar.');
+      if (err instanceof CalendarUnauthorizedDomainError) {
+        setUnauthorizedDomainHelp({
+          domain: err.domain,
+          consoleUrl: err.consoleUrl,
+        });
+      }
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Erro ao sincronizar com o Google Calendar.'
+      );
     } finally {
-      setConnectingGoogle(false);
+      setSyncingGoogle(false);
     }
   };
 
-  const handleDisconnectGoogle = async () => {
-    if (!account) return;
+  // Admin-only: Switch linked institutional calendar
+  const handleAdminSwitchCalendar = async (nextCalId: string) => {
+    if (!account || !isAdmin) return;
+    const chosen = googleCalendars.find((c) => c.id === nextCalId);
+    if (!chosen) return;
+    setSyncingGoogle(true);
+    setErrorMsg(null);
+    try {
+      await performInstitutionalMirror(
+        chosen.id,
+        chosen.summary,
+        googleSession.email || lockedAccountEmail
+      );
+      setShowAdminCalPicker(false);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Falha ao trocar calendário vinculado.');
+    } finally {
+      setSyncingGoogle(false);
+    }
+  };
+
+  // Admin-only: Disconnect current browser Google session
+  const handleAdminDisconnectGoogle = async () => {
+    if (!account || !isAdmin) return;
     await disconnectGoogleCalendarSession();
-    setSelectedCalendarId('');
     setGoogleCalendars([]);
-    setGoogleRemoteEvents([]);
-    setNotice('Google Calendar desconectado com segurança nesta sessão.');
+    setShowAdminCalPicker(false);
+    setNotice(
+      'Sessão Google desconectada neste navegador. Os eventos já sincronizados continuam disponíveis para toda a equipe.'
+    );
     void recordAgendaAudit({
       actor: account,
       action: 'google_disconnect',
-      summary: 'Sessão do Google Calendar desconectada.',
+      summary: 'Administrador encerrou a sessão Google Calendar neste navegador.',
     });
   };
 
-  const handleSelectCalendar = async (nextId: string) => {
-    setSelectedCalendarId(nextId);
-    const cal = googleCalendars.find((c) => c.id === nextId);
-    if (cal && account) {
-      try {
-        await saveSelectedGoogleCalendarConfig({
-          calendarId: cal.id,
-          calendarSummary: cal.summary,
-          actor: account,
-        });
-      } catch {
-        // Non-fatal preference save
-      }
+  // Admin-only: Push queued events created/edited while offline from Google (with MANDATORY confirmation modal)
+  const handleAdminRequestPushQueue = () => {
+    if (!account || !isAdmin || pendingPushEvents.length === 0) return;
+    if (!googleSession.connected) {
+      setErrorMsg('Clique primeiro em "Sincronizar com Google" para autenticar esta sessão.');
+      return;
     }
+
+    setPendingConfirm({
+      type: 'push_queue',
+      eventTitle:
+        pendingPushEvents.length === 1
+          ? pendingPushEvents[0].title
+          : `${pendingPushEvents.length} atividades criadas/editadas no SISCOM`,
+      calendarSummary: linkedCalendarSummary,
+      isSynced: false,
+      queueCount: pendingPushEvents.length,
+      onConfirm: async () => {
+        setConfirmBusy(true);
+        setErrorMsg(null);
+        let pushed = 0;
+        let failed = 0;
+        try {
+          for (const ev of pendingPushEvents) {
+            try {
+              const targetCal = ev.googleCalendarId || linkedCalendarId;
+              const targetSummary = ev.googleCalendarSummary || linkedCalendarSummary;
+              if (ev.googleEventId && ev.googleCalendarId) {
+                const res = await updateGoogleCalendarEvent(targetCal, ev.googleEventId, ev);
+                await updateAgendaEvent(
+                  ev.id,
+                  {
+                    googleEventId: res.googleEventId,
+                    googleHtmlLink: res.htmlLink,
+                    meetLink: res.meetLink || ev.meetLink || '',
+                    syncStatus: 'synced',
+                    pendingGoogleSync: false,
+                    lastSyncedAt: new Date().toISOString(),
+                  },
+                  account
+                );
+              } else {
+                const res = await createGoogleCalendarEvent(targetCal, ev);
+                await updateAgendaEvent(
+                  ev.id,
+                  {
+                    googleEventId: res.googleEventId,
+                    googleCalendarId: targetCal,
+                    googleCalendarSummary: targetSummary,
+                    googleHtmlLink: res.htmlLink,
+                    meetLink: res.meetLink || ev.meetLink || '',
+                    syncStatus: 'synced',
+                    pendingGoogleSync: false,
+                    lastSyncedAt: new Date().toISOString(),
+                  },
+                  account
+                );
+              }
+              pushed += 1;
+            } catch {
+              failed += 1;
+              await updateAgendaEvent(ev.id, { syncStatus: 'error' }, account);
+            }
+          }
+          if (pushed > 0) {
+            void recordAgendaAudit({
+              actor: account,
+              action: 'sync_push',
+              summary: `Fila sincronizada com Google Calendar ("${linkedCalendarSummary}"): ${pushed} enviada(s)${failed > 0 ? `, ${failed} com erro` : ''}.`,
+            });
+          }
+          setNotice(
+            failed > 0
+              ? `${pushed} atividade(s) enviada(s) ao Google Calendar; ${failed} falhou(aram).`
+              : `${pushed} atividade(s) pendente(s) enviada(s) com sucesso para "${linkedCalendarSummary}".`
+          );
+          setPendingConfirm(null);
+        } finally {
+          setConfirmBusy(false);
+        }
+      },
+    });
   };
 
-  const handleRefreshGoogle = async () => {
-    if (!googleSession.connected) return;
+  // Triage classification (Swipe Right = COMSOC, Swipe Left = General)
+  const handleClassifyTriage = async (
+    ev: AgendaEvent,
+    decision: 'comsoc' | 'general',
+    category: AgendaCategory
+  ) => {
+    if (!account) return;
+    setTriageBusyId(ev.id);
     setErrorMsg(null);
-    setLoadingGoogleEvents(true);
     try {
-      const calendars = await listGoogleCalendars();
-      setGoogleCalendars(calendars);
-      const active =
-        calendars.find((c) => c.id === selectedCalendarId) ||
-        calendars.find((c) => !c.primary) ||
-        calendars[0] ||
-        null;
-      if (active) {
-        setSelectedCalendarId(active.id);
-        await loadRemoteEventsForCalendar(active);
-      }
-      setNotice('Calendários e eventos do Google Calendar atualizados.');
+      await updateAgendaEvent(
+        ev.id,
+        {
+          comsocScope: decision,
+          category: decision === 'comsoc' ? category : ev.category,
+        },
+        account,
+        decision === 'comsoc'
+          ? `Triagem: "${ev.title}" aprovada para o Calendário COMSOC (${AGENDA_CATEGORY_MAP[category]?.shortLabel || category}).`
+          : `Triagem: "${ev.title}" mantida apenas no Calendário Geral.`
+      );
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Falha ao atualizar Google Calendar.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao classificar atividade.');
     } finally {
-      setLoadingGoogleEvents(false);
+      setTriageBusyId(null);
     }
   };
 
-  // Deduplicate Google remote events against internal SISCOM events
-  const unifiedEntries = useMemo<UnifiedCalendarEntry[]>(() => {
-    const siscomById = new Set(events.map((e) => e.id));
-    const syncedGoogleIds = new Set(
-      events.filter((e) => e.googleEventId).map((e) => e.googleEventId)
-    );
+  // 1-Click scope toggle directly from any card
+  const handleToggleEventScope = async (ev: AgendaEvent) => {
+    if (!account) return;
+    const current = getEffectiveComsocScope(ev);
+    const nextScope: 'comsoc' | 'general' = current === 'comsoc' ? 'general' : 'comsoc';
+    try {
+      await updateAgendaEvent(
+        ev.id,
+        { comsocScope: nextScope },
+        account,
+        nextScope === 'comsoc'
+          ? `"${ev.title}" movida para o Calendário COMSOC.`
+          : `"${ev.title}" movida para o Calendário Geral.`
+      );
+      setNotice(
+        nextScope === 'comsoc'
+          ? `"${ev.title}" agora aparece no Calendário COMSOC e no Geral.`
+          : `"${ev.title}" foi ocultada do Calendário COMSOC (continua no Calendário Geral).`
+      );
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao alterar classificação.');
+    }
+  };
 
-    const siscomEntries: UnifiedCalendarEntry[] = events
+  // Filtered events according to active scope (Calendário COMSOC vs Calendário Geral), category & search
+  const visibleEvents = useMemo(() => {
+    return events
       .filter((ev) => {
+        const scope = getEffectiveComsocScope(ev);
+        if (calendarScope === 'comsoc' && scope !== 'comsoc') return false;
         if (categoryFilter !== 'all' && ev.category !== categoryFilter) return false;
         if (searchQuery.trim()) {
           const q = searchQuery.trim().toLowerCase();
-          const haystack = `${ev.title} ${ev.location} ${ev.responsibles} ${ev.description}`.toLowerCase();
-          if (!haystack.includes(q)) return false;
+          const attendeesText = parseAttendeesJson(ev.attendeesJson)
+            .map((a) => `${a.displayName || ''} ${a.email}`)
+            .join(' ');
+          const hay = `${ev.title} ${ev.location} ${ev.responsibles} ${ev.description} ${attendeesText}`.toLowerCase();
+          if (!hay.includes(q)) return false;
         }
         return true;
-      })
-      .map((ev) => ({
-        origin: 'siscom',
-        event: ev,
-        startDate: parseEventDate(ev.startAt, ev.allDay, false),
-        endDate: parseEventDate(ev.endAt, ev.allDay, true),
-      }));
-
-    const remoteEntries: UnifiedCalendarEntry[] =
-      categoryFilter !== 'all'
-        ? []
-        : googleRemoteEvents
-            .filter((rem) => {
-              if (syncedGoogleIds.has(rem.id)) return false;
-              if (rem.siscomEventId && siscomById.has(rem.siscomEventId)) return false;
-              if (searchQuery.trim()) {
-                const q = searchQuery.trim().toLowerCase();
-                const haystack = `${rem.summary} ${rem.location} ${rem.description}`.toLowerCase();
-                if (!haystack.includes(q)) return false;
-              }
-              return true;
-            })
-            .map((rem) => ({
-              origin: 'google_only',
-              remote: rem,
-              startDate: parseEventDate(rem.startAt, rem.allDay, false),
-              endDate: parseEventDate(rem.endAt, rem.allDay, true),
-            }));
-
-    return [...siscomEntries, ...remoteEntries].sort(
-      (a, b) => a.startDate.getTime() - b.startDate.getTime()
-    );
-  }, [events, googleRemoteEvents, categoryFilter, searchQuery]);
-
-  // Active Reminders: scheduled events starting soon within their configured reminder window
-  const activeReminders = useMemo(() => {
-    const now = Date.now();
-    return events
-      .filter((ev) => {
-        if (ev.status !== 'agendado' || ev.reminderMinutes <= 0) return false;
-        const startMs = parseEventDate(ev.startAt, ev.allDay, false).getTime();
-        const windowMs = ev.reminderMinutes * 60_000;
-        return startMs >= now - 15 * 60_000 && startMs - now <= windowMs;
       })
       .sort(
         (a, b) =>
           parseEventDate(a.startAt, a.allDay, false).getTime() -
           parseEventDate(b.startAt, b.allDay, false).getTime()
       );
-  }, [events]);
+  }, [events, calendarScope, categoryFilter, searchQuery]);
 
-  // Trigger optional browser notifications once per active reminder
+  // Active Reminders (respecting COMSOC calendar focus when in COMSOC mode)
+  const activeReminders = useMemo(() => {
+    const now = Date.now();
+    return visibleEvents
+      .filter((ev) => {
+        if (ev.status !== 'agendado') return false;
+        const reminders = parseRemindersJson(ev.remindersJson, ev.reminderMinutes);
+        const maxMinutes = reminders.reduce((acc, r) => Math.max(acc, r.minutes), 0);
+        if (maxMinutes <= 0) return false;
+        const startMs = parseEventDate(ev.startAt, ev.allDay, false).getTime();
+        return startMs >= now - 15 * 60_000 && startMs - now <= maxMinutes * 60_000;
+      })
+      .sort(
+        (a, b) =>
+          parseEventDate(a.startAt, a.allDay, false).getTime() -
+          parseEventDate(b.startAt, b.allDay, false).getTime()
+      );
+  }, [visibleEvents]);
+
+  // Browser notification trigger
   useEffect(() => {
-    if (notifPermission !== 'granted' || typeof window === 'undefined' || !('Notification' in window)) {
+    if (
+      notifPermission !== 'granted' ||
+      typeof window === 'undefined' ||
+      !('Notification' in window)
+    ) {
       return;
     }
     activeReminders.forEach((ev) => {
@@ -537,30 +787,22 @@ export function AgendaComsoc() {
     }
   };
 
-  // History list: completed, cancelled, or past events
+  // History list (completed, cancelled, or past events within the selected scope)
   const historyEvents = useMemo(() => {
     const now = Date.now();
-    return events
+    return visibleEvents
       .filter((ev) => {
         const endMs = parseEventDate(ev.endAt, ev.allDay, true).getTime();
-        const isPastOrClosed = ev.status !== 'agendado' || endMs < now;
-        if (!isPastOrClosed) return false;
-        if (categoryFilter !== 'all' && ev.category !== categoryFilter) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.trim().toLowerCase();
-          const hay = `${ev.title} ${ev.location} ${ev.responsibles} ${ev.description}`.toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
+        return ev.status !== 'agendado' || endMs < now;
       })
       .sort(
         (a, b) =>
           parseEventDate(b.startAt, b.allDay, false).getTime() -
           parseEventDate(a.startAt, a.allDay, false).getTime()
       );
-  }, [events, categoryFilter, searchQuery]);
+  }, [visibleEvents]);
 
-  // Open Create/Edit modal
+  // Modal helpers
   const openCreateModal = (dateForEvent?: Date) => {
     if (dateForEvent) {
       setSelectedDay(startOfDay(dateForEvent));
@@ -576,71 +818,61 @@ export function AgendaComsoc() {
     setModalOpen(true);
   };
 
-  // Submit Create or Edit (enforces explicit confirmation modal before mutating Google Calendar!)
+  // Submit 6-Card Create/Edit Form (ALWAYS requires explicit confirmation before mutating Google Calendar!)
   const handleFormSubmit = async (values: EventFormValues) => {
     if (!account) return;
     setModalError(null);
     setErrorMsg(null);
-    const { startAt, endAt } = formValuesToIsoRange(values);
 
-    const canSyncNow =
-      values.syncWithGoogle &&
-      googleSession.connected &&
-      Boolean(selectedCalendar) &&
-      (selectedCalendar?.accessRole === 'owner' || selectedCalendar?.accessRole === 'writer');
+    const baseInput = formValuesToEventInput(values);
+    const canSyncNow = values.syncWithGoogle && googleSession.connected && Boolean(linkedCalendarId);
+    const shouldQueueForGoogle = values.syncWithGoogle && !googleSession.connected;
 
     // Case 1: Editing an existing event
     if (editingEvent) {
-      const targetCalendarId =
-        editingEvent.googleCalendarId || selectedCalendar?.id || '';
-      const targetCalendarSummary =
-        editingEvent.googleCalendarSummary || selectedCalendar?.summary || 'Google Calendar';
+      const targetCalendarId = editingEvent.googleCalendarId || linkedCalendarId;
+      const targetCalendarSummary = editingEvent.googleCalendarSummary || linkedCalendarSummary;
+      const willUpdateRemote = canSyncNow && Boolean(editingEvent.googleEventId && targetCalendarId);
+      const willPushRemote = canSyncNow && !editingEvent.googleEventId && Boolean(targetCalendarId);
 
-      const willMutateGoogle =
-        canSyncNow && Boolean(editingEvent.googleEventId && targetCalendarId);
-      const willPushNewToGoogle =
-        canSyncNow && !editingEvent.googleEventId && Boolean(selectedCalendar);
-
-      const executeSave = async (syncGoogle: boolean) => {
+      const executeUpdate = async (syncGoogleNow: boolean) => {
         setSavingEvent(true);
         try {
-          const baseUpdates = {
-            title: values.title,
-            category: values.category,
-            status: values.status,
-            startAt,
-            endAt,
-            allDay: values.allDay,
-            location: values.location,
-            responsibles: values.responsibles,
-            description: values.description,
-            reminderMinutes: values.reminderMinutes,
+          const updates: Partial<AgendaEventInput> = {
+            ...baseInput,
+            pendingGoogleSync: syncGoogleNow ? false : shouldQueueForGoogle,
           };
 
           await updateAgendaEvent(
             editingEvent.id,
-            baseUpdates,
+            updates,
             account,
             `Atividade atualizada: "${values.title.trim()}"`
           );
 
           const mergedEvent: AgendaEvent = {
             ...editingEvent,
-            ...baseUpdates,
+            ...updates,
           };
 
-          if (syncGoogle && editingEvent.googleEventId && targetCalendarId) {
-            const updatedRemote = await updateGoogleCalendarEvent(
+          if (syncGoogleNow && editingEvent.googleEventId && targetCalendarId) {
+            const res = await updateGoogleCalendarEvent(
               targetCalendarId,
               editingEvent.googleEventId,
               mergedEvent
             );
-            await updateAgendaEvent(editingEvent.id, {
-              googleEventId: updatedRemote.googleEventId,
-              googleHtmlLink: updatedRemote.htmlLink,
-              syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString(),
-            }, account);
+            await updateAgendaEvent(
+              editingEvent.id,
+              {
+                googleEventId: res.googleEventId,
+                googleHtmlLink: res.htmlLink,
+                meetLink: res.meetLink || mergedEvent.meetLink || '',
+                syncStatus: 'synced',
+                pendingGoogleSync: false,
+                lastSyncedAt: new Date().toISOString(),
+              },
+              account
+            );
             void recordAgendaAudit({
               actor: account,
               action: 'sync_update',
@@ -648,33 +880,37 @@ export function AgendaComsoc() {
               summary: `Evento atualizado no Google Calendar ("${targetCalendarSummary}"): "${values.title.trim()}"`,
             });
             setNotice(`Atividade salva e atualizada no Google Calendar ("${targetCalendarSummary}").`);
-          } else if (syncGoogle && selectedCalendar) {
-            const createdRemote = await createGoogleCalendarEvent(
-              selectedCalendar.id,
-              mergedEvent
+          } else if (syncGoogleNow && targetCalendarId) {
+            const res = await createGoogleCalendarEvent(targetCalendarId, mergedEvent);
+            await updateAgendaEvent(
+              editingEvent.id,
+              {
+                googleEventId: res.googleEventId,
+                googleCalendarId: targetCalendarId,
+                googleCalendarSummary: targetCalendarSummary,
+                googleHtmlLink: res.htmlLink,
+                meetLink: res.meetLink || mergedEvent.meetLink || '',
+                syncStatus: 'synced',
+                pendingGoogleSync: false,
+                lastSyncedAt: new Date().toISOString(),
+              },
+              account
             );
-            await updateAgendaEvent(editingEvent.id, {
-              googleEventId: createdRemote.googleEventId,
-              googleCalendarId: selectedCalendar.id,
-              googleCalendarSummary: selectedCalendar.summary,
-              googleHtmlLink: createdRemote.htmlLink,
-              syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString(),
-            }, account);
             void recordAgendaAudit({
               actor: account,
               action: 'sync_push',
               eventId: editingEvent.id,
-              summary: `Atividade sincronizada no Google Calendar ("${selectedCalendar.summary}"): "${values.title.trim()}"`,
+              summary: `Atividade enviada ao Google Calendar ("${targetCalendarSummary}"): "${values.title.trim()}"`,
             });
-            setNotice(`Atividade salva e sincronizada no calendário "${selectedCalendar.summary}".`);
+            setNotice(`Atividade salva e enviada para "${targetCalendarSummary}".`);
+          } else if (shouldQueueForGoogle) {
+            setNotice(
+              'Alterações salvas no SISCOM e colocadas na fila para envio ao Google Calendar na próxima sincronização.'
+            );
           } else {
-            setNotice('Alterações salvas na Agenda interna do SISCOM.');
+            setNotice('Alterações salvas na Agenda do SISCOM.');
           }
 
-          if (selectedCalendar && googleSession.connected) {
-            void loadRemoteEventsForCalendar(selectedCalendar);
-          }
           setModalOpen(false);
           setEditingEvent(null);
         } catch (err) {
@@ -686,19 +922,16 @@ export function AgendaComsoc() {
         }
       };
 
-      // MANDATORY confirmation before mutating Google Calendar
-      if (willMutateGoogle || willPushNewToGoogle) {
+      if (willUpdateRemote || willPushRemote) {
         setPendingConfirm({
-          type: willMutateGoogle ? 'update_google' : 'push_google',
+          type: willUpdateRemote ? 'update_google' : 'push_google',
           eventTitle: values.title.trim(),
-          calendarSummary: willMutateGoogle
-            ? targetCalendarSummary
-            : selectedCalendar?.summary || 'Google Calendar',
-          isSynced: willMutateGoogle,
+          calendarSummary: targetCalendarSummary,
+          isSynced: willUpdateRemote,
           onConfirm: async () => {
             setConfirmBusy(true);
             try {
-              await executeSave(true);
+              await executeUpdate(true);
               setPendingConfirm(null);
             } finally {
               setConfirmBusy(false);
@@ -708,63 +941,70 @@ export function AgendaComsoc() {
         return;
       }
 
-      await executeSave(false);
+      await executeUpdate(false);
       return;
     }
 
     // Case 2: Creating a new event
-    const executeCreate = async (syncGoogle: boolean) => {
+    const executeCreate = async (syncGoogleNow: boolean) => {
       setSavingEvent(true);
       try {
         const created = await createAgendaEvent(
           {
-            title: values.title,
-            category: values.category,
-            status: values.status,
-            startAt,
-            endAt,
-            allDay: values.allDay,
-            location: values.location,
-            responsibles: values.responsibles,
-            description: values.description,
-            reminderMinutes: values.reminderMinutes,
+            ...baseInput,
             syncStatus: 'internal',
+            pendingGoogleSync: syncGoogleNow ? false : shouldQueueForGoogle,
           },
           account
         );
 
-        if (syncGoogle && selectedCalendar) {
+        if (syncGoogleNow && linkedCalendarId) {
           try {
-            const remote = await createGoogleCalendarEvent(selectedCalendar.id, created);
-            await updateAgendaEvent(created.id, {
-              googleEventId: remote.googleEventId,
-              googleCalendarId: selectedCalendar.id,
-              googleCalendarSummary: selectedCalendar.summary,
-              googleHtmlLink: remote.htmlLink,
-              syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString(),
-            }, account);
+            const remote = await createGoogleCalendarEvent(linkedCalendarId, created);
+            await updateAgendaEvent(
+              created.id,
+              {
+                googleEventId: remote.googleEventId,
+                googleCalendarId: linkedCalendarId,
+                googleCalendarSummary: linkedCalendarSummary,
+                googleHtmlLink: remote.htmlLink,
+                meetLink: remote.meetLink || created.meetLink || '',
+                syncStatus: 'synced',
+                pendingGoogleSync: false,
+                lastSyncedAt: new Date().toISOString(),
+              },
+              account
+            );
             void recordAgendaAudit({
               actor: account,
               action: 'sync_push',
               eventId: created.id,
-              summary: `Nova atividade enviada ao Google Calendar ("${selectedCalendar.summary}"): "${created.title}"`,
+              summary: `Nova atividade enviada ao Google Calendar ("${linkedCalendarSummary}"): "${created.title}"`,
             });
-            setNotice(`Atividade cadastrada e sincronizada com "${selectedCalendar.summary}".`);
-            void loadRemoteEventsForCalendar(selectedCalendar);
+            setNotice(
+              `Atividade cadastrada e sincronizada diretamente com "${linkedCalendarSummary}".`
+            );
           } catch (googleErr) {
-            await updateAgendaEvent(created.id, { syncStatus: 'error' }, account);
+            await updateAgendaEvent(
+              created.id,
+              { syncStatus: 'error', pendingGoogleSync: true },
+              account
+            );
             setErrorMsg(
               `Atividade salva no SISCOM, mas houve erro ao enviar ao Google Calendar: ${
                 googleErr instanceof Error ? googleErr.message : 'erro desconhecido'
               }`
             );
           }
+        } else if (shouldQueueForGoogle) {
+          setNotice(
+            'Atividade cadastrada no SISCOM e marcada na fila de envio ao Google Calendar.'
+          );
         } else {
-          setNotice('Atividade cadastrada na Agenda interna da COMSOC.');
+          setNotice('Atividade cadastrada na Agenda do SISCOM.');
         }
 
-        setSelectedDay(parseEventDate(startAt, values.allDay, false));
+        setSelectedDay(parseEventDate(baseInput.startAt, values.allDay, false));
         setModalOpen(false);
       } catch (err) {
         setModalError(err instanceof Error ? err.message : 'Erro ao cadastrar atividade.');
@@ -773,11 +1013,11 @@ export function AgendaComsoc() {
       }
     };
 
-    if (canSyncNow && selectedCalendar) {
+    if (canSyncNow) {
       setPendingConfirm({
         type: 'push_google',
         eventTitle: values.title.trim(),
-        calendarSummary: selectedCalendar.summary,
+        calendarSummary: linkedCalendarSummary,
         isSynced: false,
         onConfirm: async () => {
           setConfirmBusy(true);
@@ -795,23 +1035,23 @@ export function AgendaComsoc() {
     await executeCreate(false);
   };
 
-  // Manual push or update to Google Calendar for an existing event (with MANDATORY confirmation modal)
+  // Manual push/update to Google Calendar (Admin with active session + MANDATORY confirmation)
   const handleRequestSyncEvent = (ev: AgendaEvent) => {
     if (!account) return;
-    if (!googleSession.connected || !selectedCalendar) {
-      setErrorMsg('Conecte o Google Calendar e selecione o calendário secundário antes de sincronizar.');
-      return;
-    }
-    if (selectedCalendar.accessRole !== 'owner' && selectedCalendar.accessRole !== 'writer') {
-      setErrorMsg('O calendário selecionado é somente leitura. Escolha um calendário com permissão de escrita.');
+    if (!googleSession.connected) {
+      setErrorMsg(
+        isAdmin
+          ? 'Clique em "Sincronizar com Google" no topo antes de enviar esta atividade.'
+          : 'A atividade será enviada ao Google Calendar na próxima sincronização feita pelo administrador.'
+      );
       return;
     }
 
     const isAlreadySynced = Boolean(ev.googleEventId && ev.googleCalendarId);
-    const targetCalendarId = isAlreadySynced ? ev.googleCalendarId : selectedCalendar.id;
+    const targetCalendarId = isAlreadySynced ? ev.googleCalendarId : linkedCalendarId;
     const targetCalendarSummary = isAlreadySynced
-      ? ev.googleCalendarSummary || selectedCalendar.summary
-      : selectedCalendar.summary;
+      ? ev.googleCalendarSummary || linkedCalendarSummary
+      : linkedCalendarSummary;
 
     setPendingConfirm({
       type: isAlreadySynced ? 'update_google' : 'push_google',
@@ -824,12 +1064,18 @@ export function AgendaComsoc() {
         try {
           if (isAlreadySynced) {
             const res = await updateGoogleCalendarEvent(targetCalendarId, ev.googleEventId, ev);
-            await updateAgendaEvent(ev.id, {
-              googleEventId: res.googleEventId,
-              googleHtmlLink: res.htmlLink,
-              syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString(),
-            }, account);
+            await updateAgendaEvent(
+              ev.id,
+              {
+                googleEventId: res.googleEventId,
+                googleHtmlLink: res.htmlLink,
+                meetLink: res.meetLink || ev.meetLink || '',
+                syncStatus: 'synced',
+                pendingGoogleSync: false,
+                lastSyncedAt: new Date().toISOString(),
+              },
+              account
+            );
             void recordAgendaAudit({
               actor: account,
               action: 'sync_update',
@@ -839,14 +1085,20 @@ export function AgendaComsoc() {
             setNotice(`"${ev.title}" atualizado no Google Calendar ("${targetCalendarSummary}").`);
           } else {
             const res = await createGoogleCalendarEvent(targetCalendarId, ev);
-            await updateAgendaEvent(ev.id, {
-              googleEventId: res.googleEventId,
-              googleCalendarId: targetCalendarId,
-              googleCalendarSummary: targetCalendarSummary,
-              googleHtmlLink: res.htmlLink,
-              syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString(),
-            }, account);
+            await updateAgendaEvent(
+              ev.id,
+              {
+                googleEventId: res.googleEventId,
+                googleCalendarId: targetCalendarId,
+                googleCalendarSummary: targetCalendarSummary,
+                googleHtmlLink: res.htmlLink,
+                meetLink: res.meetLink || ev.meetLink || '',
+                syncStatus: 'synced',
+                pendingGoogleSync: false,
+                lastSyncedAt: new Date().toISOString(),
+              },
+              account
+            );
             void recordAgendaAudit({
               actor: account,
               action: 'sync_push',
@@ -854,9 +1106,6 @@ export function AgendaComsoc() {
               summary: `Atividade sincronizada no Google Calendar ("${targetCalendarSummary}"): "${ev.title}"`,
             });
             setNotice(`"${ev.title}" sincronizado no calendário "${targetCalendarSummary}".`);
-          }
-          if (selectedCalendar) {
-            void loadRemoteEventsForCalendar(selectedCalendar);
           }
           setPendingConfirm(null);
         } catch (err) {
@@ -871,7 +1120,7 @@ export function AgendaComsoc() {
     });
   };
 
-  // Request deletion (ALWAYS shows explicit confirmation modal!)
+  // Deletion (ALWAYS requires explicit confirmation modal!)
   const handleRequestDeleteEvent = (ev: AgendaEvent) => {
     if (!account) return;
     const isSynced = Boolean(ev.googleEventId && ev.googleCalendarId);
@@ -879,7 +1128,7 @@ export function AgendaComsoc() {
     setPendingConfirm({
       type: 'delete_event',
       eventTitle: ev.title,
-      calendarSummary: ev.googleCalendarSummary || 'Google Calendar',
+      calendarSummary: ev.googleCalendarSummary || linkedCalendarSummary,
       isSynced,
       onConfirm: async (alsoDeleteInGoogle: boolean) => {
         setConfirmBusy(true);
@@ -888,7 +1137,7 @@ export function AgendaComsoc() {
           if (isSynced && alsoDeleteInGoogle) {
             if (!googleSession.connected) {
               throw new Error(
-                'Conecte o Google Calendar para remover o evento também na nuvem, ou desmarque a opção para excluir somente no SISCOM.'
+                'Sessão Google não ativa neste navegador. Desmarque a opção para excluir somente no SISCOM ou sincronize com o Google antes.'
               );
             }
             await deleteGoogleCalendarEvent(ev.googleCalendarId, ev.googleEventId);
@@ -896,7 +1145,7 @@ export function AgendaComsoc() {
               actor: account,
               action: 'sync_delete',
               eventId: ev.id,
-              summary: `Evento removido também no Google Calendar ("${ev.googleCalendarSummary || 'Google Calendar'}"): "${ev.title}"`,
+              summary: `Evento removido também no Google Calendar ("${ev.googleCalendarSummary || linkedCalendarSummary}"): "${ev.title}"`,
             });
           }
 
@@ -904,11 +1153,8 @@ export function AgendaComsoc() {
           setNotice(
             isSynced && alsoDeleteInGoogle
               ? `Atividade "${ev.title}" removida do SISCOM e do Google Calendar.`
-              : `Atividade "${ev.title}" removida da Agenda interna do SISCOM.`
+              : `Atividade "${ev.title}" removida da Agenda do SISCOM.`
           );
-          if (selectedCalendar && googleSession.connected) {
-            void loadRemoteEventsForCalendar(selectedCalendar);
-          }
           setPendingConfirm(null);
         } catch (err) {
           setErrorMsg(err instanceof Error ? err.message : 'Erro ao excluir atividade.');
@@ -942,44 +1188,6 @@ export function AgendaComsoc() {
     }
   };
 
-  // Import Google-only event into SISCOM without duplicating in Google Calendar
-  const handleImportRemoteToSiscom = async (remote: GoogleCalendarRemoteEvent) => {
-    if (!account) return;
-    setImportingRemote(true);
-    setErrorMsg(null);
-    try {
-      await createAgendaEvent(
-        {
-          title: remote.summary,
-          category: 'outros',
-          status: 'agendado',
-          startAt: remote.startAt,
-          endAt: remote.endAt,
-          allDay: remote.allDay,
-          location: remote.location,
-          responsibles: '',
-          description: remote.description,
-          reminderMinutes: 60,
-          googleEventId: remote.id,
-          googleCalendarId: remote.calendarId,
-          googleCalendarSummary: remote.calendarSummary,
-          googleHtmlLink: remote.htmlLink,
-          syncStatus: 'synced',
-          lastSyncedAt: new Date().toISOString(),
-        },
-        account
-      );
-      setSelectedRemoteEvent(null);
-      setNotice(
-        `Evento "${remote.summary}" importado e vinculado ao SISCOM sem duplicação no Google Calendar.`
-      );
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Falha ao importar evento.');
-    } finally {
-      setImportingRemote(false);
-    }
-  };
-
   // Date navigation
   const handleNavigateDate = (direction: -1 | 1) => {
     if (viewMode === 'month') {
@@ -1010,81 +1218,52 @@ export function AgendaComsoc() {
   const todayKey = formatLocalDateKey(new Date());
   const selectedDayKey = formatLocalDateKey(selectedDay);
 
-  const selectedDayEntries = useMemo(
-    () => unifiedEntries.filter((entry) => entryOverlapsDay(entry, selectedDay)),
-    [unifiedEntries, selectedDay]
+  const selectedDayEvents = useMemo(
+    () => visibleEvents.filter((ev) => eventOverlapsDay(ev, selectedDay)),
+    [visibleEvents, selectedDay]
   );
 
-  // Reusable Event Card for Daily View & Month Side Panel
-  const renderEntryCard = (entry: UnifiedCalendarEntry, compact = false) => {
-    if (entry.origin === 'google_only') {
-      const { remote } = entry;
-      return (
-        <div
-          key={`g-${remote.id}`}
-          className="rounded-xl border border-[#93B7D8]/28 border-l-[3px] border-l-[#7AA3C8] bg-[#101820]/75 p-3.5 space-y-2 transition-colors hover:border-[#93B7D8]/50"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[#93B7D8]/35 bg-[#253B52]/40 text-[10px] font-mono uppercase tracking-wider text-[#CDE0F2]">
-                  <Cloud className="w-3 h-3" />
-                  Google Calendar
-                </span>
-                <span className="text-[11px] font-mono text-[#98A89F]">
-                  {remote.allDay
-                    ? 'Dia inteiro'
-                    : `${formatTimeShort(entry.startDate)} – ${formatTimeShort(entry.endDate)}`}
-                </span>
-              </div>
-              <h4 className="font-display text-sm font-semibold text-[#E4EAE6] leading-snug">
-                {remote.summary}
-              </h4>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedRemoteEvent(remote)}
-              className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px] shrink-0"
-            >
-              Detalhes
-            </button>
-          </div>
-          {remote.location && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#98A89F]">
-              <MapPin className="w-3 h-3 text-[#7AA3C8] shrink-0" />
-              <span className="truncate">{remote.location}</span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    const { event } = entry;
-    const catMeta = AGENDA_CATEGORY_MAP[event.category] || AGENDA_CATEGORY_MAP.outros;
-    const isCompleted = event.status === 'realizado';
-    const isCancelled = event.status === 'cancelado';
+  // Rich Event Card renderer
+  const renderEventCard = (ev: AgendaEvent, compact = false) => {
+    const catMeta = AGENDA_CATEGORY_MAP[ev.category] || AGENDA_CATEGORY_MAP.outros;
+    const isCompleted = ev.status === 'realizado';
+    const isCancelled = ev.status === 'cancelado';
+    const scope = getEffectiveComsocScope(ev);
+    const start = parseEventDate(ev.startAt, ev.allDay, false);
+    const end = parseEventDate(ev.endAt, ev.allDay, true);
+    const attendees = parseAttendeesJson(ev.attendeesJson);
+    const attachments = parseAttachmentsJson(ev.attachmentsJson);
+    const reminders = parseRemindersJson(ev.remindersJson, ev.reminderMinutes);
+    const googleColorHex = getGoogleColorHex(ev.colorId);
 
     return (
       <article
-        key={event.id}
+        key={ev.id}
         className={`rounded-xl border border-white/10 border-l-[3px] ${catMeta.borderClass} bg-[#121815] p-3.5 sm:p-4 space-y-2.5 transition-colors hover:border-white/18 ${
           isCancelled ? 'opacity-65' : ''
         }`}
+        style={googleColorHex ? { borderLeftColor: googleColorHex } : undefined}
       >
         <div className="flex items-start justify-between gap-2.5">
           <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-1.5">
-              <CategoryDotLabel category={event.category} />
+              <ScopeBadge scope={scope} />
+              <CategoryDotLabel category={ev.category} />
 
-              {event.syncStatus === 'synced' ? (
+              {ev.pendingGoogleSync ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[#E5C17B]/40 bg-[#2A2210] text-[10px] font-mono text-[#F4E6C4]">
+                  <CloudUpload className="w-3 h-3" />
+                  Aguardando envio
+                </span>
+              ) : ev.syncStatus === 'synced' ? (
                 <span
-                  title={`Sincronizado com ${event.googleCalendarSummary || 'Google Calendar'}`}
+                  title={`Sincronizado com ${ev.googleCalendarSummary || linkedCalendarSummary}`}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[#C29B56]/35 bg-[#221D12] text-[10px] font-mono text-[#E5C17B]"
                 >
                   <Cloud className="w-3 h-3" />
                   Sincronizado
                 </span>
-              ) : event.syncStatus === 'error' ? (
+              ) : ev.syncStatus === 'error' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-red-400/35 bg-red-950/50 text-[10px] font-mono text-red-200">
                   <CloudOff className="w-3 h-3" />
                   Erro de sync
@@ -1095,7 +1274,14 @@ export function AgendaComsoc() {
                 </span>
               )}
 
-              {event.status !== 'agendado' && (
+              {ev.recurrenceRule && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[10px] font-mono text-[#C6D4CC]">
+                  <Repeat className="w-2.5 h-2.5 text-[#E5C17B]" />
+                  Recorrente
+                </span>
+              )}
+
+              {ev.status !== 'agendado' && (
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
                     isCompleted
@@ -1103,7 +1289,7 @@ export function AgendaComsoc() {
                       : 'bg-red-950/40 text-red-200 border border-red-400/25'
                   }`}
                 >
-                  {AGENDA_STATUS_LABELS[event.status]}
+                  {AGENDA_STATUS_LABELS[ev.status]}
                 </span>
               )}
             </div>
@@ -1113,111 +1299,179 @@ export function AgendaComsoc() {
                 isCancelled ? 'line-through text-[#98A89F]' : 'text-[#F4E6C4]'
               }`}
             >
-              {event.title}
+              {ev.title}
             </h4>
           </div>
 
           <div className="text-right shrink-0">
             <span className="inline-flex items-center gap-1 text-xs font-mono text-[#C8A461]">
               <Clock className="w-3.5 h-3.5" />
-              {event.allDay
+              {ev.allDay
                 ? 'Dia inteiro'
-                : `${formatTimeShort(entry.startDate)} – ${formatTimeShort(entry.endDate)}`}
+                : `${formatTimeShort(start)} – ${formatTimeShort(end)}`}
             </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#98A89F]">
-          {event.location && (
-            <span className="inline-flex items-center gap-1.5 min-w-0">
+        {/* Metadata row */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#98A89F]">
+          {ev.location && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 min-w-0 hover:text-[#E5C17B] transition-colors"
+              title="Abrir endereço no Google Maps"
+            >
               <MapPin className="w-3.5 h-3.5 text-[#C8A461] shrink-0" />
-              <span className="truncate">{event.location}</span>
+              <span className="truncate">{ev.location}</span>
+            </a>
+          )}
+
+          <ResponsibleInline text={ev.responsibles} />
+
+          {attendees.length > 0 && (
+            <span
+              title={attendees.map((a) => a.displayName || a.email).join(', ')}
+              className="inline-flex items-center gap-1 text-[11px] text-[#C6D4CC]"
+            >
+              <Users className="w-3 h-3 text-[#E5C17B]" />
+              {attendees.length} convidado{attendees.length === 1 ? '' : 's'}
             </span>
           )}
-          <ResponsibleInline text={event.responsibles} />
-          {event.reminderMinutes > 0 && event.status === 'agendado' && (
+
+          {reminders.length > 0 && ev.status === 'agendado' && (
             <span className="inline-flex items-center gap-1 text-[11px] text-[#98A89F]">
               <Bell className="w-3 h-3 text-[#C8A461]" />
-              {event.reminderMinutes >= 1440
-                ? `${Math.round(event.reminderMinutes / 1440)}d antes`
-                : event.reminderMinutes >= 60
-                  ? `${Math.round(event.reminderMinutes / 60)}h antes`
-                  : `${event.reminderMinutes}min antes`}
+              {reminders.length === 1
+                ? reminders[0].minutes >= 1440
+                  ? `${Math.round(reminders[0].minutes / 1440)}d antes`
+                  : reminders[0].minutes >= 60
+                    ? `${Math.round(reminders[0].minutes / 60)}h antes`
+                    : `${reminders[0].minutes}min antes`
+                : `${reminders.length} avisos`}
             </span>
+          )}
+
+          {ev.meetLink && (
+            <a
+              href={ev.meetLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-[#93B7D8] hover:underline"
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span>Abrir Meet</span>
+            </a>
           )}
         </div>
 
-        {!compact && event.description && (
+        {/* Attachments chips */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {attachments.map((att, idx) => (
+              <a
+                key={`${att.fileUrl}-${idx}`}
+                href={att.fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#0B100E] px-2.5 py-1 text-[11px] text-[#C6D4CC] hover:border-[#C29B56]/45 hover:text-[#F4E6C4] transition-colors max-w-[230px]"
+              >
+                <Paperclip className="w-3 h-3 text-[#C8A461] shrink-0" />
+                <span className="truncate">{att.title}</span>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {!compact && ev.description && (
           <p className="text-xs text-[#C6D4CC] whitespace-pre-wrap leading-relaxed border-t border-white/6 pt-2">
-            {event.description}
+            {ev.description}
           </p>
         )}
 
+        {/* Action footer */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/6">
           <span className="text-[10px] font-mono text-[#697870]">
-            Por {event.createdByName}
+            Por {ev.createdByName}
           </span>
 
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => void handleToggleCompleted(event)}
-              title={isCompleted ? 'Reabrir atividade' : 'Marcar como realizada'}
-              className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px]"
+              onClick={() => void handleToggleEventScope(ev)}
+              title={
+                scope === 'comsoc'
+                  ? 'Ocultar do Calendário COMSOC (manter no Geral)'
+                  : 'Incluir no Calendário COMSOC'
+              }
+              className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
             >
-              {isCompleted ? (
-                <RotateCcw className="w-3.5 h-3.5 text-[#C8A461]" />
-              ) : (
-                <CheckCircle2 className="w-3.5 h-3.5 text-[#83B499]" />
-              )}
-              <span>{isCompleted ? 'Reabrir' : 'Concluir'}</span>
+              <Layers className="w-3.5 h-3.5 text-[#E5C17B]" />
+              <span>{scope === 'comsoc' ? 'Só Geral' : 'P/ COMSOC'}</span>
             </button>
 
-            {googleSession.connected && (
+            <button
+              type="button"
+              onClick={() => void handleToggleCompleted(ev)}
+              title={isCompleted ? 'Reabrir atividade' : 'Marcar como realizada'}
+              className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
+            >
+              {isCompleted ? (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reabrir</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#83B499]" />
+                  <span>Concluir</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openEditModal(ev)}
+              className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Editar</span>
+            </button>
+
+            {isAdmin && googleSession.connected && (
               <button
                 type="button"
-                onClick={() => handleRequestSyncEvent(event)}
+                onClick={() => handleRequestSyncEvent(ev)}
                 title={
-                  event.syncStatus === 'synced'
+                  ev.syncStatus === 'synced'
                     ? 'Reenviar atualização ao Google Calendar'
-                    : 'Enviar para o Google Calendar'
+                    : 'Enviar ao Google Calendar'
                 }
-                className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-[11px]"
+                className="siscom-btn siscom-btn-gold !min-h-[32px] !px-2.5 text-[11px]"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>{event.syncStatus === 'synced' ? 'Atualizar Google' : 'Sincronizar'}</span>
+                <span>{ev.syncStatus === 'synced' ? 'Atualizar' : 'Sync'}</span>
               </button>
             )}
 
-            {event.googleHtmlLink && (
+            {ev.googleHtmlLink && (
               <a
-                href={event.googleHtmlLink}
+                href={ev.googleHtmlLink}
                 target="_blank"
                 rel="noreferrer"
-                title="Abrir evento no Google Calendar"
-                className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2 text-[11px]"
+                title="Abrir no Google Calendar"
+                className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
               >
-                <ExternalLink className="w-3.5 h-3.5 text-[#C8A461]" />
+                <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}
 
             <button
               type="button"
-              onClick={() => openEditModal(event)}
-              title="Editar atividade"
-              aria-label={`Editar ${event.title}`}
-              className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px]"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              {!compact && <span>Editar</span>}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRequestDeleteEvent(event)}
+              onClick={() => handleRequestDeleteEvent(ev)}
               title="Excluir atividade"
-              aria-label={`Excluir ${event.title}`}
-              className="siscom-btn siscom-btn-danger !min-h-[34px] !px-2.5 text-[11px]"
+              className="siscom-btn siscom-btn-danger !min-h-[32px] !px-2.5 text-[11px]"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -1228,52 +1482,97 @@ export function AgendaComsoc() {
   };
 
   return (
-    <main className="flex-1 max-w-[1320px] w-full mx-auto p-4 sm:p-6 space-y-5">
-      {/* Feedback Banners */}
-      <AnimatePresence>
-        {(notice || errorMsg) && (
-          <SiscomAlert
-            tone={errorMsg ? 'error' : 'success'}
-            onDismiss={() => {
-              setNotice(null);
-              setErrorMsg(null);
-            }}
-          >
-            {errorMsg || notice}
-          </SiscomAlert>
-        )}
-      </AnimatePresence>
+    <div className="space-y-4">
+      {/* Feedback Alerts */}
+      {notice && (
+        <SiscomAlert tone="success" onDismiss={() => setNotice(null)}>
+          {notice}
+        </SiscomAlert>
+      )}
+      {errorMsg && (
+        <SiscomAlert
+          tone="error"
+          onDismiss={() => {
+            setErrorMsg(null);
+            setUnauthorizedDomainHelp(null);
+          }}
+        >
+          <div className="space-y-2">
+            <p>{errorMsg}</p>
+            {unauthorizedDomainHelp && (
+              <div className="rounded-lg border border-red-400/25 bg-[#120A0A]/80 p-3 space-y-2 text-xs text-[#E4EAE6]">
+                <p className="font-semibold text-[#F4E6C4]">
+                  Como liberar este domínio em 30 segundos:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-[#C6D4CC]">
+                  <li>
+                    Copie o domínio exato abaixo:{' '}
+                    <code className="px-1.5 py-0.5 rounded bg-black/50 text-[#E5C17B] font-mono text-[11px] break-all">
+                      {unauthorizedDomainHelp.domain}
+                    </code>
+                  </li>
+                  <li>
+                    Abra <strong>Firebase Authentication → Settings → Domínios autorizados</strong>{' '}
+                    do projeto <strong>gen-lang-client-0187607531</strong> e clique em{' '}
+                    <strong>Adicionar domínio</strong>.
+                  </li>
+                  <li>Volte aqui e clique novamente em “Sincronizar com Google”.</li>
+                </ol>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(unauthorizedDomainHelp.domain);
+                      setCopiedDomain(true);
+                      setTimeout(() => setCopiedDomain(false), 2500);
+                    }}
+                    className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedDomain ? 'Domínio copiado!' : 'Copiar domínio'}</span>
+                  </button>
+                  <a
+                    href={unauthorizedDomainHelp.consoleUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="siscom-btn siscom-btn-gold !min-h-[32px] !px-2.5 text-[11px]"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Abrir Domínios Autorizados</span>
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </SiscomAlert>
+      )}
 
       {/* Active Reminders Strip */}
       {activeReminders.length > 0 && (
-        <section className="rounded-xl border border-[#C29B56]/35 bg-[#1B1810]/90 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-start gap-2.5 min-w-0">
-            <BellRing className="w-4 h-4 text-[#E5C17B] shrink-0 mt-0.5" />
-            <div className="space-y-0.5 text-xs">
-              <p className="font-semibold text-[#F4E6C4]">
+        <div className="rounded-xl border border-[#C29B56]/40 bg-gradient-to-r from-[#221D12] via-[#1A1A14] to-[#121815] p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[#C29B56]/20 border border-[#C29B56]/40 flex items-center justify-center text-[#E5C17B] shrink-0">
+              <BellRing className="w-4 h-4" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-xs font-display font-semibold text-[#F4E6C4]">
                 {activeReminders.length === 1
-                  ? 'Lembrete ativo da COMSOC'
-                  : `${activeReminders.length} lembretes ativos da COMSOC`}
+                  ? 'Lembrete ativo da Agenda'
+                  : `${activeReminders.length} lembretes ativos`}
               </p>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[#C6D4CC]">
-                {activeReminders.slice(0, 3).map((ev) => {
-                  const st = parseEventDate(ev.startAt, ev.allDay, false);
+              <p className="text-xs text-[#C6D4CC]">
+                {activeReminders.slice(0, 2).map((ev, idx) => {
+                  const dt = parseEventDate(ev.startAt, ev.allDay, false);
                   return (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedDay(startOfDay(st));
-                        setAnchorDate(startOfDay(st));
-                        setViewMode('day');
-                      }}
-                      className="underline decoration-[#C29B56]/50 hover:text-[#F4E6C4] text-left cursor-pointer"
-                    >
-                      {ev.title} ({ev.allDay ? 'Hoje' : formatTimeShort(st)})
-                    </button>
+                    <span key={ev.id}>
+                      {idx > 0 ? ' · ' : ''}
+                      <strong className="text-[#E5C17B]">{ev.title}</strong> (
+                      {ev.allDay ? 'Dia inteiro' : formatTimeShort(dt)})
+                    </span>
                   );
                 })}
-              </div>
+                {activeReminders.length > 2 ? ` e +${activeReminders.length - 2}` : ''}
+              </p>
             </div>
           </div>
 
@@ -1281,30 +1580,99 @@ export function AgendaComsoc() {
             <button
               type="button"
               onClick={() => void handleEnableBrowserNotifications()}
-              className="siscom-btn siscom-btn-gold !min-h-[34px] !px-3 text-[11px]"
+              className="siscom-btn siscom-btn-gold !min-h-[36px] text-xs shrink-0"
             >
               <Bell className="w-3.5 h-3.5" />
-              <span>Ativar alertas no navegador</span>
+              <span>Ativar alertas do navegador</span>
             </button>
           )}
-        </section>
+        </div>
       )}
 
-      {/* Top Control Panel: Views + Primary CTA + Google Calendar Bar */}
-      <section className="metal-surface rounded-xl p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      {/* Dual Calendar Switch (COMSOC vs Geral) + Tinder Triage Deck Trigger */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#121815]/95 p-3 sm:p-3.5">
+        <div className="inline-flex rounded-lg border border-white/10 bg-[#0C100F] p-1 gap-1 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setCalendarScope('comsoc')}
+            className={`flex-1 sm:flex-initial min-h-[38px] px-3.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              calendarScope === 'comsoc'
+                ? 'bg-[#2D5A43] text-white shadow-sm'
+                : 'text-[#98A89F] hover:text-[#E4EAE6]'
+            }`}
+          >
+            <CalendarIcon className="w-3.5 h-3.5" />
+            <span>Calendário COMSOC</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                calendarScope === 'comsoc'
+                  ? 'bg-black/25 text-[#F4E6C4]'
+                  : 'bg-white/8 text-[#98A89F]'
+              }`}
+            >
+              {comsocEventsCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCalendarScope('general')}
+            className={`flex-1 sm:flex-initial min-h-[38px] px-3.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              calendarScope === 'general'
+                ? 'bg-[#2D5A43] text-white shadow-sm'
+                : 'text-[#98A89F] hover:text-[#E4EAE6]'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Calendário Geral</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                calendarScope === 'general'
+                  ? 'bg-black/25 text-[#F4E6C4]'
+                  : 'bg-white/8 text-[#98A89F]'
+              }`}
+            >
+              {events.length}
+            </span>
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 justify-between sm:justify-end">
+          {pendingTriageEvents.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTriageOpen(true)}
+              className="siscom-btn siscom-btn-gold !min-h-[38px] text-xs w-full sm:w-auto"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Triagem ({pendingTriageEvents.length})</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => openCreateModal(selectedDay)}
+            className="siscom-btn siscom-btn-primary !min-h-[38px] text-xs w-full sm:w-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nova atividade</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Top Controls Card: View Modes, Date Nav, Search/Filter & Locked Institutional Calendar Strip */}
+      <section className="siscom-card p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <SiscomSegmentedTabs
-              layoutId="agenda-view-tabs"
               options={VIEW_OPTIONS}
               value={viewMode}
               onChange={setViewMode}
+              layoutId="agenda-view-tabs"
               ariaLabel="Visualização da Agenda"
-              className="w-full sm:w-auto sm:min-w-[340px]"
             />
 
             {viewMode !== 'history' && (
-              <div className="flex items-center justify-between sm:justify-start gap-1.5">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleNavigateDate(-1)}
@@ -1328,37 +1696,24 @@ export function AgendaComsoc() {
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
-                <h2 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4] pl-2 truncate">
-                  {viewMode === 'day'
-                    ? formatFullDayTitle(selectedDay)
-                    : formatMonthTitle(anchorDate)}
+                <h2 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4] pl-1.5">
+                  {viewMode === 'day' ? formatFullDayTitle(selectedDay) : formatMonthTitle(anchorDate)}
                 </h2>
               </div>
             )}
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openCreateModal(selectedDay)}
-              className="siscom-btn siscom-btn-primary text-xs w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nova atividade</span>
-            </button>
-          </div>
         </div>
 
-        {/* Filters + Search Row */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-3 pt-1 border-t border-white/8">
+        {/* Search & Category Filter Row */}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-2.5">
           <div className="relative">
-            <Search className="w-4 h-4 text-[#697870] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-[#697870] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
-              type="search"
+              type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por título, local, responsável ou descrição..."
-              className="siscom-input !pl-9 !min-h-[38px] text-xs"
+              placeholder="Buscar por título, local, convidado, responsável ou descrição..."
+              className="siscom-input !pl-10 !min-h-[40px] text-xs"
             />
           </div>
 
@@ -1366,7 +1721,7 @@ export function AgendaComsoc() {
             aria-label="Filtrar por categoria"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as 'all' | AgendaCategory)}
-            className="siscom-input !min-h-[38px] text-xs"
+            className="siscom-input !min-h-[40px] text-xs"
           >
             <option value="all">Todas as categorias da COMSOC</option>
             {AGENDA_CATEGORIES.map((cat) => (
@@ -1377,121 +1732,161 @@ export function AgendaComsoc() {
           </select>
         </div>
 
-        {/* Google Calendar Integration Bar */}
-        <div className="rounded-xl border border-[#C29B56]/20 bg-[#0D1210] p-3.5 space-y-3">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-start gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#151D19] border border-white/10 flex items-center justify-center shrink-0">
-                <CalendarIcon className="w-4 h-4 text-[#E5C17B]" />
-              </div>
-              <div className="space-y-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-xs font-semibold text-[#F4E6C4]">
-                    Integração Google Calendar
-                  </h3>
-                  {googleSession.connected ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-[#83B499]/35 bg-[#2D5A43]/25 text-[10px] font-mono text-[#A7D3BA]">
-                      <Link2 className="w-3 h-3" />
-                      Conectado ({googleSession.email || 'Google'})
+        {/* Institutional Google Calendar Strip — Admin manages binding/sync, Non-Admins see it pre-linked! */}
+        <div className="rounded-xl border border-[#C29B56]/25 bg-[#0E1311] p-3.5 sm:p-4 space-y-3">
+          {isAdmin ? (
+            <>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg border border-[#C29B56]/35 bg-[#1B1810] flex items-center justify-center text-[#E5C17B] shrink-0">
+                    <CalendarIcon className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-display text-xs sm:text-sm font-semibold text-[#F4E6C4]">
+                        Calendário Institucional Vinculado
+                      </h3>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                          googleSession.connected
+                            ? 'bg-[#2D5A43]/30 text-[#A7D3BA] border-[#83B499]/35'
+                            : 'bg-[#1D1B14] text-[#E5C17B] border-[#C29B56]/30'
+                        }`}
+                      >
+                        {googleSession.connected ? 'Sessão Google ativa' : 'Espelhado no SISCOM'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#98A89F]">
+                      Conta vinculada:{' '}
+                      <strong className="text-[#E4EAE6]">{linkedCalendarSummary}</strong>
+                      {' · '}Última sync:{' '}
+                      <span className="font-mono text-[#C6D4CC]">
+                        {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)}
+                      </span>
+                      {contactSuggestions.length > 0 && (
+                        <span> · {contactSuggestions.length} contato(s)</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={syncingGoogle}
+                    onClick={() => void handleAdminSyncGoogle()}
+                    className="inline-flex items-center justify-center gap-2 min-h-[38px] px-3.5 rounded-lg bg-white text-[#1F1F1F] hover:bg-[#F3F4F6] font-medium text-xs transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    {syncingGoogle ? (
+                      <SiscomSpinner className="w-4 h-4" tone="olive" />
+                    ) : (
+                      <GoogleGIcon className="w-4 h-4" />
+                    )}
+                    <span>
+                      {syncingGoogle
+                        ? 'Sincronizando...'
+                        : googleSession.connected
+                          ? 'Sincronizar agora'
+                          : 'Sincronizar com Google'}
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-white/10 bg-white/[0.03] text-[10px] font-mono text-[#98A89F]">
-                      Não conectado
-                    </span>
+                  </button>
+
+                  {pendingPushEvents.length > 0 && googleSession.connected && (
+                    <button
+                      type="button"
+                      onClick={handleAdminRequestPushQueue}
+                      className="siscom-btn siscom-btn-gold !min-h-[38px] !px-3 text-xs"
+                    >
+                      <CloudUpload className="w-3.5 h-3.5" />
+                      <span>Enviar fila ({pendingPushEvents.length})</span>
+                    </button>
+                  )}
+
+                  {googleSession.connected && googleCalendars.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminCalPicker((v) => !v)}
+                      className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-2.5 text-xs"
+                      title="Alterar calendário associado (somente Administrador)"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Alterar</span>
+                      {showAdminCalPicker ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
+
+                  {googleSession.connected && (
+                    <button
+                      type="button"
+                      onClick={() => void handleAdminDisconnectGoogle()}
+                      title="Encerrar sessão Google neste navegador"
+                      className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-2.5 text-xs"
+                    >
+                      <Unlink className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
-                <p className="text-[11px] text-[#98A89F]">
-                  {googleSession.connected
-                    ? 'Sincronize atividades com o calendário secundário dedicado da COMSOC sem interferir na agenda pessoal.'
-                    : 'Acesso exclusivo à Google Calendar API (sem permissão de Gmail). Conecte para escolher o calendário secundário da COMSOC.'}
+              </div>
+
+              {pendingPushEvents.length > 0 && !googleSession.connected && (
+                <p className="text-[11px] text-[#E5C17B] border-t border-white/8 pt-2">
+                  Há <strong>{pendingPushEvents.length} atividade(s)</strong> aguardando envio ao
+                  Google Calendar. Clique em <strong>Sincronizar com Google</strong> para enviá-las.
                 </p>
-              </div>
-            </div>
+              )}
 
-            {!googleSession.connected ? (
-              <button
-                type="button"
-                disabled={connectingGoogle}
-                onClick={() => void handleConnectGoogle()}
-                className="inline-flex items-center justify-center gap-2.5 min-h-[40px] px-4 rounded-lg bg-white text-[#1F1F1F] hover:bg-[#F3F4F6] border border-white/20 text-xs font-semibold transition-colors shadow-sm cursor-pointer disabled:opacity-60 shrink-0"
-              >
-                {connectingGoogle ? (
-                  <SiscomSpinner className="w-4 h-4" tone="olive" />
-                ) : (
-                  <GoogleGIcon className="w-4 h-4 shrink-0" />
-                )}
-                <span>
-                  {connectingGoogle ? 'Conectando...' : 'Conectar Google Calendar'}
-                </span>
-              </button>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={loadingGoogleEvents}
-                  onClick={() => void handleRefreshGoogle()}
-                  className="siscom-btn siscom-btn-secondary !min-h-[36px] !px-3 text-xs"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 text-[#C8A461] ${
-                      loadingGoogleEvents ? 'animate-spin' : ''
-                    }`}
-                  />
-                  <span>Atualizar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDisconnectGoogle()}
-                  className="siscom-btn siscom-btn-secondary !min-h-[36px] !px-3 text-xs text-red-200 hover:border-red-400/35"
-                >
-                  <Unlink className="w-3.5 h-3.5" />
-                  <span>Desconectar</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Secondary Calendar Selector when connected */}
-          {googleSession.connected && (
-            <div className="pt-2.5 border-t border-white/8 flex flex-col sm:flex-row sm:items-center gap-3">
-              <label
-                htmlFor="google-cal-select"
-                className="text-[11px] font-medium text-[#C6D4CC] shrink-0"
-              >
-                Calendário de destino:
-              </label>
-              <select
-                id="google-cal-select"
-                value={selectedCalendarId}
-                onChange={(e) => void handleSelectCalendar(e.target.value)}
-                className="siscom-input !min-h-[36px] text-xs max-w-md"
-              >
-                {secondaryCalendars.length > 0 && (
-                  <optgroup label="Calendários secundários (Recomendado para a COMSOC)">
-                    {secondaryCalendars.map((cal) => (
+              {/* Admin-only collapsible calendar switcher */}
+              {showAdminCalPicker && googleSession.connected && googleCalendars.length > 0 && (
+                <div className="pt-2.5 border-t border-white/8 flex flex-col sm:flex-row sm:items-center gap-2.5">
+                  <label
+                    htmlFor="admin-cal-select"
+                    className="text-[11px] font-mono uppercase tracking-wider text-[#C8A461] shrink-0"
+                  >
+                    Alterar calendário associado:
+                  </label>
+                  <select
+                    id="admin-cal-select"
+                    value={linkedCalendarId}
+                    disabled={syncingGoogle}
+                    onChange={(e) => void handleAdminSwitchCalendar(e.target.value)}
+                    className="siscom-input !min-h-[36px] text-xs flex-1"
+                  >
+                    {googleCalendars.map((cal) => (
                       <option key={cal.id} value={cal.id}>
-                        {cal.summary}
-                        {cal.accessRole === 'reader' ? ' (somente leitura)' : ''}
+                        {cal.summary} {cal.primary ? '(Principal da conta)' : '(Secundário)'}
                       </option>
                     ))}
-                  </optgroup>
-                )}
-                {primaryCalendar && (
-                  <optgroup label="Calendário principal (Pessoal — evitar)">
-                    <option value={primaryCalendar.id}>
-                      {primaryCalendar.summary} (Principal / Pessoal)
-                    </option>
-                  </optgroup>
-                )}
-              </select>
+                  </select>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Non-admin view: zero Google login buttons, zero calendar switcher — already pre-associated! */
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-7 h-7 rounded-lg border border-[#83B499]/30 bg-[#2D5A43]/25 flex items-center justify-center text-[#A7D3BA] shrink-0">
+                  <Lock className="w-3.5 h-3.5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-[#F4E6C4] truncate">
+                    Calendário institucional conectado:{' '}
+                    <span className="text-[#A7D3BA]">{linkedCalendarSummary}</span>
+                  </p>
+                  <p className="text-[11px] text-[#98A89F]">
+                    Sincronizado em {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)} ·
+                    Gerenciado pelo Administrador
+                  </p>
+                </div>
+              </div>
 
-              {selectedCalendar?.primary && (
-                <span className="inline-flex items-center gap-1.5 text-[11px] text-[#F0D69A]">
-                  <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-[#E5C17B]" />
-                  <span>
-                    Atenção: este é o calendário pessoal principal. Prefira selecionar um calendário
-                    secundário da COMSOC.
-                  </span>
+              {pendingPushEvents.length > 0 && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#C29B56]/30 bg-[#221D12] text-[11px] text-[#E5C17B]">
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  {pendingPushEvents.length} aguardando envio ao Google
                 </span>
               )}
             </div>
@@ -1499,433 +1894,371 @@ export function AgendaComsoc() {
         </div>
       </section>
 
-      {/* Loading Indicator */}
+      {/* Main Content Area */}
       {loadingEvents ? (
-        <div className="metal-surface rounded-xl p-10 flex items-center justify-center gap-2.5 text-xs text-[#98A89F]">
-          <SiscomSpinner className="w-4 h-4" tone="gold" />
-          <span>Carregando Agenda da Comunicação Social...</span>
+        <div className="siscom-card p-12 flex flex-col items-center justify-center gap-3">
+          <SiscomSpinner className="w-6 h-6" />
+          <p className="text-xs text-[#98A89F]">Carregando atividades da Agenda...</p>
         </div>
-      ) : (
-        <>
-          {/* ── MONTHLY VIEW ─────────────────────────────────────────────── */}
-          {viewMode === 'month' && (
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_370px] gap-5 items-start">
-              <section className="metal-surface rounded-xl overflow-hidden">
-                <div className="grid grid-cols-7 border-b border-white/8 bg-[#0E1311]">
-                  {WEEKDAYS_PT.map((wd) => (
-                    <div
-                      key={wd}
-                      className="py-2.5 text-center text-[11px] font-mono uppercase tracking-wider text-[#98A89F]"
-                    >
-                      {wd}
-                    </div>
-                  ))}
+      ) : viewMode === 'month' ? (
+        /* ── MONTHLY VIEW ─────────────────────────────────────────────────── */
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_410px] gap-4 items-start">
+          <section className="siscom-card overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-white/8 bg-[#0E1311]">
+              {WEEKDAYS_PT.map((wd) => (
+                <div
+                  key={wd}
+                  className="py-2.5 text-center text-[11px] font-mono uppercase tracking-wider text-[#98A89F]"
+                >
+                  {wd}
                 </div>
-
-                <div className="grid grid-cols-7 divide-x divide-y divide-white/[0.06]">
-                  {monthDays.map((day) => {
-                    const key = formatLocalDateKey(day);
-                    const inMonth = day.getMonth() === anchorDate.getMonth();
-                    const isToday = key === todayKey;
-                    const isSelected = key === selectedDayKey;
-                    const dayEntries = unifiedEntries.filter((e) => entryOverlapsDay(e, day));
-
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setSelectedDay(day)}
-                        className={`min-h-[76px] sm:min-h-[106px] p-1.5 sm:p-2 text-left flex flex-col gap-1 transition-colors cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#2D5A43]/22 ring-1 ring-inset ring-[#C29B56]/55'
-                            : inMonth
-                              ? 'bg-[#101513] hover:bg-white/[0.03]'
-                              : 'bg-[#0B0E0D]/70 text-[#697870] hover:bg-white/[0.02]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <span
-                            className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-mono ${
-                              isToday
-                                ? 'bg-[#C29B56] text-[#0B0E0D] font-bold'
-                                : inMonth
-                                  ? 'text-[#E4EAE6]'
-                                  : 'text-[#697870]'
-                            }`}
-                          >
-                            {day.getDate()}
-                          </span>
-                          {dayEntries.length > 0 && (
-                            <span className="sm:hidden text-[10px] font-mono text-[#E5C17B]">
-                              {dayEntries.length}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Mobile compact dots */}
-                        {dayEntries.length > 0 && (
-                          <div className="flex sm:hidden flex-wrap gap-1 pt-0.5">
-                            {dayEntries.slice(0, 4).map((ent, idx) => {
-                              const dot =
-                                ent.origin === 'google_only'
-                                  ? 'bg-[#7AA3C8]'
-                                  : AGENDA_CATEGORY_MAP[ent.event.category]?.dotClass ||
-                                    'bg-[#98A89F]';
-                              return (
-                                <span
-                                  key={idx}
-                                  className={`w-1.5 h-1.5 rounded-full ${dot}`}
-                                />
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Desktop/tablet event chips */}
-                        <div className="hidden sm:flex flex-col gap-1 w-full min-w-0">
-                          {dayEntries.slice(0, 3).map((ent) => {
-                            if (ent.origin === 'google_only') {
-                              return (
-                                <span
-                                  key={`g-${ent.remote.id}`}
-                                  className="px-1.5 py-0.5 rounded bg-[#253B52]/45 border border-[#93B7D8]/30 text-[10px] text-[#CDE0F2] truncate block"
-                                >
-                                  G · {ent.remote.summary}
-                                </span>
-                              );
-                            }
-                            const meta =
-                              AGENDA_CATEGORY_MAP[ent.event.category] ||
-                              AGENDA_CATEGORY_MAP.outros;
-                            return (
-                              <span
-                                key={ent.event.id}
-                                className={`px-1.5 py-0.5 rounded border text-[10px] truncate flex items-center gap-1 ${meta.chipClass} ${
-                                  ent.event.status === 'cancelado' ? 'line-through opacity-60' : ''
-                                }`}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`}
-                                />
-                                <span className="truncate">
-                                  {!ent.event.allDay ? `${formatTimeShort(ent.startDate)} ` : ''}
-                                  {ent.event.title}
-                                </span>
-                              </span>
-                            );
-                          })}
-                          {dayEntries.length > 3 && (
-                            <span className="text-[10px] font-mono text-[#98A89F] pl-1">
-                              +{dayEntries.length - 3} mais
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {/* Selected Day Detail Drawer/Panel */}
-              <aside className="metal-surface rounded-xl p-4 sm:p-5 space-y-4">
-                <div className="flex items-start justify-between gap-2 pb-3 border-b border-white/8">
-                  <div>
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-[#C8A461]">
-                      Atividades do dia
-                    </p>
-                    <h3 className="font-display text-sm font-semibold text-[#F4E6C4] mt-0.5">
-                      {formatFullDayTitle(selectedDay)}
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openCreateModal(selectedDay)}
-                    className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-[11px] shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Agendar</span>
-                  </button>
-                </div>
-
-                {selectedDayEntries.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-white/10 p-6 text-center space-y-2">
-                    <p className="text-xs text-[#98A89F]">
-                      Nenhuma atividade cadastrada para esta data.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => openCreateModal(selectedDay)}
-                      className="siscom-btn siscom-btn-secondary !min-h-[34px] text-xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Cadastrar neste dia</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedDayEntries.map((ent) => renderEntryCard(ent, true))}
-                  </div>
-                )}
-              </aside>
+              ))}
             </div>
-          )}
 
-          {/* ── WEEKLY VIEW ──────────────────────────────────────────────── */}
-          {viewMode === 'week' && (
-            <section className="grid grid-cols-1 md:grid-cols-7 gap-3">
-              {weekDays.map((day) => {
+            <div className="grid grid-cols-7 divide-x divide-y divide-white/[0.06]">
+              {monthDays.map((day) => {
                 const key = formatLocalDateKey(day);
+                const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
                 const isToday = key === todayKey;
-                const dayEntries = unifiedEntries.filter((e) => entryOverlapsDay(e, day));
+                const isSelected = key === selectedDayKey;
+                const dayEvents = visibleEvents.filter((ev) => eventOverlapsDay(ev, day));
 
                 return (
-                  <div
+                  <button
                     key={key}
-                    className={`metal-surface rounded-xl p-3 flex flex-col gap-2.5 min-h-[220px] ${
-                      isToday ? 'border-[#C29B56]/45' : ''
+                    type="button"
+                    onClick={() => setSelectedDay(startOfDay(day))}
+                    className={`min-h-[84px] sm:min-h-[108px] p-1.5 sm:p-2 text-left flex flex-col gap-1 transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#1D2D25]/85 ring-1 ring-inset ring-[#C29B56]/60'
+                        : isCurrentMonth
+                          ? 'bg-[#121815] hover:bg-[#17201C]'
+                          : 'bg-[#0C100F]/80 opacity-55 hover:opacity-85'
                     }`}
                   >
-                    <div className="flex items-center justify-between pb-2 border-b border-white/8">
-                      <div>
-                        <span className="block text-[10px] font-mono uppercase tracking-wider text-[#98A89F]">
-                          {WEEKDAYS_PT[day.getDay()]}
-                        </span>
-                        <span
-                          className={`font-display text-base font-semibold ${
-                            isToday ? 'text-[#E5C17B]' : 'text-[#E4EAE6]'
-                          }`}
-                        >
-                          {String(day.getDate()).padStart(2, '0')}/
-                          {String(day.getMonth() + 1).padStart(2, '0')}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openCreateModal(day)}
-                        title="Nova atividade neste dia"
-                        aria-label={`Nova atividade em ${day.toLocaleDateString('pt-BR')}`}
-                        className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-[#2D5A43]/35 text-[#98A89F] hover:text-[#F4E6C4] inline-flex items-center justify-center transition-colors cursor-pointer"
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-mono ${
+                          isToday
+                            ? 'bg-[#C29B56] text-[#0B0F0E] font-bold'
+                            : isSelected
+                              ? 'text-[#F4E6C4] font-semibold'
+                              : 'text-[#C6D4CC]'
+                        }`}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+                        {day.getDate()}
+                      </span>
+                      {dayEvents.length > 0 && (
+                        <span className="text-[10px] font-mono text-[#98A89F]">
+                          {dayEvents.length}
+                        </span>
+                      )}
                     </div>
 
-                    {dayEntries.length === 0 ? (
-                      <p className="text-[11px] text-[#697870] italic py-2">Sem atividades</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {dayEntries.map((ent) => {
-                          if (ent.origin === 'google_only') {
-                            return (
-                              <button
-                                key={`g-${ent.remote.id}`}
-                                type="button"
-                                onClick={() => setSelectedRemoteEvent(ent.remote)}
-                                className="w-full text-left rounded-lg border border-[#93B7D8]/30 bg-[#182736]/60 p-2 space-y-1 hover:border-[#93B7D8]/55 transition-colors cursor-pointer"
-                              >
-                                <span className="block text-[10px] font-mono text-[#93B7D8]">
-                                  {ent.remote.allDay
-                                    ? 'Dia inteiro · Google'
-                                    : `${formatTimeShort(ent.startDate)} · Google`}
-                                </span>
-                                <span className="block text-xs font-medium text-[#E4EAE6] line-clamp-2">
-                                  {ent.remote.summary}
-                                </span>
-                              </button>
-                            );
-                          }
-                          const meta =
-                            AGENDA_CATEGORY_MAP[ent.event.category] ||
-                            AGENDA_CATEGORY_MAP.outros;
-                          return (
-                            <button
-                              key={ent.event.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedDay(day);
-                                setAnchorDate(day);
-                                setViewMode('day');
-                              }}
-                              className={`w-full text-left rounded-lg border border-white/10 border-l-[3px] ${meta.borderClass} bg-[#131A17] p-2 space-y-1 hover:border-white/25 transition-colors cursor-pointer`}
-                            >
-                              <div className="flex items-center justify-between gap-1 text-[10px] font-mono text-[#C8A461]">
-                                <span>
-                                  {ent.event.allDay
-                                    ? 'Dia inteiro'
-                                    : formatTimeShort(ent.startDate)}
-                                </span>
-                                {ent.event.syncStatus === 'synced' && (
-                                  <Cloud className="w-3 h-3 text-[#E5C17B]" />
-                                )}
-                              </div>
-                              <span
-                                className={`block text-xs font-medium leading-snug line-clamp-2 ${
-                                  ent.event.status === 'cancelado'
-                                    ? 'line-through text-[#697870]'
-                                    : 'text-[#E4EAE6]'
-                                }`}
-                              >
-                                {ent.event.title}
-                              </span>
-                              <span className="block text-[10px] text-[#98A89F] truncate">
-                                {meta.shortLabel}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                    <div className="space-y-1 w-full overflow-hidden">
+                      {dayEvents.slice(0, 3).map((ev) => {
+                        const cat = AGENDA_CATEGORY_MAP[ev.category] || AGENDA_CATEGORY_MAP.outros;
+                        const customColor = getGoogleColorHex(ev.colorId);
+                        const scope = getEffectiveComsocScope(ev);
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`px-1.5 py-0.5 rounded text-[10px] leading-tight truncate flex items-center gap-1 ${
+                              scope === 'pending'
+                                ? 'bg-[#2B2210] text-[#F4E6C4] border border-[#E5C17B]/40'
+                                : scope === 'general'
+                                  ? 'bg-[#1A242D] text-[#CDE0F2] border border-[#93B7D8]/25'
+                                  : 'bg-[#19231E] text-[#E4EAE6] border border-white/10'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                customColor ? '' : cat.dotClass
+                              }`}
+                              style={customColor ? { backgroundColor: customColor } : undefined}
+                            />
+                            <span className="truncate">{ev.title}</span>
+                          </div>
+                        );
+                      })}
+                      {dayEvents.length > 3 && (
+                        <div className="text-[10px] font-mono text-[#E5C17B] pl-1">
+                          +{dayEvents.length - 3} mais
+                        </div>
+                      )}
+                    </div>
+                  </button>
                 );
               })}
-            </section>
-          )}
+            </div>
+          </section>
 
-          {/* ── DAILY VIEW ───────────────────────────────────────────────── */}
-          {viewMode === 'day' && (
-            <section className="metal-surface rounded-xl p-4 sm:p-6 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/8">
-                <div>
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#C8A461]">
-                    Programação do dia
-                  </span>
-                  <h3 className="font-display text-base sm:text-lg font-semibold text-[#F4E6C4]">
-                    {formatFullDayTitle(selectedDay)}
-                  </h3>
-                </div>
-                <span className="text-xs font-mono text-[#98A89F]">
-                  {selectedDayEntries.length}{' '}
-                  {selectedDayEntries.length === 1 ? 'atividade' : 'atividades'}
-                </span>
+          {/* Selected Day Side Panel */}
+          <aside className="siscom-card p-4 sm:p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3">
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-wider text-[#C8A461]">
+                  {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} · Dia
+                </p>
+                <h3 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4] mt-0.5">
+                  {formatFullDayTitle(selectedDay)}
+                </h3>
               </div>
+              <button
+                type="button"
+                onClick={() => openCreateModal(selectedDay)}
+                className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-xs shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Agendar</span>
+              </button>
+            </div>
 
-              {selectedDayEntries.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 p-10 text-center space-y-3">
-                  <p className="text-sm text-[#98A89F]">
-                    Nenhuma atividade prevista para este dia.
-                  </p>
+            {selectedDayEvents.length === 0 ? (
+              <div className="py-10 text-center space-y-2.5">
+                <CalendarIcon className="w-8 h-8 text-[#697870] mx-auto opacity-70" />
+                <p className="text-xs text-[#98A89F]">
+                  Nenhuma atividade em{' '}
+                  {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} neste dia.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openCreateModal(selectedDay)}
+                  className="siscom-btn siscom-btn-secondary !min-h-[36px] text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Cadastrar atividade neste dia</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {selectedDayEvents.map((ev) => renderEventCard(ev, true))}
+              </div>
+            )}
+          </aside>
+        </div>
+      ) : viewMode === 'week' ? (
+        /* ── WEEKLY VIEW ──────────────────────────────────────────────────── */
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-2.5">
+          {weekDays.map((day) => {
+            const key = formatLocalDateKey(day);
+            const isToday = key === todayKey;
+            const dayEvents = visibleEvents.filter((ev) => eventOverlapsDay(ev, day));
+
+            return (
+              <div
+                key={key}
+                className={`siscom-card p-3 flex flex-col gap-2.5 min-h-[260px] ${
+                  isToday ? '!border-[#C29B56]/55' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between border-b border-white/8 pb-2">
+                  <div>
+                    <span className="block text-[10px] font-mono uppercase tracking-wider text-[#98A89F]">
+                      {WEEKDAYS_PT[day.getDay()]}
+                    </span>
+                    <span
+                      className={`font-display text-base font-semibold ${
+                        isToday ? 'text-[#E5C17B]' : 'text-[#F4E6C4]'
+                      }`}
+                    >
+                      {String(day.getDate()).padStart(2, '0')}/
+                      {String(day.getMonth() + 1).padStart(2, '0')}
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => openCreateModal(selectedDay)}
-                    className="siscom-btn siscom-btn-primary text-xs"
+                    onClick={() => openCreateModal(day)}
+                    title="Nova atividade neste dia"
+                    className="p-1.5 rounded-lg border border-white/10 text-[#98A89F] hover:text-[#F4E6C4] hover:border-white/25 cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Cadastrar atividade neste dia</span>
+                    <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedDayEntries.map((ent) => renderEntryCard(ent, false))}
-                </div>
-              )}
-            </section>
-          )}
 
-          {/* ── HISTORY & AUDIT VIEW ─────────────────────────────────────── */}
-          {viewMode === 'history' && (
-            <section className="metal-surface rounded-xl p-4 sm:p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-white/8">
-                <div className="flex items-center gap-2">
-                  <History className="w-4 h-4 text-[#E5C17B]" />
-                  <h3 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4]">
-                    Histórico das Atividades Realizadas e Auditoria
-                  </h3>
-                </div>
-
-                <SiscomSegmentedTabs
-                  layoutId="agenda-history-subtabs"
-                  size="sm"
-                  options={[
-                    { value: 'events', label: `Atividades (${historyEvents.length})` },
-                    { value: 'audit', label: `Auditoria (${auditLogs.length})` },
-                  ]}
-                  value={historySubTab}
-                  onChange={setHistorySubTab}
-                  className="w-full sm:w-auto sm:min-w-[260px]"
-                />
-              </div>
-
-              {historySubTab === 'events' ? (
-                historyEvents.length === 0 ? (
-                  <p className="text-xs text-[#98A89F] py-8 text-center">
-                    Ainda não há atividades realizadas ou encerradas registradas no histórico.
-                  </p>
+                {dayEvents.length === 0 ? (
+                  <p className="text-[11px] text-[#697870] py-4 text-center">Livre</p>
                 ) : (
-                  <div className="space-y-3">
-                    {historyEvents.map((ev) =>
-                      renderEntryCard(
-                        {
-                          origin: 'siscom',
-                          event: ev,
-                          startDate: parseEventDate(ev.startAt, ev.allDay, false),
-                          endDate: parseEventDate(ev.endAt, ev.allDay, true),
-                        },
-                        false
-                      )
-                    )}
+                  <div className="space-y-2">
+                    {dayEvents.map((ev) => {
+                      const cat = AGENDA_CATEGORY_MAP[ev.category] || AGENDA_CATEGORY_MAP.outros;
+                      const start = parseEventDate(ev.startAt, ev.allDay, false);
+                      const customColor = getGoogleColorHex(ev.colorId);
+                      const scope = getEffectiveComsocScope(ev);
+                      return (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={() => openEditModal(ev)}
+                          className={`w-full text-left rounded-lg border border-white/10 border-l-[3px] ${cat.borderClass} bg-[#0E1311] p-2 space-y-1 hover:border-white/25 cursor-pointer`}
+                          style={customColor ? { borderLeftColor: customColor } : undefined}
+                        >
+                          <div className="flex items-center justify-between gap-1 text-[10px] font-mono text-[#C8A461]">
+                            <span>{ev.allDay ? 'Dia inteiro' : formatTimeShort(start)}</span>
+                            <span className="text-[9px] text-[#98A89F]">
+                              {scope === 'comsoc' ? 'COMSOC' : scope === 'pending' ? 'Triagem' : 'Geral'}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-[#F4E6C4] line-clamp-2">
+                            {ev.title}
+                          </p>
+                          {ev.location && (
+                            <p className="text-[10px] text-[#98A89F] truncate">{ev.location}</p>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                )
-              ) : auditLogs.length === 0 ? (
-                <p className="text-xs text-[#98A89F] py-8 text-center">
-                  Nenhum registro de auditoria disponível ainda.
-                </p>
-              ) : (
-                <div className="divide-y divide-white/6">
-                  {auditLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs"
-                    >
-                      <div className="space-y-0.5">
-                        <p className="text-[#E4EAE6]">{log.summary}</p>
-                        <p className="text-[11px] font-mono text-[#98A89F]">
-                          {log.actorName} · {log.action}
-                        </p>
-                      </div>
-                      <span className="text-[11px] font-mono text-[#697870] shrink-0">
-                        {log.createdAt?.toDate
-                          ? log.createdAt.toDate().toLocaleString('pt-BR')
-                          : 'Agora'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      ) : viewMode === 'day' ? (
+        /* ── DAILY VIEW ───────────────────────────────────────────────────── */
+        <section className="siscom-card p-4 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-3">
+            <div>
+              <p className="text-[11px] font-mono uppercase tracking-wider text-[#C8A461]">
+                Programação diária ·{' '}
+                {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'}
+              </p>
+              <h3 className="font-display text-lg font-semibold text-[#F4E6C4]">
+                {formatFullDayTitle(selectedDay)}
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => openCreateModal(selectedDay)}
+              className="siscom-btn siscom-btn-primary !min-h-[38px] text-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nova atividade neste dia</span>
+            </button>
+          </div>
+
+          {selectedDayEvents.length === 0 ? (
+            <div className="py-12 text-center space-y-2">
+              <CalendarIcon className="w-9 h-9 text-[#697870] mx-auto opacity-70" />
+              <p className="text-sm text-[#98A89F]">
+                Nenhuma atividade programada para esta data.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {selectedDayEvents.map((ev) => renderEventCard(ev, false))}
+            </div>
           )}
-        </>
+        </section>
+      ) : (
+        /* ── HISTORY & AUDIT VIEW ─────────────────────────────────────────── */
+        <section className="siscom-card p-4 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-3">
+            <div className="flex items-center gap-2.5">
+              <History className="w-5 h-5 text-[#E5C17B]" />
+              <div>
+                <h3 className="font-display text-base font-semibold text-[#F4E6C4]">
+                  Histórico de Atividades e Auditoria
+                </h3>
+                <p className="text-xs text-[#98A89F]">
+                  Registro cronológico das atividades realizadas, encerradas e sincronizações.
+                </p>
+              </div>
+            </div>
+
+            <SiscomSegmentedTabs
+              options={[
+                { value: 'events' as const, label: `Atividades (${historyEvents.length})` },
+                { value: 'audit' as const, label: `Auditoria (${auditLogs.length})` },
+              ]}
+              value={historySubTab}
+              onChange={setHistorySubTab}
+              layoutId="agenda-history-tabs"
+              ariaLabel="Sub-abas do histórico"
+            />
+          </div>
+
+          {historySubTab === 'events' ? (
+            historyEvents.length === 0 ? (
+              <div className="py-10 text-center text-xs text-[#98A89F]">
+                Ainda não há atividades concluídas ou passadas neste calendário.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {historyEvents.map((ev) => renderEventCard(ev, false))}
+              </div>
+            )
+          ) : auditLogs.length === 0 ? (
+            <div className="py-10 text-center text-xs text-[#98A89F]">
+              Nenhum registro de auditoria disponível ainda.
+            </div>
+          ) : (
+            <div className="divide-y divide-white/[0.06] rounded-xl border border-white/8 bg-[#0E1311]">
+              {auditLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs"
+                >
+                  <div className="space-y-0.5">
+                    <p className="text-[#E4EAE6]">{log.summary}</p>
+                    <p className="text-[11px] text-[#98A89F]">Responsável: {log.actorName}</p>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#697870] shrink-0">
+                    {log.createdAt?.toDate
+                      ? log.createdAt.toDate().toLocaleString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : 'Agora'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
-      {/* Event Form Modal */}
+      {/* Tinder-Style Swipe Triage Deck */}
+      <AgendaTriageDeck
+        open={triageOpen}
+        pendingEvents={pendingTriageEvents}
+        busyId={triageBusyId}
+        onClose={() => setTriageOpen(false)}
+        onClassify={handleClassifyTriage}
+      />
+
+      {/* 6-Card Create / Edit Activity Modal */}
       <AgendaEventModal
         open={modalOpen}
         editingEvent={editingEvent}
         defaultDate={selectedDay}
+        defaultComsocScope={calendarScope}
         googleConnected={googleSession.connected}
-        selectedCalendar={selectedCalendar}
+        linkedCalendarLabel={linkedCalendarSummary}
+        contactSuggestions={contactSuggestions}
+        locationSuggestions={locationSuggestions}
         saving={savingEvent}
         errorMsg={modalError}
         onClose={() => {
-          setModalOpen(false);
-          setEditingEvent(null);
+          if (!savingEvent) {
+            setModalOpen(false);
+            setEditingEvent(null);
+          }
         }}
-        onSubmit={(vals) => void handleFormSubmit(vals)}
+        onSubmit={(values) => void handleFormSubmit(values)}
       />
 
       {/* Mandatory Explicit Confirmation Modal for Google Calendar Mutations & Deletions */}
       <GoogleActionConfirmModal
         pending={pendingConfirm}
         busy={confirmBusy}
-        onCancel={() => setPendingConfirm(null)}
+        onCancel={() => {
+          if (!confirmBusy) setPendingConfirm(null);
+        }}
       />
-
-      {/* Google-Only Remote Event Details & Optional Import Modal */}
-      <GoogleRemoteEventModal
-        remote={selectedRemoteEvent}
-        importing={importingRemote}
-        onClose={() => setSelectedRemoteEvent(null)}
-        onImportToSiscom={handleImportRemoteToSiscom}
-      />
-    </main>
+    </div>
   );
 }

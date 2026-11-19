@@ -19,6 +19,12 @@ import type {
   AgendaIntegrationConfig,
   AgendaStatus,
   AgendaSyncStatus,
+  ComsocScope,
+  GoogleCalendarRemoteEvent,
+  GoogleContactSuggestion,
+  GoogleEventTransparency,
+  GoogleEventVisibility,
+  GoogleSendUpdates,
 } from './agendaTypes';
 
 const EVENTS_COLLECTION = 'agenda_events';
@@ -58,6 +64,21 @@ export interface AgendaEventInput {
   googleHtmlLink?: string;
   syncStatus?: AgendaSyncStatus;
   lastSyncedAt?: string;
+  comsocScope?: ComsocScope;
+  colorId?: string;
+  recurrenceRule?: string;
+  visibility?: GoogleEventVisibility;
+  transparency?: GoogleEventTransparency;
+  meetLink?: string;
+  createMeet?: boolean;
+  attendeesJson?: string;
+  guestsCanModify?: boolean;
+  guestsCanInviteOthers?: boolean;
+  guestsCanSeeOtherGuests?: boolean;
+  sendUpdates?: GoogleSendUpdates;
+  attachmentsJson?: string;
+  remindersJson?: string;
+  pendingGoogleSync?: boolean;
 }
 
 export function subscribeAgendaEvents(
@@ -153,9 +174,12 @@ export async function recordAgendaAudit(params: {
   eventId?: string;
 }): Promise<void> {
   const id = generateSafeDocId('aud');
-  const safeActorName = clampString(params.actor.displayName || params.actor.username, 80) || 'Usuário';
+  const safeActorName =
+    clampString(params.actor.displayName || params.actor.username, 80) || 'Usuário';
   const safeSummary = clampString(params.summary, 240) || 'Ação registrada na agenda';
-  const safeEventId = params.eventId ? params.eventId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128) : '';
+  const safeEventId = params.eventId
+    ? params.eventId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128)
+    : '';
 
   try {
     await setDoc(doc(db, AUDIT_COLLECTION, id), {
@@ -169,14 +193,14 @@ export async function recordAgendaAudit(params: {
       createdAt: serverTimestamp(),
     });
   } catch (err) {
-    // Audit logging should not block a primary user workflow if transiently denied
     console.warn('Falha ao gravar auditoria da Agenda:', err);
   }
 }
 
 export async function createAgendaEvent(
   input: AgendaEventInput,
-  actor: UserAccount
+  actor: UserAccount,
+  skipAudit = false
 ): Promise<AgendaEvent> {
   const id = generateSafeDocId('evt');
   const title = clampString(input.title, 140);
@@ -204,6 +228,21 @@ export async function createAgendaEvent(
     googleHtmlLink: clampString(input.googleHtmlLink || '', 400),
     syncStatus: (input.syncStatus || 'internal') as AgendaSyncStatus,
     lastSyncedAt: clampString(input.lastSyncedAt || '', 40),
+    comsocScope: (input.comsocScope || 'comsoc') as ComsocScope,
+    colorId: clampString(input.colorId || '', 16),
+    recurrenceRule: clampString(input.recurrenceRule || '', 200),
+    visibility: (input.visibility || 'default') as GoogleEventVisibility,
+    transparency: (input.transparency || 'opaque') as GoogleEventTransparency,
+    meetLink: clampString(input.meetLink || '', 400),
+    createMeet: Boolean(input.createMeet),
+    attendeesJson: (input.attendeesJson || '[]').slice(0, 12000),
+    guestsCanModify: Boolean(input.guestsCanModify),
+    guestsCanInviteOthers: input.guestsCanInviteOthers !== false,
+    guestsCanSeeOtherGuests: input.guestsCanSeeOtherGuests !== false,
+    sendUpdates: (input.sendUpdates || 'none') as GoogleSendUpdates,
+    attachmentsJson: (input.attachmentsJson || '[]').slice(0, 12000),
+    remindersJson: (input.remindersJson || '[]').slice(0, 2000),
+    pendingGoogleSync: Boolean(input.pendingGoogleSync),
     createdByUid: actor.uid,
     createdByName: actorName,
     updatedByUid: actor.uid,
@@ -218,12 +257,14 @@ export async function createAgendaEvent(
     handleFirestoreError(err, OperationType.CREATE, `${EVENTS_COLLECTION}/${id}`);
   }
 
-  void recordAgendaAudit({
-    actor,
-    action: 'create',
-    eventId: id,
-    summary: `Atividade criada: "${title}"`,
-  });
+  if (!skipAudit) {
+    void recordAgendaAudit({
+      actor,
+      action: 'create',
+      eventId: id,
+      summary: `Atividade criada: "${title}"`,
+    });
+  }
 
   return {
     ...payload,
@@ -275,6 +316,31 @@ export async function updateAgendaEvent(
   }
   if (input.syncStatus !== undefined) updates.syncStatus = input.syncStatus;
   if (input.lastSyncedAt !== undefined) updates.lastSyncedAt = clampString(input.lastSyncedAt, 40);
+  if (input.comsocScope !== undefined) updates.comsocScope = input.comsocScope;
+  if (input.colorId !== undefined) updates.colorId = clampString(input.colorId, 16);
+  if (input.recurrenceRule !== undefined) {
+    updates.recurrenceRule = clampString(input.recurrenceRule, 200);
+  }
+  if (input.visibility !== undefined) updates.visibility = input.visibility;
+  if (input.transparency !== undefined) updates.transparency = input.transparency;
+  if (input.meetLink !== undefined) updates.meetLink = clampString(input.meetLink, 400);
+  if (input.createMeet !== undefined) updates.createMeet = Boolean(input.createMeet);
+  if (input.attendeesJson !== undefined) updates.attendeesJson = input.attendeesJson.slice(0, 12000);
+  if (input.guestsCanModify !== undefined) updates.guestsCanModify = Boolean(input.guestsCanModify);
+  if (input.guestsCanInviteOthers !== undefined) {
+    updates.guestsCanInviteOthers = Boolean(input.guestsCanInviteOthers);
+  }
+  if (input.guestsCanSeeOtherGuests !== undefined) {
+    updates.guestsCanSeeOtherGuests = Boolean(input.guestsCanSeeOtherGuests);
+  }
+  if (input.sendUpdates !== undefined) updates.sendUpdates = input.sendUpdates;
+  if (input.attachmentsJson !== undefined) {
+    updates.attachmentsJson = input.attachmentsJson.slice(0, 12000);
+  }
+  if (input.remindersJson !== undefined) updates.remindersJson = input.remindersJson.slice(0, 2000);
+  if (input.pendingGoogleSync !== undefined) {
+    updates.pendingGoogleSync = Boolean(input.pendingGoogleSync);
+  }
 
   try {
     await updateDoc(doc(db, EVENTS_COLLECTION, eventId), updates);
@@ -310,16 +376,43 @@ export async function deleteAgendaEvent(
   });
 }
 
+function serializeContactsBounded(contacts: GoogleContactSuggestion[]): string {
+  const safeList = contacts
+    .filter((c) => c.email && c.email.includes('@'))
+    .slice(0, 350)
+    .map((c) => ({
+      email: c.email.trim().toLowerCase().slice(0, 120),
+      displayName: (c.displayName || c.email).trim().slice(0, 80),
+    }));
+  let json = JSON.stringify(safeList);
+  while (json.length > 58000 && safeList.length > 0) {
+    safeList.pop();
+    json = JSON.stringify(safeList);
+  }
+  return json;
+}
+
 export async function saveSelectedGoogleCalendarConfig(params: {
   calendarId: string;
   calendarSummary: string;
+  lockedAccountEmail?: string;
+  lastSyncAt?: string;
+  contactsCache?: GoogleContactSuggestion[];
+  existingContactsCacheJson?: string;
   actor: UserAccount;
 }): Promise<void> {
-  const actorName = clampString(params.actor.displayName || params.actor.username, 80) || 'Usuário';
+  const actorName = clampString(params.actor.displayName || params.actor.username, 80) || 'Admin';
+  const contactsJson = params.contactsCache
+    ? serializeContactsBounded(params.contactsCache)
+    : (params.existingContactsCacheJson || '[]').slice(0, 60000);
+
   const payload = {
     id: GOOGLE_CONFIG_DOC_ID,
     selectedCalendarId: clampString(params.calendarId, 256),
     selectedCalendarSummary: clampString(params.calendarSummary, 140),
+    lockedAccountEmail: clampString(params.lockedAccountEmail || '', 140),
+    lastSyncAt: clampString(params.lastSyncAt || new Date().toISOString(), 40),
+    contactsCacheJson: contactsJson,
     updatedByUid: params.actor.uid,
     updatedByName: actorName,
     updatedAt: serverTimestamp(),
@@ -334,4 +427,121 @@ export async function saveSelectedGoogleCalendarConfig(params: {
       `${CONFIG_COLLECTION}/${GOOGLE_CONFIG_DOC_ID}`
     );
   }
+}
+
+/**
+ * Mirrors all events from the institutional Google Calendar into Firestore so that
+ * EVERY SISCOM profile immediately sees Calendário COMSOC & Calendário Geral
+ * without requiring individual Google logins. Brand-new Google events arrive with
+ * `comsocScope: 'pending'` to feed the Tinder-style triage deck!
+ */
+export async function mirrorGoogleEventsToFirestore(params: {
+  remoteEvents: GoogleCalendarRemoteEvent[];
+  existingEvents: AgendaEvent[];
+  actor: UserAccount;
+}): Promise<{ createdPending: number; updatedMirrored: number }> {
+  const byGoogleId = new Map<string, AgendaEvent>();
+  const bySiscomId = new Map<string, AgendaEvent>();
+  params.existingEvents.forEach((ev) => {
+    if (ev.googleEventId) byGoogleId.set(ev.googleEventId, ev);
+    bySiscomId.set(ev.id, ev);
+  });
+
+  let createdPending = 0;
+  let updatedMirrored = 0;
+  const nowIso = new Date().toISOString();
+
+  for (const rem of params.remoteEvents) {
+    const matched =
+      byGoogleId.get(rem.id) ||
+      (rem.siscomEventId ? bySiscomId.get(rem.siscomEventId) : undefined);
+
+    const attendeesJson = JSON.stringify(rem.attendees).slice(0, 12000);
+    const attachmentsJson = JSON.stringify(rem.attachments).slice(0, 12000);
+    const remindersJson = JSON.stringify(rem.reminders).slice(0, 2000);
+    const primaryReminderMinutes = rem.reminders[0]?.minutes ?? 60;
+
+    if (!matched) {
+      await createAgendaEvent(
+        {
+          title: rem.summary || '(Sem título)',
+          category: 'outros',
+          status: 'agendado',
+          startAt: rem.startAt,
+          endAt: rem.endAt,
+          allDay: rem.allDay,
+          location: rem.location,
+          responsibles: '',
+          description: rem.description,
+          reminderMinutes: primaryReminderMinutes,
+          googleEventId: rem.id,
+          googleCalendarId: rem.calendarId,
+          googleCalendarSummary: rem.calendarSummary,
+          googleHtmlLink: rem.htmlLink,
+          syncStatus: 'synced',
+          lastSyncedAt: nowIso,
+          comsocScope: 'pending',
+          colorId: rem.colorId,
+          recurrenceRule: rem.recurrenceRule,
+          visibility: rem.visibility,
+          transparency: rem.transparency,
+          meetLink: rem.meetLink,
+          createMeet: Boolean(rem.meetLink),
+          attendeesJson,
+          guestsCanModify: rem.guestsCanModify,
+          guestsCanInviteOthers: rem.guestsCanInviteOthers,
+          guestsCanSeeOtherGuests: rem.guestsCanSeeOtherGuests,
+          sendUpdates: 'none',
+          attachmentsJson,
+          remindersJson,
+          pendingGoogleSync: false,
+        },
+        params.actor,
+        true
+      );
+      createdPending += 1;
+    } else if (!matched.pendingGoogleSync) {
+      // Only refresh mirrored fields if nothing is locally waiting to be pushed
+      const changed =
+        matched.title !== rem.summary ||
+        matched.startAt !== rem.startAt ||
+        matched.endAt !== rem.endAt ||
+        matched.location !== rem.location ||
+        matched.meetLink !== rem.meetLink ||
+        matched.attendeesJson !== attendeesJson ||
+        matched.attachmentsJson !== attachmentsJson;
+
+      if (changed) {
+        await updateAgendaEvent(
+          matched.id,
+          {
+            title: rem.summary || matched.title,
+            startAt: rem.startAt,
+            endAt: rem.endAt,
+            allDay: rem.allDay,
+            location: rem.location,
+            description: rem.description || matched.description,
+            googleEventId: rem.id,
+            googleCalendarId: rem.calendarId,
+            googleCalendarSummary: rem.calendarSummary,
+            googleHtmlLink: rem.htmlLink,
+            syncStatus: 'synced',
+            lastSyncedAt: nowIso,
+            colorId: rem.colorId,
+            recurrenceRule: rem.recurrenceRule,
+            visibility: rem.visibility,
+            transparency: rem.transparency,
+            meetLink: rem.meetLink,
+            attendeesJson,
+            attachmentsJson,
+            remindersJson,
+          },
+          params.actor
+        );
+        updatedMirrored += 1;
+      }
+    }
+  }
+
+  return { createdPending, updatedMirrored };
 }

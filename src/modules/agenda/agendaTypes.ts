@@ -14,6 +14,14 @@ export type AgendaStatus = 'agendado' | 'realizado' | 'cancelado';
 
 export type AgendaSyncStatus = 'internal' | 'synced' | 'error';
 
+export type ComsocScope = 'comsoc' | 'general' | 'pending';
+
+export type GoogleEventVisibility = 'default' | 'public' | 'private';
+
+export type GoogleEventTransparency = 'opaque' | 'transparent';
+
+export type GoogleSendUpdates = 'all' | 'none';
+
 export type AgendaAuditAction =
   | 'create'
   | 'update'
@@ -23,6 +31,8 @@ export type AgendaAuditAction =
   | 'sync_delete'
   | 'google_connect'
   | 'google_disconnect';
+
+export const DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL = 'comsoc1bimeces@gmail.com';
 
 export interface AgendaCategoryMeta {
   id: AgendaCategory;
@@ -115,15 +125,73 @@ export const AGENDA_STATUS_LABELS: Record<AgendaStatus, string> = {
   cancelado: 'Cancelado',
 };
 
+export interface GoogleColorOption {
+  id: string;
+  label: string;
+  hex: string;
+}
+
+export const GOOGLE_EVENT_COLORS: readonly GoogleColorOption[] = [
+  { id: '', label: 'Cor padrão do calendário', hex: '#2D5A43' },
+  { id: '1', label: 'Lavanda', hex: '#7986CB' },
+  { id: '2', label: 'Sálvia', hex: '#33B679' },
+  { id: '3', label: 'Uva', hex: '#8E24AA' },
+  { id: '4', label: 'Flamingo', hex: '#E67C73' },
+  { id: '5', label: 'Banana', hex: '#F6BF26' },
+  { id: '6', label: 'Tangerina', hex: '#F4511E' },
+  { id: '7', label: 'Pavão', hex: '#039BE5' },
+  { id: '8', label: 'Grafite', hex: '#616161' },
+  { id: '9', label: 'Mirtilo', hex: '#3F51B5' },
+  { id: '10', label: 'Manjericão', hex: '#0B8043' },
+  { id: '11', label: 'Tomate', hex: '#D50000' },
+];
+
+export const RECURRENCE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: '', label: 'Não se repete' },
+  { value: 'RRULE:FREQ=DAILY', label: 'Todos os dias' },
+  { value: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', label: 'Todos os dias úteis (seg a sex)' },
+  { value: 'RRULE:FREQ=WEEKLY', label: 'Semanalmente' },
+  { value: 'RRULE:FREQ=MONTHLY', label: 'Mensalmente' },
+  { value: 'RRULE:FREQ=YEARLY', label: 'Anualmente' },
+];
+
 export const REMINDER_OPTIONS: readonly { value: number; label: string }[] = [
-  { value: 0, label: 'Sem lembrete' },
+  { value: 0, label: 'Na hora do evento' },
+  { value: 10, label: '10 minutos antes' },
   { value: 15, label: '15 minutos antes' },
   { value: 30, label: '30 minutos antes' },
   { value: 60, label: '1 hora antes' },
   { value: 120, label: '2 horas antes' },
   { value: 1440, label: '1 dia antes' },
   { value: 2880, label: '2 dias antes' },
+  { value: 10080, label: '1 semana antes' },
 ];
+
+export interface GoogleEventAttendee {
+  email: string;
+  displayName?: string;
+  optional?: boolean;
+  responseStatus?: string;
+}
+
+export interface GoogleEventAttachment {
+  title: string;
+  fileUrl: string;
+  mimeType?: string;
+  fileId?: string;
+  iconLink?: string;
+}
+
+export interface GoogleEventReminder {
+  method: 'popup' | 'email';
+  minutes: number;
+}
+
+export interface GoogleContactSuggestion {
+  email: string;
+  displayName: string;
+  photoUrl?: string;
+}
 
 export interface AgendaEvent {
   id: string;
@@ -144,6 +212,22 @@ export interface AgendaEvent {
   googleHtmlLink: string;
   syncStatus: AgendaSyncStatus;
   lastSyncedAt: string;
+  // Enhanced COMSOC triage & full Google Calendar parity fields (optional for legacy docs)
+  comsocScope?: ComsocScope;
+  colorId?: string;
+  recurrenceRule?: string;
+  visibility?: GoogleEventVisibility;
+  transparency?: GoogleEventTransparency;
+  meetLink?: string;
+  createMeet?: boolean;
+  attendeesJson?: string;
+  guestsCanModify?: boolean;
+  guestsCanInviteOthers?: boolean;
+  guestsCanSeeOtherGuests?: boolean;
+  sendUpdates?: GoogleSendUpdates;
+  attachmentsJson?: string;
+  remindersJson?: string;
+  pendingGoogleSync?: boolean;
   createdByUid: string;
   createdByName: string;
   updatedByUid: string;
@@ -167,6 +251,9 @@ export interface AgendaIntegrationConfig {
   id: 'google_calendar';
   selectedCalendarId: string;
   selectedCalendarSummary: string;
+  lockedAccountEmail?: string;
+  lastSyncAt?: string;
+  contactsCacheJson?: string;
   updatedByUid: string;
   updatedByName: string;
   updatedAt?: Timestamp;
@@ -193,21 +280,109 @@ export interface GoogleCalendarRemoteEvent {
   allDay: boolean;
   htmlLink: string;
   siscomEventId?: string;
+  colorId: string;
+  recurrenceRule: string;
+  visibility: GoogleEventVisibility;
+  transparency: GoogleEventTransparency;
+  meetLink: string;
+  attendees: GoogleEventAttendee[];
+  guestsCanModify: boolean;
+  guestsCanInviteOthers: boolean;
+  guestsCanSeeOtherGuests: boolean;
+  attachments: GoogleEventAttachment[];
+  reminders: GoogleEventReminder[];
 }
 
-export type UnifiedCalendarEntry =
-  | {
-      origin: 'siscom';
-      event: AgendaEvent;
-      startDate: Date;
-      endDate: Date;
+export function getEffectiveComsocScope(ev: AgendaEvent): ComsocScope {
+  if (ev.comsocScope === 'comsoc' || ev.comsocScope === 'general' || ev.comsocScope === 'pending') {
+    return ev.comsocScope;
+  }
+  return 'comsoc';
+}
+
+export function parseAttendeesJson(raw?: string): GoogleEventAttendee[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item.email === 'string' && item.email.includes('@'))
+      .map((item) => ({
+        email: String(item.email).trim().toLowerCase(),
+        displayName: item.displayName ? String(item.displayName).trim() : undefined,
+        optional: Boolean(item.optional),
+        responseStatus: item.responseStatus ? String(item.responseStatus) : undefined,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export function parseAttachmentsJson(raw?: string): GoogleEventAttachment[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item.fileUrl === 'string' && item.fileUrl.trim())
+      .map((item) => ({
+        title: String(item.title || 'Anexo').trim(),
+        fileUrl: String(item.fileUrl).trim(),
+        mimeType: item.mimeType ? String(item.mimeType) : undefined,
+        fileId: item.fileId ? String(item.fileId) : undefined,
+        iconLink: item.iconLink ? String(item.iconLink) : undefined,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export function parseRemindersJson(
+  raw?: string,
+  fallbackMinutes = 60
+): GoogleEventReminder[] {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(
+            (r) =>
+              r &&
+              (r.method === 'popup' || r.method === 'email') &&
+              Number.isFinite(Number(r.minutes))
+          )
+          .map((r) => ({
+            method: r.method as 'popup' | 'email',
+            minutes: Math.max(0, Math.min(10080, Math.round(Number(r.minutes)))),
+          }));
+      }
+    } catch {
+      // Fallback below
     }
-  | {
-      origin: 'google_only';
-      remote: GoogleCalendarRemoteEvent;
-      startDate: Date;
-      endDate: Date;
-    };
+  }
+  if (fallbackMinutes > 0) {
+    return [{ method: 'popup', minutes: fallbackMinutes }];
+  }
+  return [];
+}
+
+export function parseContactsCacheJson(raw?: string): GoogleContactSuggestion[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((c) => c && typeof c.email === 'string' && c.email.includes('@'))
+      .map((c) => ({
+        email: String(c.email).trim().toLowerCase(),
+        displayName: String(c.displayName || c.email).trim(),
+        photoUrl: typeof c.photoUrl === 'string' ? c.photoUrl : undefined,
+      }));
+  } catch {
+    return [];
+  }
+}
 
 export function parseEventDate(value: string, isAllDay: boolean, isEnd = false): Date {
   if (!value) return new Date();
@@ -236,4 +411,10 @@ export function formatTimeShort(date: Date): string {
   const h = String(date.getHours()).padStart(2, '0');
   const min = String(date.getMinutes()).padStart(2, '0');
   return `${h}:${min}`;
+}
+
+export function getGoogleColorHex(colorId?: string): string | null {
+  if (!colorId) return null;
+  const found = GOOGLE_EVENT_COLORS.find((c) => c.id === colorId);
+  return found ? found.hex : null;
 }

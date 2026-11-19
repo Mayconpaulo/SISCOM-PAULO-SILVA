@@ -412,6 +412,21 @@ service cloud.firestore {
           'googleHtmlLink',
           'syncStatus',
           'lastSyncedAt',
+          'comsocScope',
+          'colorId',
+          'recurrenceRule',
+          'visibility',
+          'transparency',
+          'meetLink',
+          'createMeet',
+          'attendeesJson',
+          'guestsCanModify',
+          'guestsCanInviteOthers',
+          'guestsCanSeeOtherGuests',
+          'sendUpdates',
+          'attachmentsJson',
+          'remindersJson',
+          'pendingGoogleSync',
           'createdByUid',
           'createdByName',
           'updatedByUid',
@@ -463,6 +478,21 @@ service cloud.firestore {
         && data.syncStatus in ['internal', 'synced', 'error']
         && data.lastSyncedAt is string
         && data.lastSyncedAt.size() <= 40
+        && (!('comsocScope' in data) || data.comsocScope in ['comsoc', 'general', 'pending'])
+        && (!('colorId' in data) || (data.colorId is string && data.colorId.size() <= 16))
+        && (!('recurrenceRule' in data) || (data.recurrenceRule is string && data.recurrenceRule.size() <= 200))
+        && (!('visibility' in data) || data.visibility in ['default', 'public', 'private'])
+        && (!('transparency' in data) || data.transparency in ['opaque', 'transparent'])
+        && (!('meetLink' in data) || (data.meetLink is string && data.meetLink.size() <= 400))
+        && (!('createMeet' in data) || data.createMeet is bool)
+        && (!('attendeesJson' in data) || (data.attendeesJson is string && data.attendeesJson.size() <= 12000))
+        && (!('guestsCanModify' in data) || data.guestsCanModify is bool)
+        && (!('guestsCanInviteOthers' in data) || data.guestsCanInviteOthers is bool)
+        && (!('guestsCanSeeOtherGuests' in data) || data.guestsCanSeeOtherGuests is bool)
+        && (!('sendUpdates' in data) || data.sendUpdates in ['all', 'none'])
+        && (!('attachmentsJson' in data) || (data.attachmentsJson is string && data.attachmentsJson.size() <= 12000))
+        && (!('remindersJson' in data) || (data.remindersJson is string && data.remindersJson.size() <= 2000))
+        && (!('pendingGoogleSync' in data) || data.pendingGoogleSync is bool)
         && isValidId(data.createdByUid)
         && data.createdByName is string
         && data.createdByName.size() >= 1
@@ -533,6 +563,9 @@ service cloud.firestore {
           'id',
           'selectedCalendarId',
           'selectedCalendarSummary',
+          'lockedAccountEmail',
+          'lastSyncAt',
+          'contactsCacheJson',
           'updatedByUid',
           'updatedByName',
           'updatedAt'
@@ -543,6 +576,9 @@ service cloud.firestore {
         && data.selectedCalendarId.size() <= 256
         && data.selectedCalendarSummary is string
         && data.selectedCalendarSummary.size() <= 140
+        && (!('lockedAccountEmail' in data) || (data.lockedAccountEmail is string && data.lockedAccountEmail.size() <= 140))
+        && (!('lastSyncAt' in data) || (data.lastSyncAt is string && data.lastSyncAt.size() <= 40))
+        && (!('contactsCacheJson' in data) || (data.contactsCacheJson is string && data.contactsCacheJson.size() <= 60000))
         && isValidId(data.updatedByUid)
         && data.updatedByName is string
         && data.updatedByName.size() >= 1
@@ -734,6 +770,21 @@ service cloud.firestore {
           'googleHtmlLink',
           'syncStatus',
           'lastSyncedAt',
+          'comsocScope',
+          'colorId',
+          'recurrenceRule',
+          'visibility',
+          'transparency',
+          'meetLink',
+          'createMeet',
+          'attendeesJson',
+          'guestsCanModify',
+          'guestsCanInviteOthers',
+          'guestsCanSeeOtherGuests',
+          'sendUpdates',
+          'attachmentsJson',
+          'remindersJson',
+          'pendingGoogleSync',
           'updatedByUid',
           'updatedByName',
           'updatedAt'
@@ -756,12 +807,12 @@ service cloud.firestore {
     match /agenda_config/{configId} {
       allow get: if canAccessAgenda() && configId == 'google_calendar';
       allow list: if false;
-      allow create: if canAccessAgenda()
+      allow create: if isAdmin()
         && configId == 'google_calendar'
         && isValidAgendaConfig(incoming(), configId)
         && incoming().updatedByUid == request.auth.uid
         && incoming().updatedAt == request.time;
-      allow update: if canAccessAgenda()
+      allow update: if isAdmin()
         && configId == 'google_calendar'
         && isValidAgendaConfig(incoming(), configId)
         && incoming().id == existing().id
@@ -770,6 +821,9 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'selectedCalendarId',
           'selectedCalendarSummary',
+          'lockedAccountEmail',
+          'lastSyncAt',
+          'contactsCacheJson',
           'updatedByUid',
           'updatedByName',
           'updatedAt'

@@ -11,15 +11,24 @@ import {
 import {
   AGENDA_CATEGORY_MAP,
   AgendaEvent,
+  DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL,
   GoogleCalendarListItem,
   GoogleCalendarRemoteEvent,
+  GoogleContactSuggestion,
+  GoogleEventAttachment,
+  GoogleEventAttendee,
+  GoogleEventReminder,
+  GoogleEventTransparency,
+  GoogleEventVisibility,
+  parseAttachmentsJson,
+  parseAttendeesJson,
+  parseRemindersJson,
 } from './agendaTypes';
 
 /**
- * Isolated OAuth app for Google Calendar API integration.
+ * Isolated OAuth app for Google Calendar, Contacts, and Drive integration.
  * Runs alongside (never replacing) SISCOM's primary Firebase Auth session
- * so military users signed in with @siscom.app credentials remain signed in
- * while authorizing the institutional COMSOC Google Calendar account.
+ * so military users signed in with @siscom.app credentials remain signed in.
  */
 const GOOGLE_CALENDAR_OAUTH_CONFIG = {
   projectId: 'gen-lang-client-0187607531',
@@ -32,13 +41,18 @@ const GOOGLE_CALENDAR_OAUTH_CONFIG = {
 
 const CALENDAR_APP_NAME = 'siscom-google-calendar';
 
-// Strict least-privilege scopes: Calendar ONLY (zero Gmail permissions)
-export const GOOGLE_CALENDAR_SCOPES = [
+// Strict least-privilege scopes: Calendar + Contacts autocomplete + Drive app-created attachments (ZERO Gmail)
+export const GOOGLE_WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/contacts.other.readonly',
+  'https://www.googleapis.com/auth/drive.file',
 ] as const;
 
 const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
+const PEOPLE_API_BASE = 'https://people.googleapis.com/v1';
+const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
 
 export interface GoogleCalendarSession {
   connected: boolean;
@@ -76,8 +90,6 @@ function getCalendarAuth(): Auth {
         cachedUserName = null;
         notifyListeners();
       } else if (!cachedAccessToken && !isSigningIn) {
-        // After a full page reload Firebase may restore the user but NOT the OAuth access token.
-        // Require explicit re-consent click to obtain a fresh in-memory token.
         cachedAccessToken = null;
         cachedUserEmail = user.email;
         cachedUserName = user.displayName;
@@ -110,12 +122,32 @@ export function subscribeGoogleCalendarSession(listener: SessionListener): () =>
   };
 }
 
-export async function connectGoogleCalendar(): Promise<GoogleCalendarSession> {
+export const GOOGLE_CALENDAR_FIREBASE_PROJECT_ID = GOOGLE_CALENDAR_OAUTH_CONFIG.projectId;
+
+export class CalendarUnauthorizedDomainError extends Error {
+  readonly domain: string;
+  readonly consoleUrl: string;
+
+  constructor(domain: string) {
+    const consoleUrl = `https://console.firebase.google.com/project/${GOOGLE_CALENDAR_FIREBASE_PROJECT_ID}/authentication/settings`;
+    super(
+      `O domínio "${domain}" ainda não está autorizado para o login do Google no projeto "${GOOGLE_CALENDAR_FIREBASE_PROJECT_ID}". Adicione esse domínio em Authentication → Settings → Domínios autorizados.`
+    );
+    this.name = 'CalendarUnauthorizedDomainError';
+    this.domain = domain;
+    this.consoleUrl = consoleUrl;
+  }
+}
+
+export async function connectGoogleCalendar(
+  loginHintEmail = DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL
+): Promise<GoogleCalendarSession> {
   const authInstance = getCalendarAuth();
   const provider = new GoogleAuthProvider();
-  GOOGLE_CALENDAR_SCOPES.forEach((scope) => provider.addScope(scope));
+  GOOGLE_WORKSPACE_SCOPES.forEach((scope) => provider.addScope(scope));
   provider.setCustomParameters({
-    prompt: 'select_account consent',
+    prompt: 'select_account',
+    ...(loginHintEmail ? { login_hint: loginHintEmail } : {}),
   });
 
   try {
@@ -124,7 +156,7 @@ export async function connectGoogleCalendar(): Promise<GoogleCalendarSession> {
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
       throw new Error(
-        'Não foi possível obter o token de acesso do Google Calendar. Tente autorizar novamente.'
+        'Não foi possível obter o token de acesso do Google. Tente autorizar novamente.'
       );
     }
 
@@ -135,8 +167,13 @@ export async function connectGoogleCalendar(): Promise<GoogleCalendarSession> {
     return getGoogleCalendarSession();
   } catch (error) {
     const code = (error as { code?: string })?.code || '';
+    if (code === 'auth/unauthorized-domain') {
+      const currentHost =
+        typeof window !== 'undefined' ? window.location.hostname : 'domínio atual';
+      throw new CalendarUnauthorizedDomainError(currentHost);
+    }
     if (code === 'auth/popup-closed-by-user') {
-      throw new Error('Janela de autorização do Google Calendar fechada antes da conclusão.');
+      throw new Error('Janela de autorização do Google fechada antes da conclusão.');
     }
     if (code === 'auth/popup-blocked') {
       throw new Error(
@@ -145,7 +182,7 @@ export async function connectGoogleCalendar(): Promise<GoogleCalendarSession> {
     }
     throw error instanceof Error
       ? error
-      : new Error('Falha ao conectar com o Google Calendar.');
+      : new Error('Falha ao conectar com o Google.');
   } finally {
     isSigningIn = false;
   }
@@ -168,22 +205,22 @@ export async function disconnectGoogleCalendarSession(): Promise<void> {
 function requireAccessToken(): string {
   if (!cachedAccessToken) {
     throw new Error(
-      'Sessão do Google Calendar não conectada ou expirada. Clique em "Conectar Google Calendar".'
+      'Sessão Google não ativa neste navegador. O administrador precisa clicar em "Sincronizar com Google".'
     );
   }
   return cachedAccessToken;
 }
 
-async function calendarApiFetch<T>(
-  path: string,
+async function googleApiFetch<T>(
+  fullUrl: string,
   options: RequestInit = {}
 ): Promise<T> {
   const token = requireAccessToken();
-  const response = await fetch(`${CALENDAR_API_BASE}${path}`, {
+  const response = await fetch(fullUrl, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(options.headers || {}),
     },
   });
@@ -192,7 +229,7 @@ async function calendarApiFetch<T>(
     cachedAccessToken = null;
     notifyListeners();
     throw new Error(
-      'A autorização do Google Calendar expirou. Clique em "Conectar Google Calendar" para renovar.'
+      'A sessão Google expirou. Clique em "Sincronizar com Google" para renovar.'
     );
   }
 
@@ -206,8 +243,8 @@ async function calendarApiFetch<T>(
     }
     throw new Error(
       detail
-        ? `Permissão insuficiente no Google Calendar: ${detail}`
-        : 'Permissão insuficiente neste calendário. Verifique se você possui acesso de escrita no calendário secundário.'
+        ? `Permissão insuficiente na API do Google: ${detail}`
+        : 'Permissão insuficiente para esta operação no Google.'
     );
   }
 
@@ -216,11 +253,11 @@ async function calendarApiFetch<T>(
   }
 
   if (!response.ok) {
-    let errText = `Erro ${response.status} na API do Google Calendar.`;
+    let errText = `Erro ${response.status} na API do Google.`;
     try {
       const errJson = (await response.json()) as { error?: { message?: string } };
       if (errJson?.error?.message) {
-        errText = `Google Calendar: ${errJson.error.message}`;
+        errText = `Google: ${errJson.error.message}`;
       }
     } catch {
       // Ignore
@@ -244,8 +281,8 @@ interface RawCalendarListResponse {
 }
 
 export async function listGoogleCalendars(): Promise<GoogleCalendarListItem[]> {
-  const data = await calendarApiFetch<RawCalendarListResponse>(
-    '/users/me/calendarList?minAccessRole=reader'
+  const data = await googleApiFetch<RawCalendarListResponse>(
+    `${CALENDAR_API_BASE}/users/me/calendarList?minAccessRole=reader`
   );
 
   const items = (data.items || [])
@@ -259,12 +296,12 @@ export async function listGoogleCalendars(): Promise<GoogleCalendarListItem[]> {
       backgroundColor: item.backgroundColor,
     }));
 
-  // Place writable secondary calendars FIRST to guide the user away from their personal primary calendar
+  // Prioritize the institutional account calendar (comsoc1bimeces@gmail.com) or primary calendar of that account
   return items.sort((a, b) => {
-    if (a.primary !== b.primary) return a.primary ? 1 : -1;
-    const aWritable = a.accessRole === 'owner' || a.accessRole === 'writer';
-    const bWritable = b.accessRole === 'owner' || b.accessRole === 'writer';
-    if (aWritable !== bWritable) return aWritable ? -1 : 1;
+    const aIsInst = a.id.toLowerCase() === DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL;
+    const bIsInst = b.id.toLowerCase() === DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL;
+    if (aIsInst !== bIsInst) return aIsInst ? -1 : 1;
+    if (a.primary !== b.primary) return a.primary ? -1 : 1;
     return a.summary.localeCompare(b.summary, 'pt-BR');
   });
 }
@@ -276,6 +313,34 @@ interface RawGoogleEventItem {
   description?: string;
   location?: string;
   htmlLink?: string;
+  colorId?: string;
+  recurrence?: string[];
+  visibility?: string;
+  transparency?: string;
+  hangoutLink?: string;
+  conferenceData?: {
+    entryPoints?: Array<{ entryPointType?: string; uri?: string }>;
+  };
+  attendees?: Array<{
+    email?: string;
+    displayName?: string;
+    optional?: boolean;
+    responseStatus?: string;
+  }>;
+  guestsCanModify?: boolean;
+  guestsCanInviteOthers?: boolean;
+  guestsCanSeeOtherGuests?: boolean;
+  attachments?: Array<{
+    title?: string;
+    fileUrl?: string;
+    mimeType?: string;
+    fileId?: string;
+    iconLink?: string;
+  }>;
+  reminders?: {
+    useDefault?: boolean;
+    overrides?: Array<{ method?: string; minutes?: number }>;
+  };
   start?: { date?: string; dateTime?: string };
   end?: { date?: string; dateTime?: string };
   extendedProperties?: {
@@ -296,6 +361,14 @@ function addDaysToIsoDate(isoDate: string, days: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
+function extractMeetLink(item: RawGoogleEventItem): string {
+  if (item.hangoutLink) return item.hangoutLink;
+  const videoEntry = item.conferenceData?.entryPoints?.find(
+    (e) => e.entryPointType === 'video' && e.uri
+  );
+  return videoEntry?.uri || '';
+}
+
 export async function fetchGoogleCalendarEvents(
   calendarId: string,
   calendarSummary: string,
@@ -310,8 +383,8 @@ export async function fetchGoogleCalendarEvents(
     maxResults: '250',
   });
 
-  const data = await calendarApiFetch<RawEventsListResponse>(
-    `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`
+  const data = await googleApiFetch<RawEventsListResponse>(
+    `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`
   );
 
   return (data.items || [])
@@ -324,12 +397,47 @@ export async function fetchGoogleCalendarEvents(
 
       let endAt: string;
       if (isAllDay && item.end?.date) {
-        // Google Calendar all-day end.date is exclusive; subtract 1 day for inclusive UI display
         const inclusiveEnd = addDaysToIsoDate(item.end.date, -1);
         endAt = inclusiveEnd >= startAt ? inclusiveEnd : startAt;
       } else {
         endAt = item.end?.dateTime || startAt;
       }
+
+      const attendees: GoogleEventAttendee[] = (item.attendees || [])
+        .filter((a) => a.email)
+        .map((a) => ({
+          email: (a.email as string).toLowerCase(),
+          displayName: a.displayName,
+          optional: Boolean(a.optional),
+          responseStatus: a.responseStatus,
+        }));
+
+      const attachments: GoogleEventAttachment[] = (item.attachments || [])
+        .filter((att) => att.fileUrl)
+        .map((att) => ({
+          title: att.title || 'Anexo',
+          fileUrl: att.fileUrl as string,
+          mimeType: att.mimeType,
+          fileId: att.fileId,
+          iconLink: att.iconLink,
+        }));
+
+      const reminders: GoogleEventReminder[] = (item.reminders?.overrides || [])
+        .filter(
+          (r) => (r.method === 'popup' || r.method === 'email') && typeof r.minutes === 'number'
+        )
+        .map((r) => ({
+          method: r.method as 'popup' | 'email',
+          minutes: r.minutes as number,
+        }));
+
+      const visibility: GoogleEventVisibility =
+        item.visibility === 'public' || item.visibility === 'private'
+          ? item.visibility
+          : 'default';
+
+      const transparency: GoogleEventTransparency =
+        item.transparency === 'transparent' ? 'transparent' : 'opaque';
 
       return {
         id: item.id as string,
@@ -343,11 +451,22 @@ export async function fetchGoogleCalendarEvents(
         allDay: isAllDay,
         htmlLink: item.htmlLink || '',
         siscomEventId: item.extendedProperties?.private?.siscomEventId,
+        colorId: item.colorId || '',
+        recurrenceRule: item.recurrence?.[0] || '',
+        visibility,
+        transparency,
+        meetLink: extractMeetLink(item),
+        attendees,
+        guestsCanModify: Boolean(item.guestsCanModify),
+        guestsCanInviteOthers: item.guestsCanInviteOthers !== false,
+        guestsCanSeeOtherGuests: item.guestsCanSeeOtherGuests !== false,
+        attachments,
+        reminders,
       };
     });
 }
 
-function buildGoogleEventPayload(event: AgendaEvent) {
+function buildGoogleEventPayload(event: AgendaEvent, requestNewMeet: boolean) {
   const categoryLabel = AGENDA_CATEGORY_MAP[event.category]?.label || event.category;
   const localTimeZone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo';
@@ -356,31 +475,56 @@ function buildGoogleEventPayload(event: AgendaEvent) {
   if (event.description.trim()) {
     descriptionParts.push(event.description.trim());
   }
-  descriptionParts.push(`—\nCategoria COMSOC: ${categoryLabel}`);
-  if (event.responsibles.trim()) {
-    descriptionParts.push(`Responsáveis: ${event.responsibles.trim()}`);
+  if (!event.description.includes('Origem: SISCOM')) {
+    descriptionParts.push(`—\nCategoria COMSOC: ${categoryLabel}`);
+    if (event.responsibles.trim()) {
+      descriptionParts.push(`Responsáveis: ${event.responsibles.trim()}`);
+    }
+    descriptionParts.push('Origem: SISCOM — Agenda da Comunicação Social');
   }
-  descriptionParts.push('Origem: SISCOM — Agenda da Comunicação Social');
 
   const start = event.allDay
     ? { date: event.startAt.slice(0, 10) }
     : { dateTime: new Date(event.startAt).toISOString(), timeZone: localTimeZone };
 
   const end = event.allDay
-    ? { date: addDaysToIsoDate(event.endAt.slice(0, 10), 1) } // Google exclusive end date
+    ? { date: addDaysToIsoDate(event.endAt.slice(0, 10), 1) }
     : { dateTime: new Date(event.endAt).toISOString(), timeZone: localTimeZone };
 
-  return {
+  const attendees = parseAttendeesJson(event.attendeesJson).map((att) => ({
+    email: att.email,
+    displayName: att.displayName || undefined,
+    optional: att.optional || undefined,
+  }));
+
+  const attachments = parseAttachmentsJson(event.attachmentsJson).map((att) => ({
+    title: att.title,
+    fileUrl: att.fileUrl,
+    mimeType: att.mimeType || undefined,
+  }));
+
+  const remindersList = parseRemindersJson(event.remindersJson, event.reminderMinutes);
+
+  const payload: Record<string, unknown> = {
     summary: event.title,
     location: event.location || undefined,
     description: descriptionParts.join('\n'),
     start,
     end,
+    colorId: event.colorId || undefined,
+    recurrence: event.recurrenceRule ? [event.recurrenceRule] : undefined,
+    visibility: event.visibility && event.visibility !== 'default' ? event.visibility : undefined,
+    transparency: event.transparency || 'opaque',
+    attendees: attendees.length > 0 ? attendees : undefined,
+    guestsCanModify: Boolean(event.guestsCanModify),
+    guestsCanInviteOthers: event.guestsCanInviteOthers !== false,
+    guestsCanSeeOtherGuests: event.guestsCanSeeOtherGuests !== false,
+    attachments: attachments.length > 0 ? attachments : undefined,
     reminders:
-      event.reminderMinutes > 0
+      remindersList.length > 0
         ? {
             useDefault: false,
-            overrides: [{ method: 'popup', minutes: event.reminderMinutes }],
+            overrides: remindersList.slice(0, 5),
           }
         : { useDefault: true },
     extendedProperties: {
@@ -391,15 +535,33 @@ function buildGoogleEventPayload(event: AgendaEvent) {
       },
     },
   };
+
+  if (requestNewMeet && !event.meetLink) {
+    payload.conferenceData = {
+      createRequest: {
+        requestId: `siscom-${event.id}-${Date.now()}`,
+        conferenceSolutionKey: { type: 'hangoutsMeet' },
+      },
+    };
+  }
+
+  return payload;
 }
 
 export async function createGoogleCalendarEvent(
   calendarId: string,
   event: AgendaEvent
-): Promise<{ googleEventId: string; htmlLink: string }> {
-  const payload = buildGoogleEventPayload(event);
-  const created = await calendarApiFetch<RawGoogleEventItem>(
-    `/calendars/${encodeURIComponent(calendarId)}/events`,
+): Promise<{ googleEventId: string; htmlLink: string; meetLink: string }> {
+  const wantMeet = Boolean(event.createMeet && !event.meetLink);
+  const payload = buildGoogleEventPayload(event, wantMeet);
+  const params = new URLSearchParams({
+    supportsAttachments: 'true',
+    conferenceDataVersion: wantMeet ? '1' : '0',
+    sendUpdates: event.sendUpdates === 'all' ? 'all' : 'none',
+  });
+
+  const created = await googleApiFetch<RawGoogleEventItem>(
+    `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -413,6 +575,7 @@ export async function createGoogleCalendarEvent(
   return {
     googleEventId: created.id,
     htmlLink: created.htmlLink || '',
+    meetLink: extractMeetLink(created),
   };
 }
 
@@ -420,10 +583,17 @@ export async function updateGoogleCalendarEvent(
   calendarId: string,
   googleEventId: string,
   event: AgendaEvent
-): Promise<{ googleEventId: string; htmlLink: string }> {
-  const payload = buildGoogleEventPayload(event);
-  const updated = await calendarApiFetch<RawGoogleEventItem>(
-    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(googleEventId)}`,
+): Promise<{ googleEventId: string; htmlLink: string; meetLink: string }> {
+  const wantMeet = Boolean(event.createMeet && !event.meetLink);
+  const payload = buildGoogleEventPayload(event, wantMeet);
+  const params = new URLSearchParams({
+    supportsAttachments: 'true',
+    conferenceDataVersion: wantMeet ? '1' : '0',
+    sendUpdates: event.sendUpdates === 'all' ? 'all' : 'none',
+  });
+
+  const updated = await googleApiFetch<RawGoogleEventItem>(
+    `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(googleEventId)}?${params.toString()}`,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -433,6 +603,7 @@ export async function updateGoogleCalendarEvent(
   return {
     googleEventId: updated.id || googleEventId,
     htmlLink: updated.htmlLink || event.googleHtmlLink || '',
+    meetLink: extractMeetLink(updated) || event.meetLink || '',
   };
 }
 
@@ -451,7 +622,6 @@ export async function deleteGoogleCalendarEvent(
     }
   );
 
-  // 404 or 410 means the event was already deleted on Google Calendar — treat as resolved
   if (response.status === 204 || response.status === 404 || response.status === 410) {
     return;
   }
@@ -465,4 +635,130 @@ export async function deleteGoogleCalendarEvent(
   }
 
   throw new Error(`Não foi possível remover o evento no Google Calendar (HTTP ${response.status}).`);
+}
+
+/* ── Google People API: Autocomplete de Pessoas da Conta ────────────────── */
+
+interface RawPerson {
+  names?: Array<{ displayName?: string }>;
+  emailAddresses?: Array<{ value?: string }>;
+  photos?: Array<{ url?: string }>;
+}
+
+interface RawConnectionsResponse {
+  connections?: RawPerson[];
+}
+
+interface RawOtherContactsResponse {
+  otherContacts?: RawPerson[];
+}
+
+export async function fetchGoogleContacts(): Promise<GoogleContactSuggestion[]> {
+  const byEmail = new Map<string, GoogleContactSuggestion>();
+
+  const ingestPerson = (person: RawPerson) => {
+    const name = person.names?.[0]?.displayName?.trim() || '';
+    const photo = person.photos?.[0]?.url;
+    (person.emailAddresses || []).forEach((em) => {
+      const email = em.value?.trim().toLowerCase();
+      if (!email || !email.includes('@')) return;
+      if (!byEmail.has(email)) {
+        byEmail.set(email, {
+          email,
+          displayName: name || email,
+          photoUrl: photo,
+        });
+      }
+    });
+  };
+
+  // Query Saved Contacts + Other Contacts (people previously emailed/invited) in parallel
+  const [connResult, otherResult] = await Promise.allSettled([
+    googleApiFetch<RawConnectionsResponse>(
+      `${PEOPLE_API_BASE}/people/me/connections?personFields=names,emailAddresses,photos&pageSize=250`
+    ),
+    googleApiFetch<RawOtherContactsResponse>(
+      `${PEOPLE_API_BASE}/otherContacts?readMask=names,emailAddresses,photos&pageSize=250`
+    ),
+  ]);
+
+  if (connResult.status === 'fulfilled') {
+    (connResult.value.connections || []).forEach(ingestPerson);
+  }
+  if (otherResult.status === 'fulfilled') {
+    (otherResult.value.otherContacts || []).forEach(ingestPerson);
+  }
+
+  return Array.from(byEmail.values()).sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, 'pt-BR')
+  );
+}
+
+/* ── Google Drive API: Upload de Anexos e Imagens para o Evento ─────────── */
+
+interface RawDriveFileResponse {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  webViewLink?: string;
+  iconLink?: string;
+}
+
+export async function uploadFileToGoogleDriveForEvent(
+  file: File
+): Promise<GoogleEventAttachment> {
+  const token = requireAccessToken();
+
+  const metadata = {
+    name: file.name,
+    mimeType: file.type || 'application/octet-stream',
+  };
+
+  const formData = new FormData();
+  formData.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+  );
+  formData.append('file', file);
+
+  const response = await fetch(
+    `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,iconLink`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    }
+  );
+
+  if (response.status === 401) {
+    cachedAccessToken = null;
+    notifyListeners();
+    throw new Error('Sessão Google expirada. Reconecte antes de enviar anexos.');
+  }
+
+  if (!response.ok) {
+    let errText = `Erro ${response.status} ao enviar anexo para o Google Drive.`;
+    try {
+      const errJson = (await response.json()) as { error?: { message?: string } };
+      if (errJson?.error?.message) errText = `Google Drive: ${errJson.error.message}`;
+    } catch {
+      // Ignore
+    }
+    throw new Error(errText);
+  }
+
+  const uploaded = (await response.json()) as RawDriveFileResponse;
+  if (!uploaded.id || !uploaded.webViewLink) {
+    throw new Error('O Google Drive não retornou o link do arquivo enviado.');
+  }
+
+  return {
+    fileId: uploaded.id,
+    title: uploaded.name || file.name,
+    fileUrl: uploaded.webViewLink,
+    mimeType: uploaded.mimeType || file.type || 'application/octet-stream',
+    iconLink: uploaded.iconLink,
+  };
 }

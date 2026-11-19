@@ -34,4 +34,6 @@
 20. **Agenda Audit Tampering**: Tentativa de editar ou excluir documento existente em `/agenda_audit/{logId}` -> `PERMISSION_DENIED`.
 21. **Agenda Token Injection in Config**: Tentativa de gravar `accessToken` ou campo extra em `/agenda_config/google_calendar` -> `PERMISSION_DENIED`.
 22. **Agenda Spoofed Creator**: Usuário tentando criar evento em `/agenda_events` com `createdByUid != request.auth.uid` -> `PERMISSION_DENIED`.
+23. **Non-Admin Calendar Binding Tampering**: Usuário comum (mesmo com `permAgenda == true`) tentando alterar `/agenda_config/google_calendar` para trocar o calendário institucional -> `PERMISSION_DENIED`.
+
 

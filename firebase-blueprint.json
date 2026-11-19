@@ -504,6 +504,82 @@
           "maxLength": 40,
           "description": "Data/hora ISO da última sincronização bem-sucedida"
         },
+        "comsocScope": {
+          "type": "string",
+          "enum": ["comsoc", "general", "pending"],
+          "description": "Classificação da atividade: COMSOC, Geral (não-COMSOC) ou Pendente de triagem"
+        },
+        "colorId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 16,
+          "description": "ID da cor do evento no Google Calendar (1 a 11)"
+        },
+        "recurrenceRule": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 200,
+          "description": "Regra RRULE de repetição compatível com o Google Calendar"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["default", "public", "private"],
+          "description": "Visibilidade do evento no Google Calendar"
+        },
+        "transparency": {
+          "type": "string",
+          "enum": ["opaque", "transparent"],
+          "description": "Disponibilidade do evento (opaque = ocupado, transparent = disponível)"
+        },
+        "meetLink": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "Link da sala do Google Meet associada ao evento"
+        },
+        "createMeet": {
+          "type": "boolean",
+          "description": "Solicita criação automática de videoconferência do Google Meet ao sincronizar"
+        },
+        "attendeesJson": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 12000,
+          "description": "JSON da lista de convidados (email, nome, opcional, status)"
+        },
+        "guestsCanModify": {
+          "type": "boolean",
+          "description": "Permite que convidados editem o evento no Google Calendar"
+        },
+        "guestsCanInviteOthers": {
+          "type": "boolean",
+          "description": "Permite que convidados convidem outras pessoas"
+        },
+        "guestsCanSeeOtherGuests": {
+          "type": "boolean",
+          "description": "Permite que convidados vejam a lista de convidados"
+        },
+        "sendUpdates": {
+          "type": "string",
+          "enum": ["all", "none"],
+          "description": "Envia notificações por e-mail aos convidados no Google Calendar"
+        },
+        "attachmentsJson": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 12000,
+          "description": "JSON dos anexos e imagens vinculados via Google Drive ou URL"
+        },
+        "remindersJson": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000,
+          "description": "JSON das múltiplas notificações (popup/email) do evento"
+        },
+        "pendingGoogleSync": {
+          "type": "boolean",
+          "description": "Indica que há alterações locais aguardando envio ao Google Calendar pelo administrador"
+        },
         "createdByUid": {
           "type": "string",
           "minLength": 1,
@@ -644,7 +720,7 @@
     },
     "AgendaIntegrationConfig": {
       "title": "AgendaIntegrationConfig",
-      "description": "Preferência institucional não-sensível indicando qual calendário secundário do Google Calendar está selecionado para a COMSOC (nunca armazena tokens).",
+      "description": "Configuração institucional gerenciada exclusivamente por administradores indicando o calendário Google vinculado da COMSOC e sugestões de contatos em cache (nunca armazena tokens).",
       "type": "object",
       "properties": {
         "id": {
@@ -656,26 +732,44 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 256,
-          "description": "ID do calendário secundário escolhido no Google Calendar"
+          "description": "ID do calendário escolhido no Google Calendar"
         },
         "selectedCalendarSummary": {
           "type": "string",
           "minLength": 0,
           "maxLength": 140,
-          "description": "Nome de exibição do calendário secundário"
+          "description": "Nome de exibição do calendário vinculado"
+        },
+        "lockedAccountEmail": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "E-mail institucional Google associado à Agenda do SISCOM"
+        },
+        "lastSyncAt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Data/hora ISO da última sincronização geral realizada pelo administrador"
+        },
+        "contactsCacheJson": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 60000,
+          "description": "Cache JSON de sugestões de contatos (nome e e-mail) para autocompletar convidados"
         },
         "updatedByUid": {
           "type": "string",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "description": "UID do usuário que atualizou a preferência"
+          "description": "UID do administrador que atualizou a configuração"
         },
         "updatedByName": {
           "type": "string",
           "minLength": 1,
           "maxLength": 80,
-          "description": "Nome de exibição do usuário"
+          "description": "Nome de exibição do administrador"
         },
         "updatedAt": {
           "type": "string",
