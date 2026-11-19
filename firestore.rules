@@ -79,6 +79,19 @@ service cloud.firestore {
         );
     }
 
+    function canAccessAgenda() {
+      return isBootstrappedAdmin()
+        || (
+          isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+          && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+            || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permAgenda == true
+          )
+        );
+    }
+
     function isValidAdminMarker(data, targetUid) {
       return data.keys().hasAll(['uid', 'createdBy', 'createdAt'])
         && data.keys().hasOnly(['uid', 'createdBy', 'createdAt'])
@@ -121,6 +134,7 @@ service cloud.firestore {
           'permDocumentos',
           'permCartoes',
           'permRelatorio',
+          'permAgenda',
           'adminUids',
           'createdBy',
           'createdAt',
@@ -143,6 +157,7 @@ service cloud.firestore {
         && data.permDocumentos is bool
         && data.permCartoes is bool
         && (!('permRelatorio' in data) || data.permRelatorio is bool)
+        && (!('permAgenda' in data) || data.permAgenda is bool)
         && data.adminUids is list
         && data.adminUids.size() >= 1
         && data.adminUids.size() <= 10
@@ -351,6 +366,190 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidAgendaEvent(data, eventId) {
+      return data.keys().hasAll([
+          'id',
+          'title',
+          'category',
+          'status',
+          'startAt',
+          'endAt',
+          'allDay',
+          'location',
+          'responsibles',
+          'description',
+          'reminderMinutes',
+          'sectionScope',
+          'googleEventId',
+          'googleCalendarId',
+          'googleCalendarSummary',
+          'googleHtmlLink',
+          'syncStatus',
+          'lastSyncedAt',
+          'createdByUid',
+          'createdByName',
+          'updatedByUid',
+          'updatedByName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'title',
+          'category',
+          'status',
+          'startAt',
+          'endAt',
+          'allDay',
+          'location',
+          'responsibles',
+          'description',
+          'reminderMinutes',
+          'sectionScope',
+          'googleEventId',
+          'googleCalendarId',
+          'googleCalendarSummary',
+          'googleHtmlLink',
+          'syncStatus',
+          'lastSyncedAt',
+          'createdByUid',
+          'createdByName',
+          'updatedByUid',
+          'updatedByName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == eventId
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 140
+        && data.category in [
+          'solenidade',
+          'formatura',
+          'visita',
+          'fotografia',
+          'audiovisual',
+          'reuniao',
+          'data_comemorativa',
+          'outros'
+        ]
+        && data.status in ['agendado', 'realizado', 'cancelado']
+        && data.startAt is string
+        && data.startAt.size() >= 10
+        && data.startAt.size() <= 40
+        && data.endAt is string
+        && data.endAt.size() >= 10
+        && data.endAt.size() <= 40
+        && data.allDay is bool
+        && data.location is string
+        && data.location.size() <= 180
+        && data.responsibles is string
+        && data.responsibles.size() <= 240
+        && data.description is string
+        && data.description.size() <= 2000
+        && data.reminderMinutes is int
+        && data.reminderMinutes >= 0
+        && data.reminderMinutes <= 10080
+        && data.sectionScope == 'comsoc'
+        && data.googleEventId is string
+        && data.googleEventId.size() <= 256
+        && data.googleCalendarId is string
+        && data.googleCalendarId.size() <= 256
+        && data.googleCalendarSummary is string
+        && data.googleCalendarSummary.size() <= 140
+        && data.googleHtmlLink is string
+        && data.googleHtmlLink.size() <= 400
+        && data.syncStatus in ['internal', 'synced', 'error']
+        && data.lastSyncedAt is string
+        && data.lastSyncedAt.size() <= 40
+        && isValidId(data.createdByUid)
+        && data.createdByName is string
+        && data.createdByName.size() >= 1
+        && data.createdByName.size() <= 80
+        && isValidId(data.updatedByUid)
+        && data.updatedByName is string
+        && data.updatedByName.size() >= 1
+        && data.updatedByName.size() <= 80
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAgendaAuditLog(data, logId) {
+      return data.keys().hasAll([
+          'id',
+          'eventId',
+          'action',
+          'summary',
+          'actorUid',
+          'actorName',
+          'sectionScope',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'eventId',
+          'action',
+          'summary',
+          'actorUid',
+          'actorName',
+          'sectionScope',
+          'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.id == logId
+        && isValidOptionalId(data.eventId)
+        && data.action in [
+          'create',
+          'update',
+          'delete',
+          'sync_push',
+          'sync_update',
+          'sync_delete',
+          'google_connect',
+          'google_disconnect'
+        ]
+        && data.summary is string
+        && data.summary.size() >= 1
+        && data.summary.size() <= 240
+        && isValidId(data.actorUid)
+        && data.actorName is string
+        && data.actorName.size() >= 1
+        && data.actorName.size() <= 80
+        && data.sectionScope == 'comsoc'
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAgendaConfig(data, configId) {
+      return data.keys().hasAll([
+          'id',
+          'selectedCalendarId',
+          'selectedCalendarSummary',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'selectedCalendarId',
+          'selectedCalendarSummary',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ])
+        && data.id == 'google_calendar'
+        && configId == 'google_calendar'
+        && data.selectedCalendarId is string
+        && data.selectedCalendarId.size() <= 256
+        && data.selectedCalendarSummary is string
+        && data.selectedCalendarSummary.size() <= 140
+        && isValidId(data.updatedByUid)
+        && data.updatedByName is string
+        && data.updatedByName.size() >= 1
+        && data.updatedByName.size() <= 80
+        && data.updatedAt is timestamp;
+    }
+
     match /admins/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if false;
@@ -405,6 +604,7 @@ service cloud.firestore {
               'permDocumentos',
               'permCartoes',
               'permRelatorio',
+              'permAgenda',
               'updatedAt'
             ])
             || incoming().diff(existing()).affectedKeys().hasOnly([
@@ -422,6 +622,7 @@ service cloud.firestore {
               'permDocumentos',
               'permCartoes',
               'permRelatorio',
+              'permAgenda',
               'updatedAt'
             ])
           ))
@@ -494,6 +695,86 @@ service cloud.firestore {
           ]);
         allow delete: if canAccessOwnAlteracaoArchive(userId) && isValidId(docId);
       }
+    }
+
+    match /agenda_events/{eventId} {
+      allow get: if canAccessAgenda() && isValidId(eventId);
+      allow list: if isSignedIn() && resource.data.sectionScope == 'comsoc';
+      allow create: if canAccessAgenda()
+        && isValidId(eventId)
+        && isValidAgendaEvent(incoming(), eventId)
+        && incoming().createdByUid == request.auth.uid
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if canAccessAgenda()
+        && isValidId(eventId)
+        && isValidAgendaEvent(incoming(), eventId)
+        && incoming().id == existing().id
+        && incoming().sectionScope == existing().sectionScope
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().createdByName == existing().createdByName
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title',
+          'category',
+          'status',
+          'startAt',
+          'endAt',
+          'allDay',
+          'location',
+          'responsibles',
+          'description',
+          'reminderMinutes',
+          'googleEventId',
+          'googleCalendarId',
+          'googleCalendarSummary',
+          'googleHtmlLink',
+          'syncStatus',
+          'lastSyncedAt',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ]);
+      allow delete: if canAccessAgenda() && isValidId(eventId);
+    }
+
+    match /agenda_audit/{logId} {
+      allow get: if canAccessAgenda() && isValidId(logId);
+      allow list: if isSignedIn() && resource.data.sectionScope == 'comsoc';
+      allow create: if canAccessAgenda()
+        && isValidId(logId)
+        && isValidAgendaAuditLog(incoming(), logId)
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /agenda_config/{configId} {
+      allow get: if canAccessAgenda() && configId == 'google_calendar';
+      allow list: if false;
+      allow create: if canAccessAgenda()
+        && configId == 'google_calendar'
+        && isValidAgendaConfig(incoming(), configId)
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().updatedAt == request.time;
+      allow update: if canAccessAgenda()
+        && configId == 'google_calendar'
+        && isValidAgendaConfig(incoming(), configId)
+        && incoming().id == existing().id
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'selectedCalendarId',
+          'selectedCalendarSummary',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ]);
+      allow delete: if false;
     }
 
     match /recovery/{username} {

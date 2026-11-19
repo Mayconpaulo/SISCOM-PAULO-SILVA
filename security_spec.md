@@ -9,6 +9,7 @@
 6. `uid`, `createdBy` e `createdAt` são imutáveis após criação; todas as strings e listas possuem limites explícitos de tamanho e validação de formato.
 7. Administradores desativados (`active == false`) perdem imediatamente o status de `isAdmin()`, e administradores secundários só gerenciam contas vinculadas à própria cadeia (`adminUids`/`createdBy`), sem acesso para alterar ou excluir o administrador principal (`admin-google`) ou administradores não vinculados.
 8. As subcoleções pessoais `/users/{userId}/alteracao_folders/{folderId}` e `/users/{userId}/alteracao_docs/{docId}` são estritamente privadas ao próprio titular autenticado e ativo com acesso ao módulo Alteração (`isOwner(userId)`), com `ownerUid` imutável, carimbos `request.time`, limites de tamanho em strings/listas e bloqueio de auto-parentesco em pastas (`parentId != folderId`).
+9. As coleções `/agenda_events/{eventId}`, `/agenda_audit/{logId}` e `/agenda_config/google_calendar` exigem usuário autenticado, ativo e com acesso ao módulo Agenda (`role == 'admin'` ou `permAgenda == true`), validação estrita de esquema e limites de tamanho, imutabilidade de autoria/criação, registros de auditoria somente-leitura após criação e proibição absoluta de armazenar tokens OAuth no Firestore.
 
 ## 2. "Dirty Dozen" — Payloads Maliciosos Testados
 1. **Unauthenticated User Read**: `get(/users/uid1)` sem `request.auth` -> `PERMISSION_DENIED`.
@@ -29,3 +30,8 @@
 16. **Folder Self-Parent Cycle Injection**: Usuário tentando criar/atualizar pasta com `parentId == folderId` -> `PERMISSION_DENIED`.
 17. **Alteracao Doc Owner Tampering / Oversized Payload**: Tentativa de alterar `ownerUid` em update ou enviar `pagesHtml` vazio / > 60 itens / campos extras -> `PERMISSION_DENIED`.
 18. **Unauthorized Module Archive Write**: Usuário sem `permAlteracao == true` (e não admin) tentando criar pasta ou arquivar alteração -> `PERMISSION_DENIED`.
+19. **Unauthorized Agenda Write**: Usuário sem `permAgenda == true` (e não admin) tentando criar, atualizar ou excluir em `/agenda_events` -> `PERMISSION_DENIED`.
+20. **Agenda Audit Tampering**: Tentativa de editar ou excluir documento existente em `/agenda_audit/{logId}` -> `PERMISSION_DENIED`.
+21. **Agenda Token Injection in Config**: Tentativa de gravar `accessToken` ou campo extra em `/agenda_config/google_calendar` -> `PERMISSION_DENIED`.
+22. **Agenda Spoofed Creator**: Usuário tentando criar evento em `/agenda_events` com `createdByUid != request.auth.uid` -> `PERMISSION_DENIED`.
+

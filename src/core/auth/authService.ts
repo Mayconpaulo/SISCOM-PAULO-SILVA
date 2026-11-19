@@ -37,8 +37,16 @@ import {
   encryptPasswordWithAnswer,
 } from './recoveryCrypto';
 import { purgeAllSensitiveLocalData } from '../privacy/privacyVault';
+import { disconnectGoogleCalendarSession } from '../../modules/agenda/googleCalendarService';
 
-export type ModuleKey = 'prismas' | 'crachas' | 'alteracao' | 'documentos' | 'cartoes' | 'relatorio';
+export type ModuleKey =
+  | 'prismas'
+  | 'crachas'
+  | 'alteracao'
+  | 'documentos'
+  | 'cartoes'
+  | 'relatorio'
+  | 'agenda';
 
 export interface ModulePermissions {
   permPrismas: boolean;
@@ -47,6 +55,7 @@ export interface ModulePermissions {
   permDocumentos: boolean;
   permCartoes: boolean;
   permRelatorio?: boolean;
+  permAgenda?: boolean;
 }
 
 export interface UserAccount extends ModulePermissions {
@@ -80,6 +89,7 @@ export const MODULE_PERM_FIELD: Record<ModuleKey, keyof ModulePermissions> = {
   documentos: 'permDocumentos',
   cartoes: 'permCartoes',
   relatorio: 'permRelatorio',
+  agenda: 'permAgenda',
 };
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -89,6 +99,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   documentos: 'Documentos',
   cartoes: 'Cartões',
   relatorio: 'Relatório',
+  agenda: 'Agenda',
 };
 
 export const ALL_MODULE_KEYS: ModuleKey[] = [
@@ -98,6 +109,7 @@ export const ALL_MODULE_KEYS: ModuleKey[] = [
   'documentos',
   'cartoes',
   'relatorio',
+  'agenda',
 ];
 
 export const SYNTHETIC_DOMAIN = 'siscom.app';
@@ -223,6 +235,7 @@ export async function signInWithGoogleAdmin(): Promise<User> {
 
 export async function signOutCurrentUser(): Promise<void> {
   purgeAllSensitiveLocalData();
+  await disconnectGoogleCalendarSession();
   await signOut(auth);
 }
 
@@ -291,6 +304,7 @@ export async function ensureBootstrappedAdminProfile(user: User): Promise<void> 
         permDocumentos: true,
         permCartoes: true,
         permRelatorio: true,
+        permAgenda: true,
         adminUids: [user.uid],
         createdBy: user.uid,
         createdAt: serverTimestamp(),
@@ -298,13 +312,15 @@ export async function ensureBootstrappedAdminProfile(user: User): Promise<void> 
       });
     } else if (
       userSnap.data()?.emailVerified !== true ||
-      userSnap.data()?.permRelatorio === undefined
+      userSnap.data()?.permRelatorio === undefined ||
+      userSnap.data()?.permAgenda === undefined
     ) {
       await updateDoc(userRef, {
         emailVerified: true,
         mustChangePassword: false,
         securityQuestionSetup: true,
         ...(userSnap.data()?.permRelatorio === undefined ? { permRelatorio: true } : {}),
+        ...(userSnap.data()?.permAgenda === undefined ? { permAgenda: true } : {}),
         updatedAt: serverTimestamp(),
       });
     }
@@ -393,6 +409,7 @@ export async function createManagedUserAccount(params: {
     permDocumentos: Boolean(params.permissions.permDocumentos),
     permCartoes: Boolean(params.permissions.permCartoes),
     permRelatorio: Boolean(params.permissions.permRelatorio),
+    permAgenda: Boolean(params.permissions.permAgenda),
     adminUids: boundedAdminUids,
     createdBy: params.adminUser.uid,
     createdAt: serverTimestamp(),
@@ -701,6 +718,7 @@ export async function updateOwnAdminProfile(params: {
         permDocumentos: true,
         permCartoes: true,
         permRelatorio: true,
+        permAgenda: true,
       },
     });
 
@@ -807,6 +825,7 @@ export async function updateOwnAdminProfile(params: {
       permDocumentos: true,
       permCartoes: true,
       permRelatorio: true,
+      permAgenda: true,
       adminUids: nextAdminUids,
       createdBy: oldUid,
       createdAt: serverTimestamp(),

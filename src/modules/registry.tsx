@@ -2,6 +2,7 @@ import React from 'react';
 import { Shield } from 'lucide-react';
 import type { ModuleKey } from '../core/auth/authService';
 import { AdminPanel } from './admin/AdminPanel';
+import { AgendaComsoc } from './agenda/AgendaComsoc';
 import { AlteracaoGenerator } from './alteracao/AlteracaoGenerator';
 import { CartoesGenerator } from './cartoes/CartoesGenerator';
 import { CrachaGenerator } from './crachas/CrachaGenerator';
@@ -123,6 +124,20 @@ function RelatorioSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   );
 }
 
+function AgendaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
+      <rect x="11" y="15" width="42" height="38" rx="4" stroke="currentColor" strokeWidth="2.2" />
+      <path d="M22 10V19M42 10V19" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M11 26H53" stroke="currentColor" strokeWidth="2" opacity="0.75" />
+      <rect x="19" y="32" width="7" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="29" y="32" width="7" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" opacity="0.75" />
+      <rect x="39" y="32" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" opacity="0.75" />
+      <path d="M19 44H35" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export interface FeatureModuleDefinition {
   id: ModuleKey;
   title: string;
@@ -166,6 +181,12 @@ export const FEATURE_MODULES: readonly FeatureModuleDefinition[] = [
     title: 'Relatório',
     renderIcon: (className) => <RelatorioSymbol className={className} />,
     Component: RelatorioGenerator,
+  },
+  {
+    id: 'agenda',
+    title: 'Agenda',
+    renderIcon: (className) => <AgendaSymbol className={className} />,
+    Component: AgendaComsoc,
   },
 ];
 

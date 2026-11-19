@@ -97,6 +97,10 @@
           "type": "boolean",
           "description": "Acesso ao módulo Relatório"
         },
+        "permAgenda": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Agenda da Comunicação Social"
+        },
         "adminUids": {
           "type": "array",
           "description": "Lista limitada (máx. 10) de UIDs de administradores gerenciadores"
@@ -382,6 +386,311 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "AgendaEvent": {
+      "title": "AgendaEvent",
+      "description": "Atividade cadastrada na Agenda interna da Comunicação Social com suporte opcional à sincronização com calendário secundário do Google Calendar.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único da atividade no SISCOM"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Título da atividade"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "solenidade",
+            "formatura",
+            "visita",
+            "fotografia",
+            "audiovisual",
+            "reuniao",
+            "data_comemorativa",
+            "outros"
+          ],
+          "description": "Categoria institucional da Comunicação Social"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["agendado", "realizado", "cancelado"],
+          "description": "Situação atual da atividade"
+        },
+        "startAt": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 40,
+          "description": "Data/hora inicial em formato ISO"
+        },
+        "endAt": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 40,
+          "description": "Data/hora final em formato ISO"
+        },
+        "allDay": {
+          "type": "boolean",
+          "description": "Indica se a atividade ocupa o dia inteiro"
+        },
+        "location": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 180,
+          "description": "Local da atividade"
+        },
+        "responsibles": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 240,
+          "description": "Militares ou equipe responsáveis pela atividade"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000,
+          "description": "Descrição detalhada e observações da atividade"
+        },
+        "reminderMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10080,
+          "description": "Antecedência do lembrete em minutos (0 = desativado)"
+        },
+        "sectionScope": {
+          "type": "string",
+          "enum": ["comsoc"],
+          "description": "Escopo institucional da seção"
+        },
+        "googleEventId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 256,
+          "description": "Identificador do evento vinculado no Google Calendar"
+        },
+        "googleCalendarId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 256,
+          "description": "ID do calendário secundário do Google Calendar vinculado"
+        },
+        "googleCalendarSummary": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "Nome do calendário secundário vinculado"
+        },
+        "googleHtmlLink": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "Link de visualização do evento no Google Calendar"
+        },
+        "syncStatus": {
+          "type": "string",
+          "enum": ["internal", "synced", "error"],
+          "description": "Estado da sincronização com o Google Calendar"
+        },
+        "lastSyncedAt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Data/hora ISO da última sincronização bem-sucedida"
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário criador"
+        },
+        "createdByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição do usuário criador"
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do último usuário que alterou a atividade"
+        },
+        "updatedByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição do último usuário que alterou"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de criação no servidor"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo da última atualização no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "status",
+        "startAt",
+        "endAt",
+        "allDay",
+        "location",
+        "responsibles",
+        "description",
+        "reminderMinutes",
+        "sectionScope",
+        "googleEventId",
+        "googleCalendarId",
+        "googleCalendarSummary",
+        "googleHtmlLink",
+        "syncStatus",
+        "lastSyncedAt",
+        "createdByUid",
+        "createdByName",
+        "updatedByUid",
+        "updatedByName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AgendaAuditLog": {
+      "title": "AgendaAuditLog",
+      "description": "Registro imutável de auditoria das ações realizadas na Agenda da Comunicação Social e na sincronização com o Google Calendar.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único do registro de auditoria"
+        },
+        "eventId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "pattern": "^$|^[a-zA-Z0-9_\\-]+$",
+          "description": "ID do evento relacionado, quando aplicável"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "delete",
+            "sync_push",
+            "sync_update",
+            "sync_delete",
+            "google_connect",
+            "google_disconnect"
+          ],
+          "description": "Tipo de ação registrada"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "Descrição resumida da operação"
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário que executou a ação"
+        },
+        "actorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição do usuário"
+        },
+        "sectionScope": {
+          "type": "string",
+          "enum": ["comsoc"],
+          "description": "Escopo institucional da seção"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de data/hora no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "eventId",
+        "action",
+        "summary",
+        "actorUid",
+        "actorName",
+        "sectionScope",
+        "createdAt"
+      ]
+    },
+    "AgendaIntegrationConfig": {
+      "title": "AgendaIntegrationConfig",
+      "description": "Preferência institucional não-sensível indicando qual calendário secundário do Google Calendar está selecionado para a COMSOC (nunca armazena tokens).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["google_calendar"],
+          "description": "Identificador fixo da configuração"
+        },
+        "selectedCalendarId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 256,
+          "description": "ID do calendário secundário escolhido no Google Calendar"
+        },
+        "selectedCalendarSummary": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "Nome de exibição do calendário secundário"
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário que atualizou a preferência"
+        },
+        "updatedByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição do usuário"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de atualização no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "selectedCalendarId",
+        "selectedCalendarSummary",
+        "updatedByUid",
+        "updatedByName",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -408,6 +717,18 @@
     "/auth_lookup/{username}": {
       "schema": { "$ref": "#/entities/AuthLookup" },
       "description": "Mapeamento interno de login por usuário ativo"
+    },
+    "/agenda_events/{eventId}": {
+      "schema": { "$ref": "#/entities/AgendaEvent" },
+      "description": "Atividades da Agenda da Comunicação Social com controle de sincronização"
+    },
+    "/agenda_audit/{logId}": {
+      "schema": { "$ref": "#/entities/AgendaAuditLog" },
+      "description": "Histórico de auditoria imutável da Agenda da Comunicação Social"
+    },
+    "/agenda_config/{configId}": {
+      "schema": { "$ref": "#/entities/AgendaIntegrationConfig" },
+      "description": "Preferência do calendário secundário do Google Calendar da COMSOC (sem tokens)"
     }
   }
 }

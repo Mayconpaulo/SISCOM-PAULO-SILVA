@@ -27,6 +27,7 @@ const DEFAULT_NEW_USER_PERMS: ModulePermissions = {
   permDocumentos: false,
   permCartoes: false,
   permRelatorio: true,
+  permAgenda: true,
 };
 
 export function AdminPanel() {
