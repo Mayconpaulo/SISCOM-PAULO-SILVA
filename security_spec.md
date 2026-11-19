@@ -3,10 +3,12 @@
 ## 1. Invariantes de Dados
 1. Nenhum documento em `/admins/{userId}` ou `/users/{userId}` pode ser lido ou alterado sem autenticação (`request.auth != null`).
 2. Apenas o administrador inicial verificado (`mayconpaulo6000@gmail.com` com `email_verified == true`) ou um administrador registrado em `/admins/{uid}` pode criar, atualizar ou remover contas em `/users` e `/admins`.
-3. Usuários comuns (`role: 'user'`) só podem ler (`get`) o próprio documento `/users/{request.auth.uid}` e alterar exclusivamente as flags de onboarding (`mustChangePassword`, `securityQuestionSetup`, `updatedAt`) no próprio perfil ativo; nunca `role`, `active` ou permissões (`permPrismas`, `permCrachas`, `permAlteracao`, `permDocumentos`, `permCartoes`).
+3. Usuários comuns (`role: 'user'`) só podem ler (`get`) o próprio documento `/users/{request.auth.uid}` e alterar exclusivamente as flags de onboarding (`mustChangePassword`, `securityQuestionSetup`, `updatedAt`) no próprio perfil ativo; nunca `role`, `active` ou permissões (`permPrismas`, `permCrachas`, `permAlteracao`, `permDocumentos`, `permCartoes`, `permRelatorio`).
 4. As coleções `/recovery/{username}` e `/auth_lookup/{username}` nunca permitem listagem (`allow list: if false`), armazenam zero PII e permitem `get` apenas por ID exato de `username` válido antes do login; criação/atualização exigem `request.auth != null` com validação estrita de identidade e esquema.
 5. Todos os campos `createdAt` e `updatedAt` exigem `request.time` (carimbo do servidor).
 6. `uid`, `createdBy` e `createdAt` são imutáveis após criação; todas as strings e listas possuem limites explícitos de tamanho e validação de formato.
+7. Administradores desativados (`active == false`) perdem imediatamente o status de `isAdmin()`, e administradores secundários só gerenciam contas vinculadas à própria cadeia (`adminUids`/`createdBy`), sem acesso para alterar ou excluir o administrador principal (`admin-google`) ou administradores não vinculados.
+8. As subcoleções pessoais `/users/{userId}/alteracao_folders/{folderId}` e `/users/{userId}/alteracao_docs/{docId}` são estritamente privadas ao próprio titular autenticado e ativo com acesso ao módulo Alteração (`isOwner(userId)`), com `ownerUid` imutável, carimbos `request.time`, limites de tamanho em strings/listas e bloqueio de auto-parentesco em pastas (`parentId != folderId`).
 
 ## 2. "Dirty Dozen" — Payloads Maliciosos Testados
 1. **Unauthenticated User Read**: `get(/users/uid1)` sem `request.auth` -> `PERMISSION_DENIED`.
@@ -21,3 +23,9 @@
 10. **Client Timestamp Forgery**: `updatedAt` diferente de `request.time` -> `PERMISSION_DENIED`.
 11. **Recovery List Scraping**: Tentativa de `list(/recovery)` para enumerar usuários -> `PERMISSION_DENIED`.
 12. **Cross-User Recovery Hijack**: Usuário `uidA` tentando sobrescrever `/recovery/usuarioB` ou alterar `uid` de outro usuário -> `PERMISSION_DENIED`.
+13. **Deactivated Admin Lockout**: Administrador secundário com `users/{uid}.active == false` tentando alterar ou excluir contas -> `PERMISSION_DENIED`.
+14. **Peer/Root Admin Protection**: Administrador secundário tentando modificar `admin-google` ou remover administrador não vinculado -> `PERMISSION_DENIED`.
+15. **Cross-User Alteracao Archive Read/Write**: Usuário `uidA` tentando ler, listar ou criar em `/users/uidB/alteracao_folders` ou `/users/uidB/alteracao_docs` -> `PERMISSION_DENIED`.
+16. **Folder Self-Parent Cycle Injection**: Usuário tentando criar/atualizar pasta com `parentId == folderId` -> `PERMISSION_DENIED`.
+17. **Alteracao Doc Owner Tampering / Oversized Payload**: Tentativa de alterar `ownerUid` em update ou enviar `pagesHtml` vazio / > 60 itens / campos extras -> `PERMISSION_DENIED`.
+18. **Unauthorized Module Archive Write**: Usuário sem `permAlteracao == true` (e não admin) tentando criar pasta ou arquivar alteração -> `PERMISSION_DENIED`.

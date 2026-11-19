@@ -1,57 +1,34 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LayoutGroup, MotionConfig, motion } from 'motion/react';
+import { AnimatePresence, LayoutGroup, MotionConfig, motion } from 'motion/react';
 import { ArrowLeft, LogOut, Shield } from 'lucide-react';
-import { AdminPanel } from './components/AdminPanel';
-import { AlteracaoGenerator } from './components/AlteracaoGenerator';
-import { CartoesGenerator } from './components/CartoesGenerator';
-import { CrachaGenerator } from './components/CrachaGenerator';
-import { DocumentosVault } from './components/DocumentosVault';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { FirstLoginOnboarding } from './components/FirstLoginOnboarding';
-import { LoginScreen } from './components/LoginScreen';
-import { OfflineIndicator, PWAInstallButton } from './components/PWAComponents';
-import { PrismaGenerator } from './components/PrismaGenerator';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ModuleKey, isBootstrappedGoogleUser, signOutCurrentUser } from './lib/authService';
+import { ErrorBoundary } from './core/ErrorBoundary';
+import { AuthProvider, useAuth } from './core/auth/AuthContext';
+import { FirstLoginOnboarding } from './core/auth/FirstLoginOnboarding';
+import { LoginScreen } from './core/auth/LoginScreen';
+import { isBootstrappedGoogleUser, signOutCurrentUser } from './core/auth/authService';
+import { PrivacyShieldModal } from './core/privacy/PrivacyShieldModal';
+import {
+  hydratePrivacyVaultForUser,
+  purgeAllSensitiveLocalData,
+} from './core/privacy/privacyVault';
+import { OfflineIndicator, PWAInstallButton } from './core/pwa/PWAComponents';
+import {
+  ActiveScreen,
+  FEATURE_MODULES,
+  VALID_SCREENS,
+  getScreenTitle,
+  renderScreenContent,
+  renderScreenIcon,
+} from './modules/registry';
+import {
+  CREST_LAYOUT_TRANSITION,
+  MODULE_EXPAND_TRANSITION,
+  MODULE_LOCKUP_TRANSITION,
+  SISCOM_EASE,
+} from './shared/motion';
+import { SiscomAlert, SiscomSpinner } from './shared/ui';
 
-type ActiveScreen = 'home' | 'admin' | ModuleKey;
 type ViewStage = 'boot' | 'login' | 'onboarding' | 'home' | 'module';
-
-const CREST_LAYOUT_TRANSITION = {
-  type: 'spring' as const,
-  stiffness: 220,
-  damping: 26,
-  mass: 0.9,
-};
-
-const MODULE_EXPAND_TRANSITION = {
-  duration: 0.34,
-  ease: [0.22, 1, 0.36, 1] as const,
-};
-
-const MODULE_LOCKUP_TRANSITION = {
-  duration: 0.36,
-  ease: [0.22, 1, 0.36, 1] as const,
-};
-
-const MODULE_TITLES: Record<Exclude<ActiveScreen, 'home'>, string> = {
-  prismas: 'Prismas',
-  crachas: 'Crachás',
-  alteracao: 'Alterações',
-  documentos: 'Documentos',
-  cartoes: 'Cartões',
-  admin: 'Administração',
-};
-
-const VALID_SCREENS: ReadonlySet<ActiveScreen> = new Set([
-  'home',
-  'admin',
-  'prismas',
-  'crachas',
-  'alteracao',
-  'documentos',
-  'cartoes',
-]);
 
 function getBaseUrlWithoutHash(): string {
   return `${window.location.pathname}${window.location.search}`;
@@ -78,119 +55,6 @@ function getTimeGreeting(date = new Date()): string {
   return 'Boa noite';
 }
 
-function PrismaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <path
-        d="M12 44L22 18H52L42 44H12Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 44H42L52 44L47 29"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.55"
-      />
-      <path d="M25 28H41M23 34H37" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CrachaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <path
-        d="M27 10H37V17H27V10Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <rect x="14" y="17" width="36" height="37" rx="4" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M14 27H50M14 44H50" stroke="currentColor" strokeWidth="2" opacity="0.7" />
-      <circle cx="32" cy="35.5" r="4" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function AlteracaoSymbol({ className = 'w-14 h-14' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <rect x="15" y="10" width="34" height="44" rx="3" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M15 22H49M32 10V22" stroke="currentColor" strokeWidth="2" opacity="0.75" />
-      <path
-        d="M21 30H43M21 37H43M21 44H35"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function DocumentosSymbol({ className = 'w-14 h-14' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <path
-        d="M10 20C10 17.7909 11.7909 16 14 16H25L30 21H50C52.2091 21 54 22.7909 54 25V46C54 48.2091 52.2091 50 50 50H14C11.7909 50 10 48.2091 10 46V20Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M18 32H46M18 39H36"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-    </svg>
-  );
-}
-
-function CartoesSymbol({ className = 'w-14 h-14' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <rect x="10" y="15" width="44" height="34" rx="3" stroke="currentColor" strokeWidth="2.2" />
-      <rect x="14.5" y="19.5" width="35" height="25" rx="1.5" stroke="currentColor" strokeWidth="1.6" opacity="0.65" />
-      <path d="M22 27H42M20 33H44M26 39H38" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function renderModuleIcon(screen: Exclude<ActiveScreen, 'home'>, className: string) {
-  switch (screen) {
-    case 'prismas':
-      return <PrismaSymbol className={className} />;
-    case 'crachas':
-      return <CrachaSymbol className={className} />;
-    case 'alteracao':
-      return <AlteracaoSymbol className={className} />;
-    case 'documentos':
-      return <DocumentosSymbol className={className} />;
-    case 'cartoes':
-      return <CartoesSymbol className={className} />;
-    case 'admin':
-      return <Shield className={className} />;
-  }
-}
-
-interface LauncherCardItem {
-  id: ModuleKey;
-  title: string;
-}
-
-const LAUNCHER_CARDS: LauncherCardItem[] = [
-  { id: 'prismas', title: 'Prismas' },
-  { id: 'crachas', title: 'Crachás' },
-  { id: 'alteracao', title: 'Alterações' },
-  { id: 'documentos', title: 'Documentos' },
-  { id: 'cartoes', title: 'Cartões' },
-];
-
 function WorkspaceShell() {
   const {
     firebaseUser,
@@ -201,11 +65,107 @@ function WorkspaceShell() {
     hasModuleAccess,
   } = useAuth();
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('home');
+  const [moduleResetTick, setModuleResetTick] = useState<number>(0);
   const [greeting, setGreeting] = useState<string>(() => getTimeGreeting());
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
+  const [vaultHydratedUid, setVaultHydratedUid] = useState<string | null>(null);
+  const [shieldLocked, setShieldLocked] = useState<boolean>(false);
+  const [shieldReason, setShieldReason] = useState<'manual' | 'idle'>('manual');
+  const [idleMinutes] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('siscom_pref_autolock_min');
+      if (saved !== null) {
+        const parsed = Number(saved);
+        if (parsed === 0 || parsed === 5 || parsed === 15 || parsed === 30) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return 15;
+  });
 
   // Track if the user came directly from Login (to spin the crest only on subsequent logins -> Home)
   const wasOnLoginRef = useRef(false);
+
+  // Hydrate encrypted local vault strictly for authenticated & active user; purge immediately on sign-out or deactivation
+  useEffect(() => {
+    let cancelled = false;
+    if (!firebaseUser || !account || !account.active || unauthorizedReason) {
+      purgeAllSensitiveLocalData();
+      setVaultHydratedUid(null);
+      setShieldLocked(false);
+      return;
+    }
+
+    const uid = account.uid;
+    if (vaultHydratedUid === uid) return;
+
+    void hydratePrivacyVaultForUser(uid).then(() => {
+      if (!cancelled) {
+        setVaultHydratedUid(uid);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, account, unauthorizedReason, vaultHydratedUid]);
+
+  // Global keyboard shortcut (Ctrl+Shift+L) to instantly shield classified screens
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+        if (firebaseUser && account && account.active && !unauthorizedReason) {
+          e.preventDefault();
+          setShieldReason('manual');
+          setShieldLocked(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [firebaseUser, account, unauthorizedReason]);
+
+  // Idle auto-lock timer
+  useEffect(() => {
+    if (
+      !firebaseUser ||
+      !account ||
+      !account.active ||
+      unauthorizedReason ||
+      idleMinutes <= 0 ||
+      shieldLocked
+    ) {
+      return;
+    }
+
+    let timerId = 0;
+    const timeoutMs = idleMinutes * 60_000;
+    const resetTimer = () => {
+      window.clearTimeout(timerId);
+      timerId = window.setTimeout(() => {
+        setShieldReason('idle');
+        setShieldLocked(true);
+      }, timeoutMs);
+    };
+
+    resetTimer();
+    const events: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'touchstart',
+      'scroll',
+    ];
+    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+
+    return () => {
+      window.clearTimeout(timerId);
+      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [firebaseUser, account, unauthorizedReason, idleMinutes, shieldLocked]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -230,7 +190,7 @@ function WorkspaceShell() {
       return;
     }
     if (activeScreen !== 'home' && activeScreen !== 'admin' && !hasModuleAccess(activeScreen)) {
-      setAccessNotice(`Acesso a ${MODULE_TITLES[activeScreen]} removido pelo administrador.`);
+      setAccessNotice(`Acesso a ${getScreenTitle(activeScreen)} removido pelo administrador.`);
       window.history.replaceState(
         { siscomScreen: 'home', siscomDepth: 0 },
         '',
@@ -247,6 +207,8 @@ function WorkspaceShell() {
       (account.mustChangePassword === true || account.securityQuestionSetup === false)
   );
 
+  const isVaultReady = Boolean(account && vaultHydratedUid === account.uid);
+
   let currentView: ViewStage = 'boot';
   if (booting) {
     currentView = 'boot';
@@ -258,6 +220,8 @@ function WorkspaceShell() {
     unauthorizedReason
   ) {
     currentView = 'login';
+  } else if (!isVaultReady) {
+    currentView = 'boot';
   } else if (needsFirstLoginSetup) {
     currentView = 'onboarding';
   } else if (activeScreen === 'home') {
@@ -355,15 +319,22 @@ function WorkspaceShell() {
 
   if (currentView === 'boot') {
     return (
-      <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col items-center justify-center gap-3">
-        <motion.div layoutId="siscom-crest" className="w-16 h-16 flex items-center justify-center">
+      <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col items-center justify-center gap-4">
+        <motion.div
+          layoutId="siscom-crest"
+          transition={CREST_LAYOUT_TRANSITION}
+          className="w-16 h-16 flex items-center justify-center"
+        >
           <img
             src="/assets/logo_arma_comunicacoes.png"
             alt="SISCOM"
-            className="w-full h-full object-contain opacity-90"
+            className="w-full h-full object-contain opacity-95"
           />
         </motion.div>
-        <span className="font-mono text-xs text-[#98A89F]">Carregando...</span>
+        <div className="inline-flex items-center gap-2 text-xs text-[#98A89F]">
+          <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
+          <span className="font-mono tracking-wide">Carregando...</span>
+        </div>
       </div>
     );
   }
@@ -386,10 +357,22 @@ function WorkspaceShell() {
     return null;
   }
 
-  const visibleCards = LAUNCHER_CARDS.filter((card) => hasModuleAccess(card.id));
+  const visibleCards = FEATURE_MODULES.filter((mod) => hasModuleAccess(mod.id));
 
   return (
-    <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col relative">
+    <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col relative selection:bg-[#2D5A43]/55 selection:text-[#F4E6C4]">
+      {/* Subtle institutional ambient depth on Home */}
+      {activeScreen === 'home' && (
+        <div
+          aria-hidden="true"
+          className="no-print pointer-events-none fixed inset-0 z-0"
+          style={{
+            background:
+              'radial-gradient(640px 420px at 50% 18%, rgba(45, 90, 67, 0.14) 0%, rgba(194, 155, 86, 0.04) 42%, rgba(11, 14, 13, 0) 75%)',
+          }}
+        />
+      )}
+
       {/* Expanding backdrop surface when opening a module */}
       {activeScreen !== 'home' && (
         <motion.div
@@ -401,19 +384,19 @@ function WorkspaceShell() {
 
       {/* Minimalist Top Bar */}
       {activeScreen !== 'home' ? (
-        <header className="no-print relative z-10 h-14 px-4 sm:px-6 border-b border-[#C29B56]/20 bg-[#101513]/95 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <header className="no-print sticky top-0 z-30 h-14 px-3.5 sm:px-6 border-b border-[#C29B56]/18 bg-[#0E1311]/92 backdrop-blur-md grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <motion.div
-            initial={{ opacity: 0, x: -8 }}
+            initial={{ opacity: 0, x: -6 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.2, delay: 0.04, ease: SISCOM_EASE }}
             className="flex items-center justify-start"
           >
             <button
               type="button"
               onClick={navigateBackToHome}
-              className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-[#C29B56]/25 bg-[#161D1A] hover:bg-[#1E2824] hover:border-[#C29B56]/45 px-3 text-xs sm:text-sm font-medium text-[#E4EAE6] transition-colors whitespace-nowrap"
+              className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs sm:text-sm !border-[#C29B56]/25 hover:!border-[#C29B56]/48"
             >
-              <ArrowLeft className="w-4 h-4 text-[#C8A461]" />
+              <ArrowLeft className="w-4 h-4 text-[#C8A461] shrink-0" />
               <span>Voltar</span>
             </button>
           </motion.div>
@@ -422,34 +405,34 @@ function WorkspaceShell() {
             <motion.div
               layoutId={`module-icon-${activeScreen}`}
               transition={MODULE_LOCKUP_TRANSITION}
-              className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-[7px] bg-[#0B110E]/90 border border-[#C29B56]/35 flex items-center justify-center text-[#C8A461]"
+              className="w-8 h-8 shrink-0 rounded-[8px] bg-[#0B110E]/90 border border-[#C29B56]/35 flex items-center justify-center text-[#C8A461] shadow-[inset_0_1px_0_rgba(244,230,196,0.12)]"
             >
-              {renderModuleIcon(activeScreen, 'w-4 h-4 sm:w-[18px] sm:h-[18px]')}
+              {renderScreenIcon(activeScreen, 'w-4 h-4 sm:w-[18px] sm:h-[18px]')}
             </motion.div>
             <motion.h1
               layoutId={`module-title-${activeScreen}`}
               transition={MODULE_LOCKUP_TRANSITION}
               className="font-display text-sm sm:text-base font-semibold tracking-wide text-[#F4E6C4] truncate whitespace-nowrap"
             >
-              {MODULE_TITLES[activeScreen]}
+              {getScreenTitle(activeScreen)}
             </motion.h1>
           </div>
 
-          <div />
+          <div className="flex items-center justify-end" />
         </header>
       ) : (
         <motion.header
-          initial={{ opacity: 0, y: -6 }}
+          initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          className="no-print relative z-10 h-14 px-4 sm:px-6 flex items-center justify-between gap-2"
+          transition={{ duration: 0.2, ease: SISCOM_EASE }}
+          className="no-print relative z-20 h-14 px-3.5 sm:px-6 flex items-center justify-between gap-2"
         >
           <div className="flex items-center gap-2">
             {account.role === 'admin' && (
               <button
                 type="button"
                 onClick={() => navigateToScreen('admin')}
-                className="relative min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-[#C29B56]/30 bg-[#161D1A] hover:bg-[#1E2824] hover:border-[#C29B56]/55 px-3 text-xs font-medium text-[#E5C17B] transition-colors"
+                className="relative siscom-btn siscom-btn-gold !min-h-[38px] !px-3 text-xs"
               >
                 <motion.div
                   layoutId="module-surface-admin"
@@ -474,16 +457,16 @@ function WorkspaceShell() {
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <PWAInstallButton compact />
-            <span className="hidden sm:inline text-xs text-[#98A89F]">
+            <span className="hidden sm:inline text-xs font-medium text-[#98A89F] px-1">
               {account.displayName}
             </span>
             <button
               type="button"
               onClick={() => void signOutCurrentUser()}
               title="Sair"
-              className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161D1A] hover:bg-[#1E2824] px-2.5 text-xs text-[#C6D4CC] transition-colors"
+              className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs text-[#C6D4CC]"
             >
               <LogOut className="w-3.5 h-3.5 text-[#98A89F]" />
               <span>Sair</span>
@@ -537,52 +520,56 @@ function WorkspaceShell() {
               </motion.p>
             </div>
 
-            {accessNotice && (
-              <p className="text-xs text-[#E5C17B] bg-[#1B1913] border border-[#C29B56]/35 rounded-lg px-3.5 py-2 text-center">
-                {accessNotice}
-              </p>
-            )}
+            <AnimatePresence>
+              {accessNotice && (
+                <SiscomAlert
+                  tone="warning"
+                  onDismiss={() => setAccessNotice(null)}
+                  className="w-full"
+                >
+                  {accessNotice}
+                </SiscomAlert>
+              )}
+            </AnimatePresence>
 
             {visibleCards.length === 0 ? (
               <div className="metal-surface rounded-xl px-6 py-5 text-center text-sm text-[#98A89F]">
                 Nenhuma função liberada para este login no momento.
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full max-w-[360px] md:max-w-[540px]">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full max-w-[368px] md:max-w-[548px]">
                 {visibleCards.map((card, idx) => (
                   <motion.button
                     key={card.id}
                     type="button"
                     onClick={() => navigateToScreen(card.id)}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
                       duration: 0.22,
-                      delay: 0.06 + idx * 0.035,
-                      ease: [0.22, 1, 0.36, 1],
+                      delay: 0.04 + idx * 0.03,
+                      ease: SISCOM_EASE,
                     }}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="relative tactical-plate group aspect-square w-full rounded-[10px] p-3 sm:p-4 flex flex-col items-center justify-center gap-3 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C29B56] cursor-pointer"
+                    className="relative tactical-plate group aspect-square w-full rounded-[12px] p-3.5 sm:p-4 flex flex-col items-center justify-center gap-3 text-center cursor-pointer"
                   >
                     <motion.div
                       layoutId={`module-surface-${card.id}`}
                       transition={MODULE_EXPAND_TRANSITION}
-                      className="absolute inset-0 rounded-[10px] pointer-events-none"
+                      className="absolute inset-0 rounded-[12px] pointer-events-none"
                     />
 
                     <motion.div
                       layoutId={`module-icon-${card.id}`}
                       transition={MODULE_LOCKUP_TRANSITION}
-                      className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-[10px] bg-[#0B110E]/85 border border-[#C29B56]/25 group-hover:border-[#D4B06A]/60 flex items-center justify-center text-[#C8A461] group-hover:text-[#E5C98E] transition-colors"
+                      className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-[10px] bg-[#0B110E]/90 border border-[#C29B56]/25 group-hover:border-[#D4B06A]/60 flex items-center justify-center text-[#C8A461] group-hover:text-[#E5C98E] transition-colors duration-200"
                     >
-                      {renderModuleIcon(card.id, 'w-10 h-10 sm:w-11 sm:h-11')}
+                      {card.renderIcon('w-10 h-10 sm:w-11 sm:h-11')}
                     </motion.div>
 
                     <motion.span
                       layoutId={`module-title-${card.id}`}
                       transition={MODULE_LOCKUP_TRANSITION}
-                      className="relative z-10 block font-display text-base sm:text-lg font-semibold tracking-tight text-[#E4EAE6] group-hover:text-[#F4E6C4] transition-colors whitespace-nowrap"
+                      className="relative z-10 block font-display text-base sm:text-lg font-semibold tracking-tight text-[#E4EAE6] group-hover:text-[#F4E6C4] transition-colors duration-200 whitespace-nowrap"
                     >
                       {card.title}
                     </motion.span>
@@ -594,27 +581,43 @@ function WorkspaceShell() {
         </main>
       )}
 
-      {/* Active Module View */}
-      {activeScreen !== 'home' && (
-        <motion.div
-          key={activeScreen}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.26, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-          className="relative z-10 flex-1 flex flex-col"
-        >
-          {activeScreen === 'prismas' && hasModuleAccess('prismas') && <PrismaGenerator />}
-          {activeScreen === 'crachas' && hasModuleAccess('crachas') && <CrachaGenerator />}
-          {activeScreen === 'alteracao' && hasModuleAccess('alteracao') && <AlteracaoGenerator />}
-          {activeScreen === 'documentos' && hasModuleAccess('documentos') && <DocumentosVault />}
-          {activeScreen === 'cartoes' && hasModuleAccess('cartoes') && <CartoesGenerator />}
-          {activeScreen === 'admin' && account.role === 'admin' && <AdminPanel />}
-        </motion.div>
-      )}
+      {/* Active Module View (each feature isolated inside its own ErrorBoundary) */}
+      <AnimatePresence mode="wait">
+        {activeScreen !== 'home' &&
+          (activeScreen === 'admin' ? account.role === 'admin' : hasModuleAccess(activeScreen)) && (
+            <motion.div
+              key={activeScreen}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.24, ease: SISCOM_EASE }}
+              className="relative z-10 flex-1 flex flex-col"
+            >
+              <ErrorBoundary
+                key={`${activeScreen}-${moduleResetTick}`}
+                inline
+                scopeLabel={getScreenTitle(activeScreen)}
+                onReset={() => setModuleResetTick((tick) => tick + 1)}
+              >
+                {renderScreenContent(activeScreen)}
+              </ErrorBoundary>
+            </motion.div>
+          )}
+      </AnimatePresence>
 
       <div className="no-print relative z-10">
         <OfflineIndicator />
       </div>
+
+      {firebaseUser && (
+        <PrivacyShieldModal
+          open={shieldLocked}
+          reason={shieldReason}
+          user={firebaseUser}
+          account={account}
+          onUnlock={() => setShieldLocked(false)}
+        />
+      )}
     </div>
   );
 }

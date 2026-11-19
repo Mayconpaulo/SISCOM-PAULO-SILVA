@@ -4,17 +4,27 @@
 @layer base {
   :root {
     --bg-canvas: #0b0e0d;
-    --bg-surface: #121715;
-    --bg-elevated: #181f1c;
-    --bg-input: #0e1211;
-    --border-hairline: rgba(198, 212, 204, 0.11);
+    --bg-surface: #111614;
+    --bg-elevated: #171e1b;
+    --bg-input: #0c100f;
+    --border-hairline: rgba(198, 212, 204, 0.1);
     --border-strong: rgba(198, 212, 204, 0.2);
+    --border-gold-subtle: rgba(194, 155, 86, 0.22);
+    --border-gold-active: rgba(200, 164, 97, 0.56);
     --accent-primary: #2d5a43;
     --accent-hover: #376c51;
+    --accent-active: #254b38;
     --accent-text: #83b499;
+    --gold-primary: #c8a461;
+    --gold-bright: #e5c17b;
+    --gold-ivory: #f4e6c4;
     --text-primary: #e4eae6;
     --text-secondary: #98a89f;
     --text-muted: #697870;
+    --ease-siscom: cubic-bezier(0.22, 1, 0.36, 1);
+    --dur-micro: 170ms;
+    --dur-ui: 240ms;
+    --dur-panel: 300ms;
   }
 
   html {
@@ -22,10 +32,20 @@
     background-color: var(--bg-canvas);
     color: var(--text-primary);
     color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    overscroll-behavior-y: none;
   }
 
   h1, h2, h3, h4, .font-display {
     font-family: "Manrope", "Plus Jakarta Sans", system-ui, sans-serif;
+    text-wrap: balance;
   }
 
   .font-mono {
@@ -36,47 +56,225 @@
   .font-prisma {
     font-family: "Open Sans", Arial, sans-serif;
   }
+
+  button,
+  a,
+  select,
+  input,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid rgba(200, 164, 97, 0.72);
+    outline-offset: 2px;
+  }
+
+  /* Subtle dark scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(198, 212, 204, 0.16) transparent;
+  }
 }
 
+/* ── Institutional Surfaces ─────────────────────────────────────────────── */
+
 .metal-surface {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028) 0%, rgba(255, 255, 255, 0.004) 100%),
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026) 0%, rgba(255, 255, 255, 0.003) 100%),
     var(--bg-surface);
   border: 1px solid var(--border-hairline);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 12px 32px -18px rgba(0, 0, 0, 0.72);
 }
 
 .metal-elevated {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.008) 100%),
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.038) 0%, rgba(255, 255, 255, 0.006) 100%),
     var(--bg-elevated);
-  border: 1px solid var(--border-hairline);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(198, 212, 204, 0.13);
+  box-shadow:
+    inset 0 1px 0 rgba(244, 230, 196, 0.065),
+    0 20px 44px -20px rgba(0, 0, 0, 0.85);
 }
 
 .tactical-plate {
-  background: linear-gradient(165deg, #16231c 0%, #101714 58%, #0c110f 100%);
-  border: 1px solid rgba(194, 155, 86, 0.16);
+  background: linear-gradient(165deg, #15211b 0%, #101613 58%, #0c110f 100%);
+  border: 1px solid rgba(194, 155, 86, 0.18);
   box-shadow:
     inset 0 1px 0 rgba(212, 176, 106, 0.12),
     inset 0 -1px 0 rgba(0, 0, 0, 0.45),
-    0 12px 28px -12px rgba(0, 0, 0, 0.65);
+    0 14px 28px -14px rgba(0, 0, 0, 0.72);
+  transition:
+    transform var(--dur-micro) var(--ease-siscom),
+    border-color var(--dur-micro) var(--ease-siscom),
+    box-shadow var(--dur-ui) var(--ease-siscom),
+    background-color var(--dur-micro) var(--ease-siscom);
 }
 
-.tactical-plate:hover {
-  background: linear-gradient(165deg, #1b2b22 0%, #121c18 58%, #0e1411 100%);
-  border-color: rgba(194, 155, 86, 0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(226, 194, 130, 0.24),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    0 18px 34px -14px rgba(28, 22, 10, 0.55);
+@media (hover: hover) {
+  .tactical-plate:hover {
+    background: linear-gradient(165deg, #1b2b22 0%, #121c18 58%, #0e1411 100%);
+    border-color: rgba(194, 155, 86, 0.52);
+    box-shadow:
+      inset 0 1px 0 rgba(226, 194, 130, 0.24),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+      0 20px 36px -14px rgba(24, 18, 8, 0.62);
+  }
+}
+
+.tactical-plate:active {
+  transform: scale(0.978);
+  border-color: rgba(194, 155, 86, 0.58);
 }
 
 .metallic-wordmark {
-  background: linear-gradient(180deg, #efe0ba 0%, #c8a25a 52%, #7d5d28 100%);
+  background: linear-gradient(180deg, #f3e5c2 0%, #cba55e 52%, #86652c 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.72));
 }
+
+/* ── Standardized Interactive Controls ──────────────────────────────────── */
+
+.siscom-input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 0.5rem;
+  background-color: var(--bg-input);
+  border: 1px solid rgba(198, 212, 204, 0.13);
+  padding: 0.5rem 0.8rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition:
+    border-color var(--dur-micro) var(--ease-siscom),
+    box-shadow var(--dur-micro) var(--ease-siscom),
+    background-color var(--dur-micro) var(--ease-siscom);
+}
+
+.siscom-input::placeholder {
+  color: var(--text-muted);
+}
+
+.siscom-input:hover:not(:disabled):not(:focus) {
+  border-color: rgba(198, 212, 204, 0.22);
+}
+
+.siscom-input:focus {
+  outline: none;
+  border-color: var(--border-gold-active);
+  box-shadow: 0 0 0 3px rgba(194, 155, 86, 0.14);
+}
+
+.siscom-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.siscom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition:
+    transform var(--dur-micro) var(--ease-siscom),
+    background-color var(--dur-micro) var(--ease-siscom),
+    border-color var(--dur-micro) var(--ease-siscom),
+    color var(--dur-micro) var(--ease-siscom),
+    box-shadow var(--dur-micro) var(--ease-siscom),
+    opacity var(--dur-micro) var(--ease-siscom);
+}
+
+.siscom-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.siscom-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.siscom-btn-primary {
+  background-color: var(--accent-primary);
+  color: #ffffff;
+  border: 1px solid rgba(131, 180, 153, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@media (hover: hover) {
+  .siscom-btn-primary:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+    border-color: rgba(131, 180, 153, 0.36);
+  }
+}
+
+.siscom-btn-gold {
+  background-color: #191711;
+  color: var(--gold-bright);
+  border: 1px solid rgba(194, 155, 86, 0.38);
+  box-shadow: inset 0 1px 0 rgba(244, 230, 196, 0.08);
+}
+
+@media (hover: hover) {
+  .siscom-btn-gold:hover:not(:disabled) {
+    background-color: #231f16;
+    border-color: rgba(200, 164, 97, 0.62);
+    color: var(--gold-ivory);
+  }
+}
+
+.siscom-btn-secondary {
+  background-color: #161d1a;
+  color: var(--text-primary);
+  border: 1px solid rgba(198, 212, 204, 0.13);
+}
+
+@media (hover: hover) {
+  .siscom-btn-secondary:hover:not(:disabled) {
+    background-color: #1e2723;
+    border-color: rgba(198, 212, 204, 0.24);
+  }
+}
+
+.siscom-btn-danger {
+  background-color: #1b1213;
+  color: #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+@media (hover: hover) {
+  .siscom-btn-danger:hover:not(:disabled) {
+    background-color: rgba(127, 29, 29, 0.42);
+    border-color: rgba(248, 113, 113, 0.45);
+  }
+}
+
+.siscom-tab-track {
+  padding: 0.25rem;
+  border-radius: 0.625rem;
+  background-color: var(--bg-input);
+  border: 1px solid rgba(198, 212, 204, 0.1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.siscom-field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.005em;
+}
+
 
 .alteracao-editor p {
   margin: 0;

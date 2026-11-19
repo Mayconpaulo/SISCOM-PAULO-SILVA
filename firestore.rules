@@ -14,6 +14,10 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidOptionalId(id) {
+      return id is string && (id == '' || isValidId(id));
+    }
+
     function isValidUsernameId(id) {
       return id is string && id.size() >= 2 && id.size() <= 40 && id.matches('^[a-z0-9._-]+$');
     }
@@ -38,7 +42,41 @@ service cloud.firestore {
 
     function isAdmin() {
       return isBootstrappedAdmin()
-        || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+        || (
+          isSignedIn()
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+          && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+              || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true)
+        );
+    }
+
+    function canManageExistingUser(targetUid) {
+      return isBootstrappedAdmin()
+        || (
+          isAdmin()
+          && existing().username != 'admin-google'
+          && (
+            targetUid == request.auth.uid
+            || request.auth.uid in existing().adminUids
+            || existing().createdBy == request.auth.uid
+          )
+        );
+    }
+
+    function canAccessOwnAlteracaoArchive(userId) {
+      return isOwner(userId)
+        && isValidId(userId)
+        && (
+          isBootstrappedAdmin()
+          || (
+            exists(/databases/$(database)/documents/users/$(userId))
+            && get(/databases/$(database)/documents/users/$(userId)).data.active == true
+            && (
+              get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin'
+              || get(/databases/$(database)/documents/users/$(userId)).data.permAlteracao == true
+            )
+          )
+        );
     }
 
     function isValidAdminMarker(data, targetUid) {
@@ -82,6 +120,7 @@ service cloud.firestore {
           'permAlteracao',
           'permDocumentos',
           'permCartoes',
+          'permRelatorio',
           'adminUids',
           'createdBy',
           'createdAt',
@@ -103,6 +142,7 @@ service cloud.firestore {
         && data.permAlteracao is bool
         && data.permDocumentos is bool
         && data.permCartoes is bool
+        && (!('permRelatorio' in data) || data.permRelatorio is bool)
         && data.adminUids is list
         && data.adminUids.size() >= 1
         && data.adminUids.size() <= 10
@@ -166,6 +206,151 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
+    function isValidAlteracaoFolder(data, userId, folderId) {
+      return data.keys().hasAll(['id', 'ownerUid', 'name', 'parentId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerUid', 'name', 'parentId', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && data.id == folderId
+        && isValidId(data.ownerUid)
+        && data.ownerUid == userId
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 80
+        && isValidOptionalId(data.parentId)
+        && data.parentId != folderId
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAlteracaoHeaderMap(header) {
+      return header is map
+        && header.keys().hasAll([
+          'ministerio',
+          'forca',
+          'comandoDivisao',
+          'grandeUnidade',
+          'omCodom',
+          'omExtenso',
+          'tituloDocumento',
+          'guarnicao',
+          'folhaInicial',
+          'nomeCompleto',
+          'nomeGuerra',
+          'generoCont',
+          'postoGraduacao',
+          'qasQms',
+          'identidade',
+          'semestre',
+          'periodo'
+        ])
+        && header.keys().hasOnly([
+          'ministerio',
+          'forca',
+          'comandoDivisao',
+          'grandeUnidade',
+          'omCodom',
+          'omExtenso',
+          'tituloDocumento',
+          'guarnicao',
+          'folhaInicial',
+          'nomeCompleto',
+          'nomeGuerra',
+          'generoCont',
+          'postoGraduacao',
+          'qasQms',
+          'identidade',
+          'semestre',
+          'periodo'
+        ])
+        && header.ministerio is string && header.ministerio.size() <= 160
+        && header.forca is string && header.forca.size() <= 160
+        && header.comandoDivisao is string && header.comandoDivisao.size() <= 160
+        && header.grandeUnidade is string && header.grandeUnidade.size() <= 160
+        && header.omCodom is string && header.omCodom.size() <= 160
+        && header.omExtenso is string && header.omExtenso.size() <= 200
+        && header.tituloDocumento is string && header.tituloDocumento.size() <= 160
+        && header.guarnicao is string && header.guarnicao.size() <= 160
+        && header.folhaInicial is int && header.folhaInicial >= 1 && header.folhaInicial <= 9999
+        && header.nomeCompleto is string && header.nomeCompleto.size() <= 180
+        && header.nomeGuerra is string && header.nomeGuerra.size() <= 100
+        && header.generoCont in ['auto', 'do', 'da']
+        && header.postoGraduacao is string && header.postoGraduacao.size() <= 100
+        && header.qasQms is string && header.qasQms.size() <= 100
+        && header.identidade is string && header.identidade.size() <= 80
+        && header.semestre is string && header.semestre.size() <= 120
+        && header.periodo is string && header.periodo.size() <= 160;
+    }
+
+    function isValidAlteracaoDoc(data, userId, docId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerUid',
+          'folderId',
+          'title',
+          'header',
+          'pagesHtml',
+          'fontFamily',
+          'fontSizePt',
+          'lineHeight',
+          'dataPraca',
+          'dataFinal',
+          'enabledItemIds',
+          'structuredDocJson',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerUid',
+          'folderId',
+          'title',
+          'header',
+          'pagesHtml',
+          'fontFamily',
+          'fontSizePt',
+          'lineHeight',
+          'dataPraca',
+          'dataFinal',
+          'enabledItemIds',
+          'structuredDocJson',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == docId
+        && isValidId(data.ownerUid)
+        && data.ownerUid == userId
+        && isValidOptionalId(data.folderId)
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 160
+        && isValidAlteracaoHeaderMap(data.header)
+        && data.pagesHtml is list
+        && data.pagesHtml.size() >= 1
+        && data.pagesHtml.size() <= 60
+        && data.pagesHtml[0] is string
+        && data.pagesHtml[0].size() <= 200000
+        && data.fontFamily is string
+        && data.fontFamily.size() >= 1
+        && data.fontFamily.size() <= 40
+        && data.fontSizePt is string
+        && data.fontSizePt.size() >= 1
+        && data.fontSizePt.size() <= 12
+        && data.lineHeight is string
+        && data.lineHeight.size() >= 1
+        && data.lineHeight.size() <= 12
+        && data.dataPraca is string
+        && data.dataPraca.size() <= 20
+        && data.dataFinal is string
+        && data.dataFinal.size() <= 20
+        && data.enabledItemIds is list
+        && data.enabledItemIds.size() <= 500
+        && data.structuredDocJson is string
+        && data.structuredDocJson.size() <= 260000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     match /admins/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if false;
@@ -175,7 +360,20 @@ service cloud.firestore {
         && incoming().createdBy == request.auth.uid
         && incoming().createdAt == request.time;
       allow update: if false;
-      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+      allow delete: if isAdmin()
+        && isValidId(userId)
+        && userId != request.auth.uid
+        && (
+          isBootstrappedAdmin()
+          || (
+            exists(/databases/$(database)/documents/users/$(userId))
+            && get(/databases/$(database)/documents/users/$(userId)).data.username != 'admin-google'
+            && (
+              request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.adminUids
+              || get(/databases/$(database)/documents/users/$(userId)).data.createdBy == request.auth.uid
+            )
+          )
+        );
     }
 
     match /users/{userId} {
@@ -199,13 +397,14 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          (isAdmin() && (
+          (canManageExistingUser(userId) && (
             incoming().diff(existing()).affectedKeys().hasOnly([
               'permPrismas',
               'permCrachas',
               'permAlteracao',
               'permDocumentos',
               'permCartoes',
+              'permRelatorio',
               'updatedAt'
             ])
             || incoming().diff(existing()).affectedKeys().hasOnly([
@@ -222,6 +421,7 @@ service cloud.firestore {
               'permAlteracao',
               'permDocumentos',
               'permCartoes',
+              'permRelatorio',
               'updatedAt'
             ])
           ))
@@ -236,7 +436,64 @@ service cloud.firestore {
             ])
           )
         );
-      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+      allow delete: if isValidId(userId)
+        && userId != request.auth.uid
+        && canManageExistingUser(userId);
+
+      match /alteracao_folders/{folderId} {
+        allow get: if canAccessOwnAlteracaoArchive(userId) && isValidId(folderId);
+        allow list: if isOwner(userId)
+          && isValidId(userId)
+          && resource.data.ownerUid == request.auth.uid;
+        allow create: if canAccessOwnAlteracaoArchive(userId)
+          && isValidId(folderId)
+          && isValidAlteracaoFolder(incoming(), userId, folderId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if canAccessOwnAlteracaoArchive(userId)
+          && isValidId(folderId)
+          && isValidAlteracaoFolder(incoming(), userId, folderId)
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'parentId', 'updatedAt']);
+        allow delete: if canAccessOwnAlteracaoArchive(userId) && isValidId(folderId);
+      }
+
+      match /alteracao_docs/{docId} {
+        allow get: if canAccessOwnAlteracaoArchive(userId) && isValidId(docId);
+        allow list: if isOwner(userId)
+          && isValidId(userId)
+          && resource.data.ownerUid == request.auth.uid;
+        allow create: if canAccessOwnAlteracaoArchive(userId)
+          && isValidId(docId)
+          && isValidAlteracaoDoc(incoming(), userId, docId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if canAccessOwnAlteracaoArchive(userId)
+          && isValidId(docId)
+          && isValidAlteracaoDoc(incoming(), userId, docId)
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'folderId',
+            'title',
+            'header',
+            'pagesHtml',
+            'fontFamily',
+            'fontSizePt',
+            'lineHeight',
+            'dataPraca',
+            'dataFinal',
+            'enabledItemIds',
+            'structuredDocJson',
+            'updatedAt'
+          ]);
+        allow delete: if canAccessOwnAlteracaoArchive(userId) && isValidId(docId);
+      }
     }
 
     match /recovery/{username} {

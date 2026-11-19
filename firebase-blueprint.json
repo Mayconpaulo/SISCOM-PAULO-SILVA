@@ -93,6 +93,10 @@
           "type": "boolean",
           "description": "Acesso ao módulo Cartões"
         },
+        "permRelatorio": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Relatório"
+        },
         "adminUids": {
           "type": "array",
           "description": "Lista limitada (máx. 10) de UIDs de administradores gerenciadores"
@@ -224,6 +228,160 @@
         }
       },
       "required": ["uid", "username", "authEmail", "updatedAt"]
+    },
+    "AlteracaoFolder": {
+      "title": "AlteracaoFolder",
+      "description": "Pasta ou subpasta pessoal da conta do usuário para organizar alterações editáveis.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único da pasta"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do proprietário da conta"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome da pasta ou subpasta"
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "pattern": "^$|^[a-zA-Z0-9_\\-]+$",
+          "description": "ID da pasta pai ou string vazia para pasta na raiz"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora de criação no servidor"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora da última atualização no servidor"
+        }
+      },
+      "required": ["id", "ownerUid", "name", "parentId", "createdAt", "updatedAt"]
+    },
+    "AlteracaoArchiveDoc": {
+      "title": "AlteracaoArchiveDoc",
+      "description": "Alteração editável arquivada na conta do usuário com páginas HTML, cabeçalho e estado estruturado.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único da alteração arquivada"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do proprietário da conta"
+        },
+        "folderId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "pattern": "^$|^[a-zA-Z0-9_\\-]+$",
+          "description": "ID da pasta de destino ou string vazia para raiz"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Título de identificação da alteração no arquivo"
+        },
+        "header": {
+          "type": "object",
+          "description": "Metadados completos do cabeçalho militar (AlteracaoHeaderData)"
+        },
+        "pagesHtml": {
+          "type": "array",
+          "description": "Lista ordenada do HTML editável de cada página A4 (1 a 60 páginas)"
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Família tipográfica aplicada no documento"
+        },
+        "fontSizePt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12,
+          "description": "Tamanho da fonte em pontos"
+        },
+        "lineHeight": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12,
+          "description": "Espaçamento entre linhas"
+        },
+        "dataPraca": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20,
+          "description": "Data de praça para cálculo de tempo de serviço"
+        },
+        "dataFinal": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20,
+          "description": "Data final para cálculo de tempo de serviço"
+        },
+        "enabledItemIds": {
+          "type": "array",
+          "description": "Lista de IDs de tópicos e tabelas ativos no checklist"
+        },
+        "structuredDocJson": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 260000,
+          "description": "Snapshot JSON opcional da estrutura de tópicos e tabelas para checklist"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora de criação no servidor"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data/hora da última atualização no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "ownerUid",
+        "folderId",
+        "title",
+        "header",
+        "pagesHtml",
+        "fontFamily",
+        "fontSizePt",
+        "lineHeight",
+        "dataPraca",
+        "dataFinal",
+        "enabledItemIds",
+        "structuredDocJson",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -234,6 +392,14 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserAccount" },
       "description": "Perfis de usuários e matriz de permissões por módulo em tempo real"
+    },
+    "/users/{userId}/alteracao_folders/{folderId}": {
+      "schema": { "$ref": "#/entities/AlteracaoFolder" },
+      "description": "Pastas e subpastas pessoais da conta para organizar alterações editáveis"
+    },
+    "/users/{userId}/alteracao_docs/{docId}": {
+      "schema": { "$ref": "#/entities/AlteracaoArchiveDoc" },
+      "description": "Alterações editáveis arquivadas na conta do usuário"
     },
     "/recovery/{username}": {
       "schema": { "$ref": "#/entities/RecoverySecret" },
