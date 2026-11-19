@@ -5,19 +5,45 @@ import { createWorker } from 'tesseract.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+export type CrachaColumnRole =
+  | 'posto'
+  | 'nome_guerra'
+  | 'nome_completo'
+  | 'documento'
+  | 'categoria'
+  | 'ordem'
+  | 'outro';
+
+export const CRACHA_COLUMN_ROLE_LABELS: Record<CrachaColumnRole, string> = {
+  posto: 'Posto/Graduação',
+  nome_guerra: 'Nome de Guerra',
+  nome_completo: 'Nome Completo',
+  documento: 'Documento',
+  categoria: 'OM / Função / Categoria',
+  ordem: 'Ordem / Número',
+  outro: 'Outro campo',
+};
+
 export interface CrachaDocumentColumn {
   id: string;
   label: string;
   sample: string;
-  isDerived?: boolean;
+  samples: string[];
+  isGenericLabel: boolean;
+  detectedRole: CrachaColumnRole;
+  detectedRoleLabel: string;
+  detectedBy: 'synonym' | 'content' | 'none';
+  docSubKind?: 'cpf' | 'identidade' | 'outro';
 }
 
 export interface CrachaSuggestedMapping {
+  identPrefixo: string;
   identPrincipal: string;
   identSecundario: string;
   identTop: string;
   identBottom: string;
   identBack: string;
+  rpPrefixo: string;
   rpPrincipal: string;
   rpTop: string;
   rpBottom: string;
@@ -27,6 +53,7 @@ export interface CrachaSuggestedMapping {
 export interface ExtractedCrachaDocument {
   fileName: string;
   sourceKind: 'tabela' | 'lista' | 'ocr';
+  hasExplicitHeader: boolean;
   columns: CrachaDocumentColumn[];
   rows: Record<string, string>[];
   suggestedMapping: CrachaSuggestedMapping;
@@ -42,11 +69,13 @@ export interface CrachaSlotRef {
 }
 
 export interface CrachaMultiMapping {
+  identPrefixo: CrachaSlotRef;
   identPrincipal: CrachaSlotRef;
   identSecundario: CrachaSlotRef;
   identTop: CrachaSlotRef;
   identBottom: CrachaSlotRef;
   identBack: CrachaSlotRef;
+  rpPrefixo: CrachaSlotRef;
   rpPrincipal: CrachaSlotRef;
   rpTop: CrachaSlotRef;
   rpBottom: CrachaSlotRef;
@@ -91,6 +120,19 @@ function stripDiacriticsUpper(s: string): string {
     .toUpperCase();
 }
 
+export function composePrefixedText(prefix: string, main: string): string {
+  const p = cleanCellText(prefix);
+  const m = cleanCellText(main);
+  if (!p) return m;
+  if (!m) return p;
+  const pNorm = stripDiacriticsUpper(p);
+  const mNorm = stripDiacriticsUpper(m);
+  if (mNorm === pNorm || mNorm.startsWith(`${pNorm} `)) {
+    return m;
+  }
+  return `${p} ${m}`;
+}
+
 function clusterValues(vals: number[], tolerance = 2.5): number[] {
   if (vals.length === 0) return [];
   const sorted = [...vals].sort((a, b) => a - b);
@@ -106,13 +148,277 @@ function clusterValues(vals: number[], tolerance = 2.5): number[] {
   return groups.map((g) => g.reduce((a, b) => a + b, 0) / g.length);
 }
 
-const HEADER_KEYWORDS_RE =
-  /\b(NOME|GUERRA|IDENTIDADE|IDT|RG|CPF|POSTO|GRAD|GRADUACAO|P\/G|OM|FUNCAO|CARGO|SETOR|SECAO|ORD|NR|NUMERO|DATA|CATEGORIA|VINCULO|EMPRESA|DOCUMENTO|PLACA|VEICULO|MATRICULA|SIAPE|SARAM|PREC)\b/;
+// ==================== SYNONYM & CONTENT CLASSIFICATION ====================
 
 const RANK_PREFIX_RE =
-  /^(?:GEN(?:\s+(?:EX|DIV|BDA))?|CEL|TEN\s*CEL|TC|MAJ|CAP|1[º°O]?\s*TEN|2[º°O]?\s*TEN|ASP(?:\s*OF)?|ST|SUBTEN|1[º°O]?\s*SGT|2[º°O]?\s*SGT|3[º°O]?\s*SGT|CB|SD(?:\s*(?:EP|EV|NB|RCR))?|AL|CAD|SR\.?|SRA\.?)\s+/i;
+  /^(?:GEN(?:\s+(?:EX|DIV|BDA))?|CEL|TEN\s*CEL|TC|MAJ|CAP|1[º°O]?\s*TEN|2[º°O]?\s*TEN|ASP(?:\s*OF)?|ST|SUB\s*TEN|SUBTEN|1[º°O]?\s*SGT|2[º°O]?\s*SGT|3[º°O]?\s*SGT|CB|SD(?:\s*(?:EP|EV|NB|RCR))?|AL|CAD|SR\.?|SRA\.?)\s+/i;
+
+const RANK_EXACT_RE =
+  /^(?:GEN(?:\s+(?:EX|DIV|BDA))?|CEL|TEN\.?\s*CEL\.?|TC|MAJ|CAP|1[º°O]?\s*TEN|2[º°O]?\s*TEN|ASP(?:\s*OF)?|ST|SUB\s*TEN|SUBTEN|1[º°O]?\s*SGT|2[º°O]?\s*SGT|3[º°O]?\s*SGT|SGT|CB|SD(?:\s*(?:EP|EV|NB|RCR))?|AL|CAD|CIVIL|SC|SERVIDOR\s+CIVIL)\.?$/i;
+
+const CPF_VALUE_RE = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/;
+const CPF_DIGITS_RE = /^\d{11}$/;
+const IDT_HYPHEN_RE = /^\d{5,11}-[A-Z0-9]{1,2}$/i;
+const IDT_GENERIC_RE = /^(?:\d{7,12}|[A-Z]{2,3}[-\s]?\d{5,10}|\d{2}\.\d{3}\.\d{3}-[A-Z0-9])$/i;
 
 const NAME_PARTICLES = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'D']);
+
+interface RoleClassificationResult {
+  role: CrachaColumnRole;
+  docSubKind?: 'cpf' | 'identidade' | 'outro';
+}
+
+interface ColumnSynonymRule {
+  role: CrachaColumnRole;
+  patterns: RegExp[];
+  exclude?: RegExp;
+}
+
+const COLUMN_SYNONYM_RULES: ColumnSynonymRule[] = [
+  // 1. Nome de Guerra (check before Nome Completo and Posto so "NOME DE GUERRA" never falls into generic NOME)
+  {
+    role: 'nome_guerra',
+    patterns: [
+      /\bGUERRA\b/,
+      /\bN\.?\s*GUERRA\b/,
+      /\bNOM\.?\s*GUERRA\b/,
+      /\bN\s*DE\s*GUERRA\b/,
+      /^NG$/,
+      /\bAPELIDO\b/,
+    ],
+  },
+  // 2. Documento (CPF / Identidade / RG / Matrícula — check before Ordem so "NR IDT" / "N CPF" match Documento)
+  {
+    role: 'documento',
+    patterns: [
+      /\bCPF\b/,
+      /\bIDENTIDADE\b/,
+      /\bIDT\b/,
+      /\bID\.?\s*MIL(?:ITAR)?\b/,
+      /^ID$/,
+      /\bRG\b/,
+      /\bDOCUMENTO\b/,
+      /\bDOC\.?\b/,
+      /\bMATRICULA\b/,
+      /\bSARAM\b/,
+      /\bSIAPE\b/,
+      /\bPREC(?:[-\s]?CP)?\b/,
+      /\bREGISTRO\b/,
+      /\bPASSAPORTE\b/,
+      /\bCNH\b/,
+    ],
+  },
+  // 3. Posto / Graduação (exclude compound columns like "POSTO E NOME")
+  {
+    role: 'posto',
+    patterns: [
+      /\bPOSTO\b/,
+      /\bGRADUACAO\b/,
+      /\bGRAD\.?\b/,
+      /\bP\s*\/\s*G\b/,
+      /\bP\s*-\s*G\b/,
+      /^PG$/,
+      /^PST$/,
+      /\bPATENTE\b/,
+    ],
+    exclude: /\b(NOME|GUERRA)\b/,
+  },
+  // 4. Nome Completo
+  {
+    role: 'nome_completo',
+    patterns: [
+      /\bNOME\b/,
+      /\bMILITAR\b/,
+      /\bSERVIDOR\b/,
+      /\bPARTICIPANTE\b/,
+      /\bFUNCIONARIO\b/,
+      /\bCOLABORADOR\b/,
+      /\bPERMISSIONARIO\b/,
+      /\bVISITANTE\b/,
+      /\bINTEGRANTE\b/,
+      /\bALUNO\b/,
+      /\bCANDIDATO\b/,
+      /\bTITULAR\b/,
+      /\bBENEFICIARIO\b/,
+      /\bCONDUTOR\b/,
+      /\bMOTORISTA\b/,
+      /\bPESSOA\b/,
+    ],
+    exclude: /\bGUERRA\b/,
+  },
+  // 5. Ordem / Número
+  {
+    role: 'ordem',
+    patterns: [
+      /\bORDEM\b/,
+      /\bORD\.?\b/,
+      /^NR\.?$/,
+      /^N[º°O.]?$/,
+      /^NO\.?$/,
+      /\bNRO\.?\b/,
+      /\bNUMERO\b/,
+      /^NUM\.?$/,
+      /\bSEQ(?:UENCIA)?\.?\b/,
+      /\bITEM\b/,
+      /^#$/,
+      /\bCRACHA\b/,
+    ],
+  },
+  // 6. OM / Função / Setor / Categoria
+  {
+    role: 'categoria',
+    patterns: [
+      /\bOM\b/,
+      /\bUNIDADE\b/,
+      /\bSUBUNIDADE\b/,
+      /^SU$/,
+      /\bCIA\b/,
+      /\bCOMPANHIA\b/,
+      /\bPELOTAO\b/,
+      /\bBATERIA\b/,
+      /\bESQUADRAO\b/,
+      /\bSETOR\b/,
+      /\bSECAO\b/,
+      /\bSEC\.?\b/,
+      /\bDIVISAO\b/,
+      /\bFUNCAO\b/,
+      /\bCARGO\b/,
+      /\bEMPRESA\b/,
+      /\bORGAO\b/,
+      /\bCATEGORIA\b/,
+      /\bVINCULO\b/,
+      /\bEQUIPE\b/,
+      /\bDESTINO\b/,
+      /\bLOCAL\b/,
+      /\bATIVIDADE\b/,
+      /\bQUADRO\b/,
+      /\bARMA\b/,
+      /\bSERVICO\b/,
+      /\bQMS\b/,
+      /\bESPECIALIDADE\b/,
+      /\bPLACA\b/,
+      /\bVEICULO\b/,
+    ],
+  },
+];
+
+function detectDocSubKindFromLabel(normLabel: string): 'cpf' | 'identidade' | 'outro' {
+  if (/\bCPF\b/.test(normLabel)) return 'cpf';
+  if (/\b(IDENTIDADE|IDT|RG|ID\.?\s*MIL)\b/.test(normLabel) || normLabel === 'ID') {
+    return 'identidade';
+  }
+  return 'outro';
+}
+
+export function classifyHeaderBySynonym(rawLabel: string): RoleClassificationResult {
+  const norm = stripDiacriticsUpper(rawLabel);
+  if (!norm) return { role: 'outro' };
+
+  for (const rule of COLUMN_SYNONYM_RULES) {
+    if (rule.exclude && rule.exclude.test(norm)) continue;
+    if (rule.patterns.some((re) => re.test(norm))) {
+      return {
+        role: rule.role,
+        docSubKind: rule.role === 'documento' ? detectDocSubKindFromLabel(norm) : undefined,
+      };
+    }
+  }
+  return { role: 'outro' };
+}
+
+function classifyColumnByContent(values: string[]): RoleClassificationResult {
+  const nonEmpty = values.map(cleanCellText).filter(Boolean).slice(0, 15);
+  if (nonEmpty.length === 0) return { role: 'outro' };
+
+  const ratio = (pred: (v: string) => boolean) =>
+    nonEmpty.filter(pred).length / nonEmpty.length;
+
+  // 1. Military ranks (Posto / Graduação)
+  if (ratio((v) => RANK_EXACT_RE.test(v)) >= 0.5) {
+    return { role: 'posto' };
+  }
+
+  // 2. CPF
+  if (ratio((v) => CPF_VALUE_RE.test(v) || CPF_DIGITS_RE.test(v.replace(/\D/g, '')) && /^\d[\d.\-\s]{10,14}$/.test(v)) >= 0.5) {
+    return { role: 'documento', docSubKind: 'cpf' };
+  }
+
+  // 3. Identidade / RG / Matrícula
+  if (ratio((v) => IDT_HYPHEN_RE.test(v) || IDT_GENERIC_RE.test(v)) >= 0.5) {
+    return { role: 'documento', docSubKind: 'identidade' };
+  }
+
+  // 4. Ordem / Sequential small numbers
+  if (ratio((v) => /^\d{1,4}[º°.)\-]?$/.test(v)) >= 0.7) {
+    return { role: 'ordem' };
+  }
+
+  // 5. Full names (>= 2 alphabetic words, not pure numbers or ranks)
+  const isWordAlpha = (w: string) => /^[A-Za-zÀ-ÿ'.-]{2,}$/.test(w);
+  if (
+    ratio((v) => {
+      if (RANK_EXACT_RE.test(v) || /\d{3,}/.test(v)) return false;
+      const words = v.split(/\s+/).filter(Boolean);
+      return words.length >= 2 && words.filter(isWordAlpha).length >= 2 && v.length >= 7;
+    }) >= 0.5
+  ) {
+    return { role: 'nome_completo' };
+  }
+
+  // 6. Single-word (or short 2-word) war names (avoid constant repeated labels like "ATIVA")
+  const distinctCount = new Set(nonEmpty.map((v) => stripDiacriticsUpper(v))).size;
+  if (
+    (nonEmpty.length === 1 || distinctCount >= Math.min(2, nonEmpty.length)) &&
+    ratio((v) => {
+      if (RANK_EXACT_RE.test(v) || /\d/.test(v)) return false;
+      const words = v.split(/\s+/).filter(Boolean);
+      return words.length >= 1 && words.length <= 2 && /^[A-Za-zÀ-ÿ'.\s-]{2,26}$/.test(v);
+    }) >= 0.6
+  ) {
+    return { role: 'nome_guerra' };
+  }
+
+  return { role: 'outro' };
+}
+
+function classifyCrachaColumn(
+  label: string,
+  isGenericLabel: boolean,
+  sampleValues: string[]
+): {
+  detectedRole: CrachaColumnRole;
+  detectedRoleLabel: string;
+  detectedBy: 'synonym' | 'content' | 'none';
+  docSubKind?: 'cpf' | 'identidade' | 'outro';
+} {
+  if (!isGenericLabel) {
+    const bySynonym = classifyHeaderBySynonym(label);
+    if (bySynonym.role !== 'outro') {
+      return {
+        detectedRole: bySynonym.role,
+        detectedRoleLabel: CRACHA_COLUMN_ROLE_LABELS[bySynonym.role],
+        detectedBy: 'synonym',
+        docSubKind: bySynonym.docSubKind,
+      };
+    }
+  }
+
+  const byContent = classifyColumnByContent(sampleValues);
+  if (byContent.role !== 'outro') {
+    return {
+      detectedRole: byContent.role,
+      detectedRoleLabel: CRACHA_COLUMN_ROLE_LABELS[byContent.role],
+      detectedBy: 'content',
+      docSubKind: byContent.docSubKind,
+    };
+  }
+
+  return {
+    detectedRole: 'outro',
+    detectedRoleLabel: CRACHA_COLUMN_ROLE_LABELS.outro,
+    detectedBy: 'none',
+  };
+}
 
 function extractWarNameHeuristic(rawFullName: string, boldHint?: string): string {
   const clean = cleanCellText(rawFullName);
@@ -133,7 +439,6 @@ function extractWarNameHeuristic(rawFullName: string, boldHint?: string): string
   const tokens = withoutRank.split(/\s+/).filter(Boolean);
   if (tokens.length <= 1) return (tokens[0] || '').toUpperCase();
 
-  // Check if the source marks war name via ALL CAPS tokens inside mixed-case name (e.g. "João Carlos da SILVA")
   const hasLower = /[a-záàâãéêíóôõúç]/.test(withoutRank);
   if (hasLower) {
     const upperTokens = tokens.filter(
@@ -148,7 +453,6 @@ function extractWarNameHeuristic(rawFullName: string, boldHint?: string): string
     }
   }
 
-  // Fallback: last meaningful non-particle surname token
   for (let i = tokens.length - 1; i >= 0; i--) {
     const t = tokens[i].replace(/[,.;:]+$/, '');
     if (t && !NAME_PARTICLES.has(t.toUpperCase())) {
@@ -167,7 +471,6 @@ function extractCpfFromText(text: string): string {
 }
 
 function extractIdentidadeFromText(text: string): string {
-  // Strip any CPF first so a labeled pattern never grabs the CPF by mistake
   const withoutCpf = text.replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, ' ');
   const labeled = withoutCpf.match(
     /\b(?:IDENTIDADE|IDT|RG)\s*[:\-]?\s*([A-Z0-9.\-\/]{5,18})\b/i
@@ -178,23 +481,107 @@ function extractIdentidadeFromText(text: string): string {
   return '';
 }
 
+// ==================== FAITHFUL HEADER DETECTION & NORMALIZATION ====================
+
+function stripLeadingTitleBanners(rows: RawCellWithMeta[][]): RawCellWithMeta[][] {
+  let start = 0;
+  const maxStrip = Math.min(3, Math.max(0, rows.length - 2));
+  while (start < maxStrip) {
+    const curr = rows[start];
+    const currNonEmpty = curr.filter((c) => c.text.length > 0);
+    if (currNonEmpty.length !== 1) break;
+
+    const rest = rows.slice(start + 1, start + 6);
+    const restMultiColCount = rest.filter(
+      (r) => r.filter((c) => c.text.length > 0).length >= 2
+    ).length;
+
+    if (restMultiColCount >= Math.min(2, rest.length)) {
+      start++;
+    } else {
+      break;
+    }
+  }
+  return rows.slice(start);
+}
+
+function isRowDataLike(row: RawCellWithMeta[]): boolean {
+  const nonEmpty = row.map((c) => c.text).filter(Boolean);
+  if (nonEmpty.length === 0) return false;
+  return nonEmpty.some(
+    (txt) =>
+      CPF_VALUE_RE.test(txt) ||
+      IDT_HYPHEN_RE.test(txt) ||
+      RANK_EXACT_RE.test(txt) ||
+      /^\d{1,4}[º°.)]?$/.test(txt) ||
+      /^\d{2}\/\d{2}\/\d{2,4}$/.test(txt)
+  );
+}
+
+function detectExplicitHeaderRow(compact: RawCellWithMeta[][]): boolean {
+  if (compact.length < 2) return false;
+  const row0 = compact[0];
+  const nonEmpty0 = row0.map((c) => c.text).filter(Boolean);
+  if (nonEmpty0.length === 0) return false;
+
+  // Never treat a row containing CPF, Identidade, or standalone military ranks (e.g. "3º SGT") as a header
+  if (isRowDataLike(row0)) return false;
+
+  // 1. Direct synonym match on any cell in row 0
+  const synonymHits = nonEmpty0.filter(
+    (txt) => classifyHeaderBySynonym(txt).role !== 'outro'
+  ).length;
+  if (synonymHits >= 1) return true;
+
+  // 2. Structural heuristic for non-standard headers (e.g. "Código | Descrição | Obs"):
+  //    All row 0 cells are short non-numeric labels (<= 36 chars, contain letters, no long numbers)
+  //    AND at least one row below contains numbers / CPFs / ranks / noticeably longer names
+  const allShortLabels =
+    nonEmpty0.length >= 2 &&
+    nonEmpty0.every(
+      (txt) =>
+        txt.length <= 36 &&
+        /[A-Za-zÀ-ÿ]/.test(txt) &&
+        !/\d{3,}/.test(txt) &&
+        txt.split(/\s+/).length <= 4
+    );
+
+  if (allShortLabels) {
+    const sampleDataRows = compact.slice(1, 6);
+    const dataRowsHaveDataTraits = sampleDataRows.some(
+      (r) =>
+        isRowDataLike(r) ||
+        r.some((c) => c.text.length > 0 && /\d/.test(c.text))
+    );
+    if (dataRowsHaveDataTraits) return true;
+  }
+
+  return false;
+}
+
 function normalizeTabularRows(
   matrix: RawCellWithMeta[][],
   fileName: string,
   sourceKind: 'tabela' | 'lista' | 'ocr'
 ): ExtractedCrachaDocument {
-  const nonEmptyRows: RawCellWithMeta[][] = matrix
+  const cleanedRows: RawCellWithMeta[][] = matrix
     .map((r) =>
-      r.map((c): RawCellWithMeta => ({ text: cleanCellText(c.text), boldSubstring: c.boldSubstring }))
+      r.map((c): RawCellWithMeta => ({
+        text: cleanCellText(c.text),
+        boldSubstring: c.boldSubstring,
+      }))
     )
     .filter((r) => r.some((c) => c.text.length > 0));
 
-  if (nonEmptyRows.length === 0) {
+  if (cleanedRows.length === 0) {
     throw new Error('Nenhum dado legível encontrado no documento.');
   }
 
-  const maxCols = Math.max(...nonEmptyRows.map((r) => r.length));
-  const padded: RawCellWithMeta[][] = nonEmptyRows.map((r) => {
+  // Strip full-width title banner rows sitting above the actual table header row
+  const withoutBanners = stripLeadingTitleBanners(cleanedRows);
+
+  const maxCols = Math.max(...withoutBanners.map((r) => r.length));
+  const padded: RawCellWithMeta[][] = withoutBanners.map((r) => {
     const next: RawCellWithMeta[] = [...r];
     while (next.length < maxCols) next.push({ text: '' });
     return next;
@@ -211,25 +598,37 @@ function normalizeTabularRows(
     throw new Error('Nenhuma coluna com dados encontrada no documento.');
   }
 
-  // Decide if row 0 is a header row
+  // Faithful header extraction: ONLY row 0, or generic "Coluna 1..N" when headerless
+  const hasExplicitHeader = detectExplicitHeaderRow(compact);
   const row0 = compact[0];
-  const row0MatchesHeader =
-    compact.length >= 2 &&
-    row0.some((c) => HEADER_KEYWORDS_RE.test(stripDiacriticsUpper(c.text))) &&
-    !row0.some((c) => /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(c.text));
 
-  const headerLabels = row0MatchesHeader
-    ? row0.map((c, idx) => c.text || `Coluna ${idx + 1}`)
-    : Array.from({ length: colCount }, (_, idx) => `Coluna ${idx + 1}`);
+  const headerMeta = Array.from({ length: colCount }, (_, idx) => {
+    if (hasExplicitHeader && row0[idx]?.text) {
+      return { label: row0[idx].text, isGenericLabel: false };
+    }
+    return { label: `Coluna ${idx + 1}`, isGenericLabel: true };
+  });
 
-  const dataRowsRaw = row0MatchesHeader ? compact.slice(1) : compact;
+  const dataRowsRaw = hasExplicitHeader ? compact.slice(1) : compact;
 
-  // Deduplicate repeated header rows (common across multi-page PDF tables)
-  const headerSig = headerLabels.map((h) => stripDiacriticsUpper(h)).join('|');
+  // Deduplicate repeated header rows (very common on pages 2..N of exported PDFs)
+  const headerNormCells = headerMeta.map((h) => stripDiacriticsUpper(h.label));
+  const headerSig = headerNormCells.join('|');
   const filteredDataRows = dataRowsRaw.filter((row) => {
-    if (row0MatchesHeader) {
-      const sig = row.map((c) => stripDiacriticsUpper(c.text)).join('|');
-      if (sig === headerSig) return false;
+    if (hasExplicitHeader) {
+      const rowNormCells = row.map((c) => stripDiacriticsUpper(c.text));
+      if (rowNormCells.join('|') === headerSig) return false;
+      // Also catch repeated headers where 1 cell had minor OCR/spacing variance (>= 75% match)
+      const nonEmptyHeaderCount = headerMeta.filter((h) => !h.isGenericLabel).length;
+      if (nonEmptyHeaderCount >= 2) {
+        let matches = 0;
+        for (let i = 0; i < colCount; i++) {
+          if (!headerMeta[i].isGenericLabel && rowNormCells[i] === headerNormCells[i]) {
+            matches++;
+          }
+        }
+        if (matches / nonEmptyHeaderCount >= 0.75) return false;
+      }
     }
     return row.some((c) => c.text.length > 0);
   });
@@ -238,10 +637,31 @@ function normalizeTabularRows(
     throw new Error('O documento contém apenas cabeçalhos e nenhuma linha de dados.');
   }
 
-  const columns: CrachaDocumentColumn[] = headerLabels.map((label, idx) => {
+  // Build ONLY real extracted columns with mandatory examples from the row(s) below + synonym classification
+  const columns: CrachaDocumentColumn[] = headerMeta.map((meta, idx) => {
     const id = `col_${idx}`;
-    const sample = filteredDataRows.find((r) => r[idx]?.text)?.[idx]?.text || '';
-    return { id, label, sample };
+    const colValues = filteredDataRows.map((r) => r[idx]?.text || '');
+    const nonEmptyValues = colValues.filter(Boolean);
+    const sample = nonEmptyValues[0] || '';
+    const samples: string[] = [];
+    for (const val of nonEmptyValues) {
+      if (!samples.includes(val)) samples.push(val);
+      if (samples.length >= 3) break;
+    }
+
+    const classification = classifyCrachaColumn(meta.label, meta.isGenericLabel, nonEmptyValues);
+
+    return {
+      id,
+      label: meta.label,
+      sample,
+      samples,
+      isGenericLabel: meta.isGenericLabel,
+      detectedRole: classification.detectedRole,
+      detectedRoleLabel: classification.detectedRoleLabel,
+      detectedBy: classification.detectedBy,
+      docSubKind: classification.docSubKind,
+    };
   });
 
   const rows: Record<string, string>[] = filteredDataRows.map((row) => {
@@ -252,198 +672,68 @@ function normalizeTabularRows(
     return rec;
   });
 
-  // Identify key columns by header label or sample heuristics
-  const findColId = (re: RegExp): string =>
-    columns.find((c) => re.test(stripDiacriticsUpper(c.label)))?.id || '';
+  // Auto-map slots based strictly on synonym/content-classified real columns
+  const colPosto = columns.find((c) => c.detectedRole === 'posto')?.id || '';
+  const colWarName = columns.find((c) => c.detectedRole === 'nome_guerra')?.id || '';
+  const colFullName = columns.find((c) => c.detectedRole === 'nome_completo')?.id || '';
+  const colDocIdt =
+    columns.find((c) => c.detectedRole === 'documento' && c.docSubKind === 'identidade')?.id || '';
+  const colDocCpf =
+    columns.find((c) => c.detectedRole === 'documento' && c.docSubKind === 'cpf')?.id || '';
+  const colDocAny = columns.find((c) => c.detectedRole === 'documento')?.id || '';
+  const colOrd = columns.find((c) => c.detectedRole === 'ordem')?.id || '';
 
-  let colFullName =
-    findColId(/\bNOME\s*COMPLETO\b/) ||
+  // Flexible Prefix + Principal default:
+  // If Posto/Grad exists alongside Nome de Guerra (or Nome Completo), prefill Prefixo = Posto and Principal = Nome de Guerra (or Nome Completo)
+  const preferredMainName =
+    (colPosto && colWarName ? colWarName : '') ||
+    colWarName ||
+    colFullName ||
     columns.find(
       (c) =>
-        /\bNOME\b/.test(stripDiacriticsUpper(c.label)) &&
-        !/\bGUERRA\b/.test(stripDiacriticsUpper(c.label))
+        c.id !== colPosto &&
+        c.detectedRole !== 'ordem' &&
+        c.detectedRole !== 'documento'
     )?.id ||
-    '';
-
-  const colWarName = findColId(/\bNOME\s*(?:DE\s*)?GUERRA\b|\bGUERRA\b/);
-  let colPosto = findColId(/\b(POSTO|GRAD|GRADUACAO|P\/G|PG)\b/);
-  let colIdentidade = findColId(/\b(IDENTIDADE|IDT|RG)\b/);
-  let colCpf = findColId(/\bCPF\b/);
-
-  // Content-based inference for headerless tables
-  if (!colCpf) {
-    const cpfMatch = columns.find((c) =>
-      rows.slice(0, 8).some((r) => /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(r[c.id] || ''))
-    );
-    if (cpfMatch) colCpf = cpfMatch.id;
-  }
-  if (!colIdentidade) {
-    const idMatch = columns.find(
-      (c) =>
-        c.id !== colCpf &&
-        rows.slice(0, 8).some((r) => /^\d{6,11}-\d$/.test((r[c.id] || '').trim()))
-    );
-    if (idMatch) colIdentidade = idMatch.id;
-  }
-  if (!colFullName) {
-    const nameMatch = columns.find(
-      (c) =>
-        c.id !== colCpf &&
-        c.id !== colIdentidade &&
-        c.id !== colWarName &&
-        rows.slice(0, 8).some((r) => {
-          const val = (r[c.id] || '').trim();
-          return (
-            val.split(/\s+/).length >= 2 &&
-            /[A-Za-zÀ-ÿ]{3,}/.test(val) &&
-            !/^\d+$/.test(val)
-          );
-        })
-    );
-    if (nameMatch) colFullName = nameMatch.id;
-  }
-  if (!colPosto) {
-    const postoMatch = columns.find((c) =>
-      rows
-        .slice(0, 8)
-        .some((r) =>
-          /^(?:GEN|CEL|TC|MAJ|CAP|1[º°O]?\s*TEN|2[º°O]?\s*TEN|ST|1[º°O]?\s*SGT|2[º°O]?\s*SGT|3[º°O]?\s*SGT|CB|SD|ASP)$/i.test(
-            (r[c.id] || '').trim()
-          )
-        )
-    );
-    if (postoMatch) colPosto = postoMatch.id;
-  }
-
-  // Add derived "Somente Nome de Guerra (extraído)" if we have a full name column without an explicit war-name column
-  let derivedWarColId = '';
-  if (!colWarName && colFullName) {
-    const fullNameIdx = columns.findIndex((c) => c.id === colFullName);
-    const derivedValues = filteredDataRows.map((rawRow, rIdx) => {
-      const cell = rawRow[fullNameIdx];
-      return extractWarNameHeuristic(rows[rIdx][colFullName] || '', cell?.boldSubstring);
-    });
-    if (derivedValues.some((v) => v.length > 0)) {
-      derivedWarColId = 'derived_war_name';
-      columns.push({
-        id: derivedWarColId,
-        label: 'Somente Nome de Guerra (extraído)',
-        sample: derivedValues.find(Boolean) || '',
-        isDerived: true,
-      });
-      rows.forEach((r, rIdx) => {
-        r[derivedWarColId] = derivedValues[rIdx];
-      });
-    }
-  }
-
-  // Add composite "Posto/Grad + Nome de guerra" when both are available (or rank embedded in fullName)
-  const effectiveWarCol = colWarName || derivedWarColId;
-  if (effectiveWarCol) {
-    const derivedComposite = rows.map((r) => {
-      const rankFromCol = colPosto ? r[colPosto] : '';
-      const rankFromName = !rankFromCol && colFullName
-        ? (r[colFullName]?.match(RANK_PREFIX_RE)?.[0] || '').trim()
-        : '';
-      const posto = rankFromCol || rankFromName;
-      return posto ? [posto, r[effectiveWarCol]].filter(Boolean).join(' ') : '';
-    });
-    if (derivedComposite.some(Boolean)) {
-      const compositeId = 'derived_posto_war';
-      columns.push({
-        id: compositeId,
-        label: 'Posto/Grad + Nome de guerra',
-        sample: derivedComposite.find(Boolean) || '',
-        isDerived: true,
-      });
-      rows.forEach((r, idx) => {
-        r[compositeId] = derivedComposite[idx];
-      });
-    }
-  }
-
-  // Always offer standalone "Somente CPF (extraído)" when CPF is embedded or mixed in another column
-  const extractedCpfs = rows.map((r) =>
-    extractCpfFromText(Object.values(r).join(' '))
-  );
-  const existingCpfNeedsClean =
-    !colCpf ||
-    rows.some((r) => {
-      const rawVal = (r[colCpf] || '').trim();
-      const pureCpf = extractCpfFromText(rawVal);
-      return Boolean(pureCpf && rawVal !== pureCpf);
-    });
-  if (existingCpfNeedsClean && extractedCpfs.some(Boolean)) {
-    const derivedCpfId = 'derived_cpf';
-    columns.push({
-      id: derivedCpfId,
-      label: 'Somente CPF (extraído)',
-      sample: extractedCpfs.find(Boolean) || '',
-      isDerived: true,
-    });
-    rows.forEach((r, idx) => {
-      r[derivedCpfId] = extractedCpfs[idx];
-    });
-    if (!colCpf || colCpf === colIdentidade) {
-      colCpf = derivedCpfId;
-    }
-  }
-
-  // Always offer standalone "Somente Identidade (extraída)" when Identidade is embedded or mixed
-  const extractedIds = rows.map((r) =>
-    extractIdentidadeFromText(Object.values(r).join(' '))
-  );
-  const existingIdNeedsClean =
-    !colIdentidade ||
-    colIdentidade === colCpf ||
-    rows.some((r) => {
-      const rawVal = (r[colIdentidade] || '').trim();
-      const pureId = extractIdentidadeFromText(rawVal);
-      return Boolean(pureId && rawVal !== pureId);
-    });
-  if (existingIdNeedsClean && extractedIds.some(Boolean)) {
-    const derivedIdCol = 'derived_identidade';
-    columns.push({
-      id: derivedIdCol,
-      label: 'Somente Identidade (extraída)',
-      sample: extractedIds.find(Boolean) || '',
-      isDerived: true,
-    });
-    rows.forEach((r, idx) => {
-      r[derivedIdCol] = extractedIds[idx];
-    });
-    if (!colIdentidade || colIdentidade === colCpf) {
-      colIdentidade = derivedIdCol;
-    }
-  }
-
-  const colOrd = findColId(/\b(ORD|NR|N[º°O]|NUMERO)\b/);
-
-  const identPrincipal = colFullName || effectiveWarCol || columns[0]?.id || '';
-  const identSecundario =
-    colIdentidade ||
-    colCpf ||
-    columns.find((c) => c.id !== identPrincipal)?.id ||
-    '';
-
-  const rpPrincipal =
-    colOrd ||
-    effectiveWarCol ||
-    identPrincipal ||
     columns[0]?.id ||
     '';
+
+  const identPrefixo =
+    colPosto && preferredMainName && colPosto !== preferredMainName ? colPosto : '';
+  const identPrincipal = preferredMainName;
+
+  const identSecundario =
+    colDocIdt ||
+    colDocCpf ||
+    colDocAny ||
+    (columns.length === 2
+      ? columns.find(
+          (c) =>
+            c.id !== identPrincipal &&
+            c.id !== identPrefixo &&
+            c.detectedRole !== 'ordem' &&
+            c.detectedRole !== 'posto'
+        )?.id || ''
+      : '');
+
+  const rpPrincipal = colOrd || colWarName || colFullName || columns[0]?.id || '';
+  const rpPrefixo =
+    !colOrd && colPosto && rpPrincipal && colPosto !== rpPrincipal ? colPosto : '';
 
   return {
     fileName,
     sourceKind,
+    hasExplicitHeader,
     columns,
     rows,
     suggestedMapping: {
+      identPrefixo,
       identPrincipal,
       identSecundario,
       identTop: '',
       identBottom: '',
       identBack: '',
+      rpPrefixo,
       rpPrincipal,
       rpTop: '',
       rpBottom: '',
@@ -539,7 +829,6 @@ async function parseXlsxFile(file: File): Promise<RawCellWithMeta[][]> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const parser = new DOMParser();
 
-  // Read shared strings if present
   const sharedStrings: string[] = [];
   const ssFile = zip.file('xl/sharedStrings.xml');
   if (ssFile) {
@@ -559,7 +848,6 @@ async function parseXlsxFile(file: File): Promise<RawCellWithMeta[][]> {
     throw new Error('Nenhuma planilha encontrada no arquivo Excel (.xlsx).');
   }
 
-  // Pick the first worksheet that has meaningful rows
   for (const sheetPath of sheetPaths) {
     const sheetXml = await zip.file(sheetPath)!.async('string');
     const doc = parser.parseFromString(sheetXml, 'application/xml');
@@ -642,9 +930,26 @@ async function parseOdsFile(file: File): Promise<RawCellWithMeta[][]> {
   return [];
 }
 
-// ==================== DOCX PARSER (via JSZip) ====================
+// ==================== DOCX PARSER (via JSZip — Direct XML Tree Walking) ====================
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function getXmlLocalName(el: Element): string {
+  return el.localName || el.nodeName.replace(/^.*:/, '');
+}
+
+function getDirectWordChildren(parent: Element, targetLocalName: string): Element[] {
+  const out: Element[] = [];
+  for (const child of Array.from(parent.children)) {
+    const name = getXmlLocalName(child);
+    if (name === targetLocalName) {
+      out.push(child);
+    } else if (name === 'sdt' || name === 'sdtContent' || name === 'ins' || name === 'customXml') {
+      out.push(...getDirectWordChildren(child, targetLocalName));
+    }
+  }
+  return out;
+}
 
 function readDocxParagraphWithBold(p: Element): RawCellWithMeta {
   const runs = Array.from(p.getElementsByTagNameNS(W_NS, 'r'));
@@ -663,9 +968,15 @@ function readDocxParagraphWithBold(p: Element): RawCellWithMeta {
         isBold = val !== '0' && val !== 'false';
       }
     }
-    const text = Array.from(r.getElementsByTagNameNS(W_NS, 't'))
-      .map((t) => t.textContent || '')
-      .join('');
+    let text = '';
+    for (const child of Array.from(r.children)) {
+      const cName = getXmlLocalName(child);
+      if (cName === 't') {
+        text += child.textContent || '';
+      } else if (cName === 'tab' || cName === 'br' || cName === 'cr') {
+        text += ' ';
+      }
+    }
     if (!text) continue;
     fullText += text;
     if (isBold) {
@@ -687,6 +998,66 @@ function readDocxParagraphWithBold(p: Element): RawCellWithMeta {
   };
 }
 
+function parseDocxTableElement(tbl: Element): RawCellWithMeta[][] {
+  const trs = getDirectWordChildren(tbl, 'tr');
+  const matrix: RawCellWithMeta[][] = [];
+
+  for (const tr of trs) {
+    const tcs = getDirectWordChildren(tr, 'tc');
+    const rowCells: RawCellWithMeta[] = [];
+    const vMergeContinuations: number[] = [];
+
+    for (const tc of tcs) {
+      // Read ONLY direct paragraphs inside this cell (never absorb nested table cells)
+      const directPs = getDirectWordChildren(tc, 'p').map(readDocxParagraphWithBold);
+      const mergedText = cleanCellText(directPs.map((x) => x.text).filter(Boolean).join(' '));
+      const boldSub = directPs.find((x) => x.boldSubstring)?.boldSubstring;
+
+      const tcPr = getDirectWordChildren(tc, 'tcPr')[0];
+      const gridSpanEl = tcPr ? getDirectWordChildren(tcPr, 'gridSpan')[0] : undefined;
+      const spanVal = Math.max(
+        1,
+        parseInt(
+          gridSpanEl?.getAttribute('w:val') ?? gridSpanEl?.getAttribute('val') ?? '1',
+          10
+        ) || 1
+      );
+
+      const vMergeEl = tcPr ? getDirectWordChildren(tcPr, 'vMerge')[0] : undefined;
+      const vMergeVal = vMergeEl
+        ? (vMergeEl.getAttribute('w:val') ?? vMergeEl.getAttribute('val') ?? 'continue').toLowerCase()
+        : null;
+      const isVMergeContinue = vMergeEl !== undefined && vMergeVal !== 'restart';
+
+      const colStartIdx = rowCells.length;
+      rowCells.push({ text: mergedText, boldSubstring: boldSub });
+      if (isVMergeContinue && !mergedText) {
+        vMergeContinuations.push(colStartIdx);
+      }
+
+      for (let s = 1; s < spanVal; s++) {
+        rowCells.push({ text: '' });
+      }
+    }
+
+    const hasRealContent = rowCells.some((c) => c.text.length > 0);
+    if (hasRealContent) {
+      // Propagate vertically merged cell values cleanly on data rows (never copy row 0 header into row 1)
+      if (matrix.length >= 2 && vMergeContinuations.length > 0) {
+        const prevRow = matrix[matrix.length - 1];
+        for (const cIdx of vMergeContinuations) {
+          if (prevRow[cIdx]?.text) {
+            rowCells[cIdx] = { text: prevRow[cIdx].text };
+          }
+        }
+      }
+      matrix.push(rowCells);
+    }
+  }
+
+  return matrix;
+}
+
 async function parseDocxFile(
   file: File
 ): Promise<{ tables: RawCellWithMeta[][][]; lines: RawCellWithMeta[] }> {
@@ -703,45 +1074,32 @@ async function parseDocxFile(
 
   if (!body) return { tables, lines };
 
-  for (const child of Array.from(body.children)) {
-    const localName = child.localName || child.nodeName.replace(/^.*:/, '');
-    if (localName === 'tbl') {
-      const trs = Array.from(child.getElementsByTagNameNS(W_NS, 'tr'));
-      const matrix: RawCellWithMeta[][] = [];
-      for (const tr of trs) {
-        const tcs = Array.from(tr.getElementsByTagNameNS(W_NS, 'tc'));
-        const rowCells: RawCellWithMeta[] = [];
-        for (const tc of tcs) {
-          const ps = Array.from(tc.getElementsByTagNameNS(W_NS, 'p')).map(readDocxParagraphWithBold);
-          const mergedText = cleanCellText(ps.map((x) => x.text).filter(Boolean).join(' '));
-          const boldSub = ps.find((x) => x.boldSubstring)?.boldSubstring;
-          rowCells.push({ text: mergedText, boldSubstring: boldSub });
-
-          const tcPr = tc.getElementsByTagNameNS(W_NS, 'tcPr')[0];
-          const gridSpan = tcPr?.getElementsByTagNameNS(W_NS, 'gridSpan')[0];
-          const spanVal = parseInt(
-            gridSpan?.getAttribute('w:val') ?? gridSpan?.getAttribute('val') ?? '1',
-            10
-          );
-          if (Number.isFinite(spanVal) && spanVal > 1) {
-            for (let s = 1; s < spanVal; s++) rowCells.push({ text: '' });
-          }
-        }
-        if (rowCells.some((c) => c.text.length > 0)) {
-          matrix.push(rowCells);
-        }
+  const walkContainer = (container: Element) => {
+    for (const child of Array.from(container.children)) {
+      const localName = getXmlLocalName(child);
+      if (localName === 'tbl') {
+        const matrix = parseDocxTableElement(child);
+        if (matrix.length > 0) tables.push(matrix);
+      } else if (localName === 'p') {
+        const pMeta = readDocxParagraphWithBold(child);
+        if (pMeta.text) lines.push(pMeta);
+      } else if (
+        localName === 'sdt' ||
+        localName === 'sdtContent' ||
+        localName === 'ins' ||
+        localName === 'customXml'
+      ) {
+        walkContainer(child);
       }
-      if (matrix.length > 0) tables.push(matrix);
-    } else if (localName === 'p') {
-      const pMeta = readDocxParagraphWithBold(child);
-      if (pMeta.text) lines.push(pMeta);
     }
-  }
+  };
+
+  walkContainer(body);
 
   return { tables, lines };
 }
 
-// ==================== PDF PARSER (Tables + Lines + Bold + OCR) ====================
+// ==================== PDF PARSER (Ruled Vector Grids + Band-Aligned Borderless + OCR) ====================
 
 interface PdfChunk {
   text: string;
@@ -749,6 +1107,37 @@ interface PdfChunk {
   y: number;
   width: number;
   bold: boolean;
+}
+
+interface PdfLineSegment {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+interface DetectedPdfGrid {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  hLinesDesc: number[];
+  vLinesAsc: number[];
+}
+
+function multiplyMat(m1: number[], m2: number[]): number[] {
+  return [
+    m1[0] * m2[0] + m1[2] * m2[1],
+    m1[1] * m2[0] + m1[3] * m2[1],
+    m1[0] * m2[2] + m1[2] * m2[3],
+    m1[1] * m2[2] + m1[3] * m2[3],
+    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+    m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+  ];
+}
+
+function applyMat(m: number[], x: number, y: number): [number, number] {
+  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }
 
 function isPdfFontBold(fontName: string, styles?: Record<string, { fontFamily?: string }>): boolean {
@@ -774,26 +1163,49 @@ function splitRowChunksIntoColumns(row: PdfChunk[], gapThreshold: number): PdfCh
 }
 
 function chunksToCellMeta(chunks: PdfChunk[]): RawCellWithMeta {
-  const sorted = [...chunks].sort((a, b) => a.x - b.x);
-  let text = '';
+  if (chunks.length === 0) return { text: '' };
+  // Group chunks into visual lines (top-to-bottom), then sort left-to-right inside each line
+  const byY = [...chunks].sort((a, b) => b.y - a.y || a.x - b.x);
+  const yLines: PdfChunk[][] = [];
+  for (const ch of byY) {
+    const last = yLines[yLines.length - 1];
+    if (!last || Math.abs(last[0].y - ch.y) > 3.8) {
+      yLines.push([ch]);
+    } else {
+      last.push(ch);
+    }
+  }
+
+  const lineTexts: string[] = [];
   let boldRun = '';
   let firstBold = '';
   let boldCount = 0;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const c = sorted[i];
-    const prev = i > 0 ? sorted[i - 1] : null;
-    if (prev && c.x - (prev.x + prev.width) > 1.8 && !text.endsWith(' ') && !c.text.startsWith(' ')) {
-      text += ' ';
+  for (const line of yLines) {
+    const sorted = [...line].sort((a, b) => a.x - b.x);
+    let text = '';
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted[i];
+      const prev = i > 0 ? sorted[i - 1] : null;
+      if (
+        prev &&
+        c.x - (prev.x + prev.width) > 1.6 &&
+        !text.endsWith(' ') &&
+        !c.text.startsWith(' ')
+      ) {
+        text += ' ';
+      }
+      text += c.text;
+      if (c.bold) {
+        boldRun += (boldRun && !boldRun.endsWith(' ') && !c.text.startsWith(' ') ? ' ' : '') + c.text;
+      } else if (boldRun.trim()) {
+        boldCount++;
+        firstBold = cleanCellText(boldRun);
+        boldRun = '';
+      }
     }
-    text += c.text;
-    if (c.bold) {
-      boldRun += c.text;
-    } else if (boldRun.trim()) {
-      boldCount++;
-      firstBold = cleanCellText(boldRun);
-      boldRun = '';
-    }
+    const cleanedLine = cleanCellText(text);
+    if (cleanedLine) lineTexts.push(cleanedLine);
   }
   if (boldRun.trim()) {
     boldCount++;
@@ -801,9 +1213,602 @@ function chunksToCellMeta(chunks: PdfChunk[]): RawCellWithMeta {
   }
 
   return {
-    text: cleanCellText(text),
+    text: cleanCellText(lineTexts.join(' ')),
     boldSubstring: boldCount === 1 ? firstBold : undefined,
   };
+}
+
+/**
+ * Detects vector-drawn table grids on a PDF page so centered headers, wrapped cells,
+ * and empty cells preserve exact column alignment.
+ */
+async function detectPdfRuledGrids(
+  page: pdfjsLib.PDFPageProxy,
+  pageWidth: number,
+  pageHeight: number
+): Promise<DetectedPdfGrid[]> {
+  try {
+    const opList = await page.getOperatorList();
+    const { OPS } = pdfjsLib;
+    const stack: number[][] = [];
+    let ctm = [1, 0, 0, 1, 0, 0];
+
+    const hSegs: PdfLineSegment[] = [];
+    const vSegs: PdfLineSegment[] = [];
+
+    let curX = 0;
+    let curY = 0;
+
+    const DRAW_OPS = {
+      moveTo: 0,
+      lineTo: 1,
+      curveTo: 2,
+      quadraticCurveTo: 3,
+      closePath: 4,
+    } as const;
+
+    const VISIBLE_PAINT_OPS = new Set<number>([
+      OPS.stroke,
+      OPS.closeStroke,
+      OPS.fill,
+      OPS.eoFill,
+      OPS.fillStroke,
+      OPS.eoFillStroke,
+      OPS.closeFillStroke,
+      OPS.closeEOFillStroke,
+    ]);
+
+    const recordSegment = (ax: number, ay: number, bx: number, by: number) => {
+      const [tx0, ty0] = applyMat(ctm, ax, ay);
+      const [tx1, ty1] = applyMat(ctm, bx, by);
+      const dx = Math.abs(tx1 - tx0);
+      const dy = Math.abs(ty1 - ty0);
+      if (dy <= 1.8 && dx >= 12) {
+        const yMid = (ty0 + ty1) / 2;
+        if (dx > pageWidth * 0.94 && (yMid < pageHeight * 0.02 || yMid > pageHeight * 0.98)) {
+          return;
+        }
+        hSegs.push({
+          x0: Math.min(tx0, tx1),
+          y0: yMid,
+          x1: Math.max(tx0, tx1),
+          y1: yMid,
+        });
+      } else if (dx <= 1.8 && dy >= 8) {
+        const xMid = (tx0 + tx1) / 2;
+        if (dy > pageHeight * 0.94 && (xMid < pageWidth * 0.02 || xMid > pageWidth * 0.98)) {
+          return;
+        }
+        vSegs.push({
+          x0: xMid,
+          y0: Math.min(ty0, ty1),
+          x1: xMid,
+          y1: Math.max(ty0, ty1),
+        });
+      }
+    };
+
+    const recordRect = (x: number, y: number, w: number, h: number) => {
+      const [tx0, ty0] = applyMat(ctm, x, y);
+      const [tx1, ty1] = applyMat(ctm, x + w, y + h);
+      const absW = Math.abs(tx1 - tx0);
+      const absH = Math.abs(ty1 - ty0);
+      if (absW > pageWidth * 0.94 && absH > pageHeight * 0.92) {
+        return;
+      }
+      // Thin filled rectangles are commonly used as cell border rules
+      if (absH <= 2.5 && absW >= 12) {
+        recordSegment(x, y + h / 2, x + w, y + h / 2);
+        return;
+      }
+      if (absW <= 2.5 && absH >= 8) {
+        recordSegment(x + w / 2, y, x + w / 2, y + h);
+        return;
+      }
+      if (absW >= 12 && absH >= 8) {
+        recordSegment(x, y, x + w, y);
+        recordSegment(x, y + h, x + w, y + h);
+        recordSegment(x, y, x, y + h);
+        recordSegment(x + w, y, x + w, y + h);
+      }
+    };
+
+    const flushSubpathSegments = (pendingSegs: Array<[number, number, number, number]>) => {
+      if (pendingSegs.length === 0) return;
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const [ax, ay, bx, by] of pendingSegs) {
+        const [tx0, ty0] = applyMat(ctm, ax, ay);
+        const [tx1, ty1] = applyMat(ctm, bx, by);
+        minX = Math.min(minX, tx0, tx1);
+        maxX = Math.max(maxX, tx0, tx1);
+        minY = Math.min(minY, ty0, ty1);
+        maxY = Math.max(maxY, ty0, ty1);
+      }
+      const boxW = maxX - minX;
+      const boxH = maxY - minY;
+      if (pendingSegs.length <= 5 && boxW > pageWidth * 0.94 && boxH > pageHeight * 0.92) {
+        return;
+      }
+      if (pendingSegs.length <= 5 && boxH <= 2.5 && boxW >= 12) {
+        hSegs.push({ x0: minX, y0: (minY + maxY) / 2, x1: maxX, y1: (minY + maxY) / 2 });
+        return;
+      }
+      if (pendingSegs.length <= 5 && boxW <= 2.5 && boxH >= 8) {
+        vSegs.push({ x0: (minX + maxX) / 2, y0: minY, x1: (minX + maxX) / 2, y1: maxY });
+        return;
+      }
+      for (const [ax, ay, bx, by] of pendingSegs) {
+        recordSegment(ax, ay, bx, by);
+      }
+    };
+
+    const processLegacyPathOps = (ops: number[], coords: number[]) => {
+      let idx = 0;
+      let startX = curX;
+      let startY = curY;
+      let subpathSegs: Array<[number, number, number, number]> = [];
+      for (const op of ops) {
+        if (op === OPS.moveTo) {
+          flushSubpathSegments(subpathSegs);
+          subpathSegs = [];
+          curX = coords[idx++];
+          curY = coords[idx++];
+          startX = curX;
+          startY = curY;
+        } else if (op === OPS.lineTo) {
+          const nx = coords[idx++];
+          const ny = coords[idx++];
+          subpathSegs.push([curX, curY, nx, ny]);
+          curX = nx;
+          curY = ny;
+        } else if (op === OPS.curveTo) {
+          idx += 4;
+          curX = coords[idx++];
+          curY = coords[idx++];
+        } else if (op === OPS.curveTo2 || op === OPS.curveTo3) {
+          idx += 2;
+          curX = coords[idx++];
+          curY = coords[idx++];
+        } else if (op === OPS.closePath) {
+          subpathSegs.push([curX, curY, startX, startY]);
+          curX = startX;
+          curY = startY;
+        } else if (op === OPS.rectangle) {
+          flushSubpathSegments(subpathSegs);
+          subpathSegs = [];
+          const rx = coords[idx++];
+          const ry = coords[idx++];
+          const rw = coords[idx++];
+          const rh = coords[idx++];
+          recordRect(rx, ry, rw, rh);
+        }
+      }
+      flushSubpathSegments(subpathSegs);
+    };
+
+    const processModernDrawOps = (drawData: ArrayLike<number>) => {
+      let idx = 0;
+      let startX = curX;
+      let startY = curY;
+      let subpathSegs: Array<[number, number, number, number]> = [];
+      while (idx < drawData.length) {
+        const dop = drawData[idx++];
+        if (dop === DRAW_OPS.moveTo) {
+          flushSubpathSegments(subpathSegs);
+          subpathSegs = [];
+          curX = drawData[idx++];
+          curY = drawData[idx++];
+          startX = curX;
+          startY = curY;
+        } else if (dop === DRAW_OPS.lineTo) {
+          const nx = drawData[idx++];
+          const ny = drawData[idx++];
+          subpathSegs.push([curX, curY, nx, ny]);
+          curX = nx;
+          curY = ny;
+        } else if (dop === DRAW_OPS.curveTo) {
+          idx += 4;
+          curX = drawData[idx++];
+          curY = drawData[idx++];
+        } else if (dop === DRAW_OPS.quadraticCurveTo) {
+          idx += 2;
+          curX = drawData[idx++];
+          curY = drawData[idx++];
+        } else if (dop === DRAW_OPS.closePath) {
+          subpathSegs.push([curX, curY, startX, startY]);
+          curX = startX;
+          curY = startY;
+        } else {
+          break;
+        }
+      }
+      flushSubpathSegments(subpathSegs);
+    };
+
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      const args = opList.argsArray[i];
+      if (fn === OPS.save) {
+        stack.push([...ctm]);
+      } else if (fn === OPS.restore) {
+        ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
+      } else if (fn === OPS.transform && Array.isArray(args) && args.length >= 6) {
+        ctm = multiplyMat(ctm, args as number[]);
+      } else if (fn === OPS.moveTo && Array.isArray(args)) {
+        curX = args[0];
+        curY = args[1];
+      } else if (fn === OPS.lineTo && Array.isArray(args)) {
+        recordSegment(curX, curY, args[0], args[1]);
+        curX = args[0];
+        curY = args[1];
+      } else if (fn === OPS.rectangle && Array.isArray(args)) {
+        recordRect(args[0], args[1], args[2], args[3]);
+      } else if (fn === OPS.constructPath && Array.isArray(args) && args.length >= 2) {
+        if (typeof args[0] === 'number') {
+          if (VISIBLE_PAINT_OPS.has(args[0])) {
+            const firstBuf = Array.isArray(args[1]) ? args[1][0] : args[1];
+            if (firstBuf && (Array.isArray(firstBuf) || ArrayBuffer.isView(firstBuf))) {
+              processModernDrawOps(firstBuf as ArrayLike<number>);
+            }
+          }
+        } else if (Array.isArray(args[0])) {
+          const opsArr = args[0] as number[];
+          const coordsArr =
+            args[1] && (Array.isArray(args[1]) || ArrayBuffer.isView(args[1]))
+              ? Array.from(args[1] as ArrayLike<number>)
+              : [];
+          if (opsArr.length > 0 && coordsArr.length > 0) {
+            processLegacyPathOps(opsArr, coordsArr);
+          }
+        }
+      }
+    }
+
+    if (hSegs.length < 3) return [];
+
+    const hAdjV: number[][] = hSegs.map(() => []);
+    const vAdjH: number[][] = vSegs.map(() => []);
+    for (let hi = 0; hi < hSegs.length; hi++) {
+      const h = hSegs[hi];
+      for (let vi = 0; vi < vSegs.length; vi++) {
+        const v = vSegs[vi];
+        if (
+          v.x0 >= h.x0 - 5 &&
+          v.x0 <= h.x1 + 5 &&
+          h.y0 >= v.y0 - 5 &&
+          h.y0 <= v.y1 + 5
+        ) {
+          hAdjV[hi].push(vi);
+          vAdjH[vi].push(hi);
+        }
+      }
+    }
+
+    const visitedH = new Set<number>();
+    const visitedV = new Set<number>();
+    const grids: DetectedPdfGrid[] = [];
+
+    for (let startH = 0; startH < hSegs.length; startH++) {
+      if (visitedH.has(startH) || hAdjV[startH].length === 0) continue;
+
+      const compH: number[] = [];
+      const compV: number[] = [];
+      const qH: number[] = [startH];
+      const qV: number[] = [];
+      visitedH.add(startH);
+
+      while (qH.length > 0 || qV.length > 0) {
+        while (qH.length > 0) {
+          const hi = qH.pop()!;
+          compH.push(hi);
+          for (const vi of hAdjV[hi]) {
+            if (!visitedV.has(vi)) {
+              visitedV.add(vi);
+              qV.push(vi);
+            }
+          }
+        }
+        while (qV.length > 0) {
+          const vi = qV.pop()!;
+          compV.push(vi);
+          for (const hi of vAdjH[vi]) {
+            if (!visitedH.has(hi)) {
+              visitedH.add(hi);
+              qH.push(hi);
+            }
+          }
+        }
+      }
+
+      const hLinesDesc = clusterValues(
+        compH.map((idx) => hSegs[idx].y0),
+        3.5
+      ).sort((a, b) => b - a);
+      const rawVLinesAsc = clusterValues(
+        compV.map((idx) => vSegs[idx].x0),
+        3.5
+      ).sort((a, b) => a - b);
+
+      if (hLinesDesc.length >= 3 && rawVLinesAsc.length >= 1) {
+        const minHx = Math.min(...compH.map((idx) => hSegs[idx].x0), rawVLinesAsc[0]);
+        const maxHx = Math.max(
+          ...compH.map((idx) => hSegs[idx].x1),
+          rawVLinesAsc[rawVLinesAsc.length - 1]
+        );
+        const vLinesAsc = [...rawVLinesAsc];
+        if (vLinesAsc[0] > minHx + 12) vLinesAsc.unshift(minHx);
+        if (vLinesAsc[vLinesAsc.length - 1] < maxHx - 12) vLinesAsc.push(maxHx);
+
+        if (vLinesAsc.length >= 3) {
+          grids.push({
+            minX: vLinesAsc[0],
+            maxX: vLinesAsc[vLinesAsc.length - 1],
+            minY: hLinesDesc[hLinesDesc.length - 1],
+            maxY: hLinesDesc[0],
+            hLinesDesc,
+            vLinesAsc,
+          });
+        }
+      }
+    }
+
+    // Horizontal-ruled tables (parallel horizontal rules without vertical column lines)
+    const remainingH = hSegs.filter((_, idx) => !visitedH.has(idx));
+    if (remainingH.length >= 3) {
+      const bySpan = new Map<string, PdfLineSegment[]>();
+      for (const h of remainingH) {
+        if (h.x1 - h.x0 < pageWidth * 0.35) continue;
+        const key = `${Math.round(h.x0 / 12) * 12}:${Math.round(h.x1 / 12) * 12}`;
+        const list = bySpan.get(key) || [];
+        list.push(h);
+        bySpan.set(key, list);
+      }
+      for (const group of bySpan.values()) {
+        const hLinesDesc = clusterValues(
+          group.map((g) => g.y0),
+          3.5
+        ).sort((a, b) => b - a);
+        if (hLinesDesc.length >= 3) {
+          const minX = Math.min(...group.map((g) => g.x0));
+          const maxX = Math.max(...group.map((g) => g.x1));
+          grids.push({
+            minX,
+            maxX,
+            minY: hLinesDesc[hLinesDesc.length - 1],
+            maxY: hLinesDesc[0],
+            hLinesDesc,
+            vLinesAsc: [],
+          });
+        }
+      }
+    }
+
+    return grids.sort((a, b) => b.maxY - a.maxY);
+  } catch {
+    return [];
+  }
+}
+
+interface ColumnBand {
+  minX: number;
+  maxX: number;
+  center: number;
+}
+
+function buildColumnBandsFromSegments(
+  rowsSegs: Array<Array<{ xStart: number; xEnd: number; meta: RawCellWithMeta }>>
+): ColumnBand[] {
+  if (rowsSegs.length === 0) return [];
+
+  // Find dominant segment count among rows (prefer data rows 1..N when >= 2 rows)
+  const countFreq = new Map<number, number>();
+  const bodyRows = rowsSegs.length >= 3 ? rowsSegs.slice(1) : rowsSegs;
+  for (const r of bodyRows) {
+    if (r.length >= 2) {
+      countFreq.set(r.length, (countFreq.get(r.length) || 0) + 1);
+    }
+  }
+  let targetCols = 0;
+  let maxFreq = 0;
+  for (const [cols, freq] of countFreq.entries()) {
+    if (freq > maxFreq || (freq === maxFreq && cols > targetCols)) {
+      maxFreq = freq;
+      targetCols = cols;
+    }
+  }
+
+  // If multiple rows share the exact target column count, derive clean non-overlapping bands per column index
+  const referenceRows =
+    targetCols >= 2 ? bodyRows.filter((r) => r.length === targetCols) : [];
+
+  if (referenceRows.length >= 2) {
+    const bands: ColumnBand[] = [];
+    for (let c = 0; c < targetCols; c++) {
+      const xs = referenceRows.map((r) => r[c].xStart);
+      const xe = referenceRows.map((r) => r[c].xEnd);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xe);
+      bands.push({ minX, maxX, center: (minX + maxX) / 2 });
+    }
+    // Verify bands are strictly ordered left-to-right
+    const ordered = bands.every((b, idx) => idx === 0 || b.center > bands[idx - 1].center + 6);
+    if (ordered) return bands;
+  }
+
+  // Fallback: merge overlapping X-intervals across all segments
+  const allSegs = rowsSegs
+    .flat()
+    .map((s) => ({ minX: s.xStart, maxX: Math.max(s.xEnd, s.xStart + 4) }))
+    .sort((a, b) => a.minX - b.minX);
+
+  const merged: ColumnBand[] = [];
+  for (const seg of allSegs) {
+    const prev = merged[merged.length - 1];
+    if (prev && seg.minX <= prev.maxX + 4) {
+      prev.maxX = Math.max(prev.maxX, seg.maxX);
+      prev.center = (prev.minX + prev.maxX) / 2;
+    } else {
+      merged.push({
+        minX: seg.minX,
+        maxX: seg.maxX,
+        center: (seg.minX + seg.maxX) / 2,
+      });
+    }
+  }
+
+  if (merged.length >= 2 && merged.length <= 16) {
+    return merged;
+  }
+
+  // Final fallback: cluster xStart values
+  const anchors = clusterValues(
+    rowsSegs.flatMap((r) => r.map((s) => s.xStart)),
+    16
+  ).sort((a, b) => a - b);
+
+  return anchors.map((a, idx) => ({
+    minX: a,
+    maxX: idx < anchors.length - 1 ? anchors[idx + 1] - 4 : a + 60,
+    center: a,
+  }));
+}
+
+function assignSegmentToBand(
+  seg: { xStart: number; xEnd: number },
+  bands: ColumnBand[]
+): number {
+  const segCenter = (seg.xStart + seg.xEnd) / 2;
+  let bestCol = 0;
+  let bestOverlap = -1;
+  let bestDist = Infinity;
+
+  for (let c = 0; c < bands.length; c++) {
+    const b = bands[c];
+    const overlap = Math.min(seg.xEnd, b.maxX) - Math.max(seg.xStart, b.minX);
+    const dist = Math.abs(segCenter - b.center);
+    if (overlap > 0) {
+      if (overlap > bestOverlap || (overlap === bestOverlap && dist < bestDist)) {
+        bestOverlap = overlap;
+        bestDist = dist;
+        bestCol = c;
+      }
+    } else if (bestOverlap <= 0 && dist < bestDist) {
+      bestDist = dist;
+      bestCol = c;
+    }
+  }
+
+  return bestCol;
+}
+
+function buildMatrixFromRuledGrid(
+  grid: DetectedPdfGrid,
+  chunks: PdfChunk[],
+  pageWidth: number
+): RawCellWithMeta[][] | null {
+  const numRows = grid.hLinesDesc.length - 1;
+  if (numRows < 2) return null;
+
+  const regionChunks = chunks.filter(
+    (ch) =>
+      ch.x + ch.width * 0.5 >= grid.minX - 6 &&
+      ch.x <= grid.maxX + 6 &&
+      ch.y >= grid.minY - 5 &&
+      ch.y <= grid.maxY + 5
+  );
+  if (regionChunks.length === 0) return null;
+
+  let colBoundariesAsc = grid.vLinesAsc;
+  if (colBoundariesAsc.length < 3) {
+    // Horizontal-ruled table without vertical dividers: infer column boundaries via horizontal bands
+    const yLines: PdfChunk[][] = [];
+    const sortedByY = [...regionChunks].sort((a, b) => b.y - a.y || a.x - b.x);
+    for (const ch of sortedByY) {
+      const last = yLines[yLines.length - 1];
+      if (!last || Math.abs(last[0].y - ch.y) > 3.8) yLines.push([ch]);
+      else last.push(ch);
+    }
+
+    const gapThresh = Math.max(11, pageWidth * 0.018);
+    const rowsSegs = yLines
+      .map((line) => splitRowChunksIntoColumns(line, gapThresh))
+      .filter((segs) => segs.length >= 2)
+      .map((segs) =>
+        segs.map((s) => ({
+          xStart: s[0].x,
+          xEnd: s[s.length - 1].x + s[s.length - 1].width,
+          meta: chunksToCellMeta(s),
+        }))
+      );
+
+    const bands = buildColumnBandsFromSegments(rowsSegs);
+    if (bands.length < 2) return null;
+
+    colBoundariesAsc = [grid.minX - 2];
+    for (let i = 1; i < bands.length; i++) {
+      colBoundariesAsc.push((bands[i - 1].maxX + bands[i].minX) / 2);
+    }
+    colBoundariesAsc.push(grid.maxX + 2);
+  }
+
+  const numCols = colBoundariesAsc.length - 1;
+  if (numCols < 2) return null;
+
+  const cells: PdfChunk[][][] = Array.from({ length: numRows }, () =>
+    Array.from({ length: numCols }, () => [])
+  );
+
+  for (const ch of regionChunks) {
+    let rIdx = grid.hLinesDesc.findIndex(
+      (yTop, idx) =>
+        idx < numRows &&
+        ch.y <= yTop + 3.5 &&
+        ch.y >= grid.hLinesDesc[idx + 1] - 3.5
+    );
+    if (rIdx < 0) {
+      let bestDist = Infinity;
+      for (let r = 0; r < numRows; r++) {
+        const midY = (grid.hLinesDesc[r] + grid.hLinesDesc[r + 1]) / 2;
+        const d = Math.abs(ch.y - midY);
+        if (d < bestDist) {
+          bestDist = d;
+          rIdx = r;
+        }
+      }
+    }
+
+    const probeX = ch.x + Math.min(ch.width, 18) * 0.45;
+    let cIdx = colBoundariesAsc.findIndex(
+      (xLeft, idx) =>
+        idx < numCols &&
+        probeX >= xLeft - 2.5 &&
+        probeX <= colBoundariesAsc[idx + 1] + 2.5
+    );
+    if (cIdx < 0) {
+      let bestDist = Infinity;
+      for (let c = 0; c < numCols; c++) {
+        const midX = (colBoundariesAsc[c] + colBoundariesAsc[c + 1]) / 2;
+        const d = Math.abs(probeX - midX);
+        if (d < bestDist) {
+          bestDist = d;
+          cIdx = c;
+        }
+      }
+    }
+
+    if (rIdx >= 0 && rIdx < numRows && cIdx >= 0 && cIdx < numCols) {
+      cells[rIdx][cIdx].push(ch);
+    }
+  }
+
+  const matrix: RawCellWithMeta[][] = cells
+    .map((row) => row.map((cellChunks) => chunksToCellMeta(cellChunks)))
+    .filter((row) => row.some((c) => c.text.length > 0));
+
+  return matrix.length >= 2 ? matrix : null;
 }
 
 async function parsePdfFile(
@@ -812,7 +1817,8 @@ async function parsePdfFile(
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
 
-  const allRowGroups: { chunks: PdfChunk[]; pageWidth: number }[] = [];
+  const ruledTables: RawCellWithMeta[][][] = [];
+  const borderlessRowGroups: { chunks: PdfChunk[]; pageWidth: number }[] = [];
   const lines: RawCellWithMeta[] = [];
 
   for (let p = 1; p <= pdf.numPages; p++) {
@@ -839,6 +1845,17 @@ async function parsePdfFile(
       });
     }
 
+    // Priority 1: Vector-ruled table grids on this page
+    const grids = await detectPdfRuledGrids(page, viewport.width, viewport.height);
+    let pageFoundRuledTable = false;
+    for (const grid of grids) {
+      const matrix = buildMatrixFromRuledGrid(grid, chunks, viewport.width);
+      if (matrix && matrix.length >= 2) {
+        ruledTables.push(matrix);
+        pageFoundRuledTable = true;
+      }
+    }
+
     chunks.sort((a, b) => b.y - a.y || a.x - b.x);
     const pageRows: PdfChunk[][] = [];
     for (const ch of chunks) {
@@ -851,7 +1868,9 @@ async function parsePdfFile(
     }
 
     for (const r of pageRows) {
-      allRowGroups.push({ chunks: r, pageWidth: viewport.width });
+      if (!pageFoundRuledTable) {
+        borderlessRowGroups.push({ chunks: r, pageWidth: viewport.width });
+      }
       lines.push(chunksToCellMeta(r));
     }
   }
@@ -882,26 +1901,30 @@ async function parsePdfFile(
     return { tables: [], lines: ocrLines, usedOcr: true };
   }
 
-  // Build aligned multi-column tables across consecutive rows when gap separation is clear
-  const tables: RawCellWithMeta[][][] = [];
+  if (ruledTables.length > 0) {
+    return { tables: ruledTables, lines, usedOcr: false };
+  }
+
+  // Priority 2: Band-aligned borderless PDF tables (handles centered headers vs left-aligned body)
+  const borderlessTables: RawCellWithMeta[][][] = [];
   let idx = 0;
-  while (idx < allRowGroups.length) {
-    const gapThresh = Math.max(12, allRowGroups[idx].pageWidth * 0.02);
-    const segs = splitRowChunksIntoColumns(allRowGroups[idx].chunks, gapThresh);
+  while (idx < borderlessRowGroups.length) {
+    const gapThresh = Math.max(12, borderlessRowGroups[idx].pageWidth * 0.02);
+    const segs = splitRowChunksIntoColumns(borderlessRowGroups[idx].chunks, gapThresh);
     if (segs.length < 2) {
       idx++;
       continue;
     }
 
-    // Collect contiguous multi-column rows
-    const candidateSegs: { xStart: number; meta: RawCellWithMeta }[][] = [];
+    const candidateSegs: { xStart: number; xEnd: number; meta: RawCellWithMeta }[][] = [];
     let scan = idx;
-    while (scan < allRowGroups.length) {
-      const rowSegs = splitRowChunksIntoColumns(allRowGroups[scan].chunks, gapThresh);
+    while (scan < borderlessRowGroups.length) {
+      const rowSegs = splitRowChunksIntoColumns(borderlessRowGroups[scan].chunks, gapThresh);
       if (rowSegs.length < 2) break;
       candidateSegs.push(
         rowSegs.map((s) => ({
           xStart: s[0].x,
+          xEnd: s[s.length - 1].x + s[s.length - 1].width,
           meta: chunksToCellMeta(s),
         }))
       );
@@ -909,24 +1932,12 @@ async function parsePdfFile(
     }
 
     if (candidateSegs.length >= 2) {
-      const anchors = clusterValues(
-        candidateSegs.flatMap((r) => r.map((c) => c.xStart)),
-        16
-      ).sort((a, b) => a - b);
-
-      if (anchors.length >= 2 && anchors.length <= 16) {
+      const bands = buildColumnBandsFromSegments(candidateSegs);
+      if (bands.length >= 2 && bands.length <= 16) {
         const matrix: RawCellWithMeta[][] = candidateSegs.map((row) => {
-          const out = Array.from({ length: anchors.length }, (): RawCellWithMeta => ({ text: '' }));
+          const out = Array.from({ length: bands.length }, (): RawCellWithMeta => ({ text: '' }));
           for (const seg of row) {
-            let bestCol = 0;
-            let bestDist = Infinity;
-            for (let c = 0; c < anchors.length; c++) {
-              const d = Math.abs(seg.xStart - anchors[c]);
-              if (d < bestDist) {
-                bestDist = d;
-                bestCol = c;
-              }
-            }
+            const bestCol = assignSegmentToBand(seg, bands);
             if (out[bestCol].text) {
               out[bestCol] = {
                 text: `${out[bestCol].text} ${seg.meta.text}`,
@@ -938,7 +1949,7 @@ async function parsePdfFile(
           }
           return out;
         });
-        tables.push(matrix);
+        borderlessTables.push(matrix);
         idx = scan;
         continue;
       }
@@ -946,7 +1957,7 @@ async function parsePdfFile(
     idx++;
   }
 
-  return { tables, lines, usedOcr: false };
+  return { tables: borderlessTables, lines, usedOcr: false };
 }
 
 // ==================== UNSTRUCTURED / KEY-VALUE LINE PARSER ====================
@@ -955,15 +1966,15 @@ function parseFreeLinesIntoTable(lines: RawCellWithMeta[]): RawCellWithMeta[][] 
   const cleanLines = lines.map((l) => ({ ...l, text: cleanCellText(l.text) })).filter((l) => l.text);
   if (cleanLines.length === 0) return [];
 
-  // 1. Check if delimited text (e.g., paste/TXT with ; or | or TAB)
+  // 1. Delimited text (CSV / TSV / semicolon / pipe)
   const delim = detectDelimiter(cleanLines.map((l) => l.text));
   if (delim) {
     return parseDelimitedText(cleanLines.map((l) => l.text).join('\n'), delim);
   }
 
-  // 2. Check Key: Value multi-line blocks (e.g., Nome: ...\nCPF: ...\nIdentidade: ...)
+  // 2. Key: Value blocks (e.g., Nome: ...\nCPF: ...\nIdentidade: ...)
   const kvMatches = cleanLines.filter((l) =>
-    /^(?:NOME(?:\s+COMPLETO)?|NOME\s+DE\s+GUERRA|POSTO(?:\s*\/\s*GRAD(?:UA[ÇC][ÃA]O)?)?|IDENTIDADE|IDT|CPF|RG|FUN[ÇC][ÃA]O|CARGO|OM|SETOR)\s*:/i.test(
+    /^(?:NOME(?:\s+COMPLETO)?|NOME\s+DE\s+GUERRA|POSTO(?:\s*\/\s*GRAD(?:UA[ÇC][ÃA]O)?)?|P\/G|IDENTIDADE|IDT|CPF|RG|FUN[ÇC][ÃA]O|CARGO|OM|SETOR)\s*:/i.test(
       l.text
     )
   );
@@ -993,31 +2004,30 @@ function parseFreeLinesIntoTable(lines: RawCellWithMeta[]): RawCellWithMeta[][] 
     }
 
     if (records.length >= 1 && keysOrder.length >= 1) {
-      const matrix: RawCellWithMeta[][] = [
+      return [
         keysOrder.map((k) => ({ text: k })),
         ...records.map((rec) =>
           keysOrder.map((k) => ({ text: rec[stripDiacriticsUpper(k)] || '' }))
         ),
       ];
-      return matrix;
     }
   }
 
-  // 3. Fallback: person-per-line list (extract Posto/Grad, Nome Completo, Nome de Guerra, Identidade, CPF)
+  // 3. Fallback: person-per-line list (no table detected)
   const personRows: RawCellWithMeta[][] = [
     [
-      { text: 'POSTO/GRAD' },
-      { text: 'NOME COMPLETO' },
-      { text: 'NOME DE GUERRA' },
-      { text: 'IDENTIDADE' },
+      { text: 'Posto/Grad' },
+      { text: 'Nome Completo' },
+      { text: 'Nome de Guerra' },
+      { text: 'Identidade' },
       { text: 'CPF' },
-      { text: 'LINHA COMPLETA' },
     ],
   ];
 
   for (const line of cleanLines) {
-    let raw = line.text.replace(/^(?:\d+\s*[-.)]\s*|[-–—•*]\s*)/, '').trim();
-    if (!raw || HEADER_KEYWORDS_RE.test(stripDiacriticsUpper(raw)) && raw.split(/\s+/).length <= 4) {
+    const raw = line.text.replace(/^(?:\d+\s*[-.)]\s*|[-–—•*]\s*)/, '').trim();
+    if (!raw) continue;
+    if (classifyHeaderBySynonym(raw).role !== 'outro' && raw.split(/\s+/).length <= 4) {
       continue;
     }
 
@@ -1047,7 +2057,6 @@ function parseFreeLinesIntoTable(lines: RawCellWithMeta[]): RawCellWithMeta[][] 
       { text: warName },
       { text: idt },
       { text: cpf },
-      { text: line.text },
     ]);
   }
 
@@ -1062,9 +2071,13 @@ function parseHtmlString(html: string): { tables: RawCellWithMeta[][][]; lines: 
   const lines: RawCellWithMeta[] = [];
 
   for (const tbl of Array.from(doc.querySelectorAll('table'))) {
+    // Only inspect direct rows belonging to this table (avoid nested table leakage)
+    const trs = Array.from(tbl.querySelectorAll('tr')).filter((tr) => tr.closest('table') === tbl);
     const matrix: RawCellWithMeta[][] = [];
-    for (const tr of Array.from(tbl.querySelectorAll('tr'))) {
-      const cells = Array.from(tr.querySelectorAll('th, td'));
+    for (const tr of trs) {
+      const cells = Array.from(tr.children).filter(
+        (el) => el.tagName === 'TD' || el.tagName === 'TH'
+      );
       const row: RawCellWithMeta[] = [];
       for (const cell of cells) {
         const boldEl = cell.querySelector('strong, b');
@@ -1098,14 +2111,31 @@ function parseHtmlString(html: string): { tables: RawCellWithMeta[][][]; lines: 
   return { tables, lines };
 }
 
+function effectiveTableColCount(table: RawCellWithMeta[][]): number {
+  const counts = table
+    .map((r) => r.length)
+    .filter((n) => n >= 2);
+  if (counts.length === 0) return Math.max(...table.map((r) => r.length), 0);
+  const freq = new Map<number, number>();
+  for (const c of counts) freq.set(c, (freq.get(c) || 0) + 1);
+  let best = counts[0];
+  let bestFreq = 0;
+  for (const [k, v] of freq.entries()) {
+    if (v > bestFreq || (v === bestFreq && k > best)) {
+      bestFreq = v;
+      best = k;
+    }
+  }
+  return best;
+}
+
 function mergeLargestCompatibleTables(tables: RawCellWithMeta[][][]): RawCellWithMeta[][] {
   if (tables.length === 0) return [];
-  // Pick the table with most rows, merging consecutive tables of identical column count
   const grouped: RawCellWithMeta[][][][] = [];
   for (const t of tables) {
-    const cols = Math.max(...t.map((r) => r.length));
+    const cols = effectiveTableColCount(t);
     const prev = grouped[grouped.length - 1];
-    if (prev && Math.max(...prev[0].map((r) => r.length)) === cols) {
+    if (prev && effectiveTableColCount(prev[0]) === cols) {
       prev.push(t);
     } else {
       grouped.push([t]);
@@ -1113,9 +2143,14 @@ function mergeLargestCompatibleTables(tables: RawCellWithMeta[][][]): RawCellWit
   }
 
   let bestMerged: RawCellWithMeta[][] = tables[0];
+  let bestScore = -1;
   for (const grp of grouped) {
     const merged: RawCellWithMeta[][] = grp.flat();
-    if (merged.length > bestMerged.length) {
+    const cols = effectiveTableColCount(merged);
+    // Prefer tables with more rows and >= 2 real columns
+    const score = merged.length * (cols >= 2 ? 10 : 1);
+    if (score > bestScore) {
+      bestScore = score;
       bestMerged = merged;
     }
   }
@@ -1202,12 +2237,27 @@ async function parseOdtFile(
 
   for (const tbl of Array.from(doc.getElementsByTagName('table:table'))) {
     const matrix: RawCellWithMeta[][] = [];
-    for (const tr of Array.from(tbl.getElementsByTagName('table:table-row'))) {
+    const directRows = Array.from(tbl.children).filter(
+      (el) => el.nodeName === 'table:table-row' || el.localName === 'table-row'
+    );
+    const rows =
+      directRows.length > 0
+        ? directRows
+        : Array.from(tbl.getElementsByTagName('table:table-row'));
+    for (const tr of rows) {
+      const cells = Array.from(tr.children).filter(
+        (el) => el.nodeName === 'table:table-cell' || el.localName === 'table-cell'
+      );
       const rowCells: RawCellWithMeta[] = [];
-      for (const tc of Array.from(tr.getElementsByTagName('table:table-cell'))) {
+      for (const tc of cells) {
+        const span = Math.max(
+          1,
+          parseInt(tc.getAttribute('table:number-columns-spanned') || '1', 10) || 1
+        );
         const ps = Array.from(tc.getElementsByTagName('text:p'));
         const text = cleanCellText(ps.map((p) => p.textContent || '').join(' '));
         rowCells.push({ text });
+        for (let s = 1; s < span; s++) rowCells.push({ text: '' });
       }
       if (rowCells.some((c) => c.text.length > 0)) matrix.push(rowCells);
     }
@@ -1394,25 +2444,31 @@ export async function extractCrachaDocumentData(
 export const EMPTY_SLOT_REF: CrachaSlotRef = { docId: '', colId: '' };
 
 function scoreDocumentAsNameSource(doc: ImportedCrachaSource): number {
-  const labels = doc.columns.map((c) => stripDiacriticsUpper(c.label));
   let score = doc.rows.length > 0 ? 1 : 0;
-  if (labels.some((l) => /\bNOME\b/.test(l))) score += 10;
-  if (labels.some((l) => /\bGUERRA\b/.test(l))) score += 4;
+  if (doc.columns.some((c) => c.detectedRole === 'nome_completo')) score += 10;
+  if (doc.columns.some((c) => c.detectedRole === 'nome_guerra')) score += 8;
+  if (doc.columns.some((c) => c.detectedRole === 'posto')) score += 4;
   return score;
 }
 
 function scoreDocumentAsSecondaryIdSource(doc: ImportedCrachaSource): number {
-  const labels = doc.columns.map((c) => stripDiacriticsUpper(c.label));
   let score = 0;
-  if (labels.some((l) => /\b(IDENTIDADE|IDT|RG)\b/.test(l))) score += 10;
-  if (labels.some((l) => /\bCPF\b/.test(l))) score += 8;
+  if (doc.columns.some((c) => c.detectedRole === 'documento' && c.docSubKind === 'identidade')) {
+    score += 10;
+  }
+  if (doc.columns.some((c) => c.detectedRole === 'documento' && c.docSubKind === 'cpf')) {
+    score += 8;
+  }
+  if (doc.columns.some((c) => c.detectedRole === 'documento')) {
+    score += 4;
+  }
   return score;
 }
 
 function pickPreferredIdCol(doc: ImportedCrachaSource): string {
   return (
     doc.columns.find((c) => c.id === doc.suggestedMapping.identSecundario)?.id ||
-    doc.columns.find((c) => /\b(IDENTIDADE|IDT|CPF)\b/.test(stripDiacriticsUpper(c.label)))?.id ||
+    doc.columns.find((c) => c.detectedRole === 'documento')?.id ||
     doc.columns[0]?.id ||
     ''
   );
@@ -1423,11 +2479,13 @@ export function buildInitialMultiMapping(
 ): CrachaMultiMapping {
   if (sources.length === 0) {
     return {
+      identPrefixo: EMPTY_SLOT_REF,
       identPrincipal: EMPTY_SLOT_REF,
       identSecundario: EMPTY_SLOT_REF,
       identTop: EMPTY_SLOT_REF,
       identBottom: EMPTY_SLOT_REF,
       identBack: EMPTY_SLOT_REF,
+      rpPrefixo: EMPTY_SLOT_REF,
       rpPrincipal: EMPTY_SLOT_REF,
       rpTop: EMPTY_SLOT_REF,
       rpBottom: EMPTY_SLOT_REF,
@@ -1442,12 +2500,13 @@ export function buildInitialMultiMapping(
   let secDoc = primaryDoc;
   let secColId = primaryDoc.suggestedMapping.identSecundario;
 
-  // If the primary document doesn't have an ID/CPF column and a 2nd document does, auto-link it!
   if (sources.length > 1) {
     const primaryHasId = scoreDocumentAsSecondaryIdSource(primaryDoc) > 0;
     const bestOtherIdDoc = sources
       .filter((s) => s.id !== primaryDoc.id)
-      .sort((a, b) => scoreDocumentAsSecondaryIdSource(b) - scoreDocumentAsSecondaryIdSource(a))[0];
+      .sort(
+        (a, b) => scoreDocumentAsSecondaryIdSource(b) - scoreDocumentAsSecondaryIdSource(a)
+      )[0];
 
     if (!primaryHasId && bestOtherIdDoc && scoreDocumentAsSecondaryIdSource(bestOtherIdDoc) > 0) {
       secDoc = bestOtherIdDoc;
@@ -1459,6 +2518,9 @@ export function buildInitialMultiMapping(
   }
 
   return {
+    identPrefixo: primaryDoc.suggestedMapping.identPrefixo
+      ? { docId: primaryDoc.id, colId: primaryDoc.suggestedMapping.identPrefixo }
+      : EMPTY_SLOT_REF,
     identPrincipal: primaryDoc.suggestedMapping.identPrincipal
       ? { docId: primaryDoc.id, colId: primaryDoc.suggestedMapping.identPrincipal }
       : EMPTY_SLOT_REF,
@@ -1471,6 +2533,9 @@ export function buildInitialMultiMapping(
       : EMPTY_SLOT_REF,
     identBack: primaryDoc.suggestedMapping.identBack
       ? { docId: primaryDoc.id, colId: primaryDoc.suggestedMapping.identBack }
+      : EMPTY_SLOT_REF,
+    rpPrefixo: primaryDoc.suggestedMapping.rpPrefixo
+      ? { docId: primaryDoc.id, colId: primaryDoc.suggestedMapping.rpPrefixo }
       : EMPTY_SLOT_REF,
     rpPrincipal: primaryDoc.suggestedMapping.rpPrincipal
       ? { docId: primaryDoc.id, colId: primaryDoc.suggestedMapping.rpPrincipal }
@@ -1507,25 +2572,23 @@ export function reconcileMultiMapping(
   };
 
   const next: CrachaMultiMapping = {
+    identPrefixo: validateSlot(prev.identPrefixo, defaults.identPrefixo),
     identPrincipal: validateSlot(prev.identPrincipal, defaults.identPrincipal),
     identSecundario: validateSlot(prev.identSecundario, defaults.identSecundario),
     identTop: validateSlot(prev.identTop, EMPTY_SLOT_REF),
     identBottom: validateSlot(prev.identBottom, EMPTY_SLOT_REF),
     identBack: validateSlot(prev.identBack, EMPTY_SLOT_REF),
+    rpPrefixo: validateSlot(prev.rpPrefixo, defaults.rpPrefixo),
     rpPrincipal: validateSlot(prev.rpPrincipal, defaults.rpPrincipal),
     rpTop: validateSlot(prev.rpTop, EMPTY_SLOT_REF),
     rpBottom: validateSlot(prev.rpBottom, EMPTY_SLOT_REF),
     rpBack: validateSlot(prev.rpBack, EMPTY_SLOT_REF),
   };
 
-  // If user added a 2nd document containing ID/CPF and identSecundario wasn't explicitly set yet,
-  // or points to a blank/fallback column on doc 1 without IDs, helpfully link it!
   if (nextSources.length > 1) {
     const newest = nextSources[nextSources.length - 1];
     const secSrc = byId.get(next.identSecundario.docId);
-    const secHasIdLabel = secSrc
-      ? scoreDocumentAsSecondaryIdSource(secSrc) > 0
-      : false;
+    const secHasIdLabel = secSrc ? scoreDocumentAsSecondaryIdSource(secSrc) > 0 : false;
     if (!secHasIdLabel && scoreDocumentAsSecondaryIdSource(newest) > 0) {
       next.identSecundario = { docId: newest.id, colId: pickPreferredIdCol(newest) };
     }
@@ -1548,12 +2611,11 @@ function extractRowMatchProfile(
 ): { fullNorm: string; tokens: string[]; cpfDigits: string; idtNorm: string } {
   const nameCandidates: string[] = [];
   for (const col of doc.columns) {
-    const lbl = stripDiacriticsUpper(col.label);
     const val = (row[col.id] || '').trim();
     if (!val) continue;
-    if (/\bNOME\b/.test(lbl) && !/\bGUERRA\b/.test(lbl)) {
+    if (col.detectedRole === 'nome_completo') {
       nameCandidates.unshift(val);
-    } else if (/\bGUERRA\b/.test(lbl)) {
+    } else if (col.detectedRole === 'nome_guerra') {
       nameCandidates.push(val);
     }
   }
@@ -1598,7 +2660,6 @@ function findBestMatchingRowIndex(
   const exactIdx = otherProfiles.findIndex((p) => p.fullNorm === baseProfile.fullNorm);
   if (exactIdx !== -1) return exactIdx;
 
-  // Token overlap matching (e.g. "João Carlos da Silva" vs "3º Sgt João C. Silva" or war name "SILVA")
   let bestIdx = -1;
   let bestScore = 0;
   for (let i = 0; i < otherProfiles.length; i++) {
@@ -1620,7 +2681,6 @@ function findBestMatchingRowIndex(
       (p.tokens.length === 1 || baseProfile.tokens.length === 1) &&
       (p.tokens[0]?.length || 0) >= 4
     ) {
-      // Single unique surname / war name match
       const score = 5;
       if (score > bestScore) {
         bestScore = score;
@@ -1644,28 +2704,37 @@ export function resolveMultiDocumentRows(
   const byId = new Map(sources.map((s) => [s.id, s]));
   const primarySlot =
     targetMode === 'identificacao' ? mapping.identPrincipal : mapping.rpPrincipal;
+  const prefixSlot =
+    targetMode === 'identificacao' ? mapping.identPrefixo : mapping.rpPrefixo;
   const fallbackSlot =
     targetMode === 'identificacao' ? mapping.identSecundario : mapping.rpTop;
 
   const primaryDoc =
     byId.get(primarySlot.docId) ||
+    byId.get(prefixSlot.docId) ||
     byId.get(fallbackSlot.docId) ||
     sources[0];
 
   const baseRows = primaryDoc.rows.slice(0, 200);
   const baseProfiles = baseRows.map((r) => extractRowMatchProfile(primaryDoc, r));
 
-  // Precompute cross-file alignment map for any external document referenced
   const relevantSlots =
     targetMode === 'identificacao'
       ? [
+          mapping.identPrefixo,
           mapping.identPrincipal,
           mapping.identSecundario,
           mapping.identTop,
           mapping.identBottom,
           mapping.identBack,
         ]
-      : [mapping.rpPrincipal, mapping.rpTop, mapping.rpBottom, mapping.rpBack];
+      : [
+          mapping.rpPrefixo,
+          mapping.rpPrincipal,
+          mapping.rpTop,
+          mapping.rpBottom,
+          mapping.rpBack,
+        ];
 
   const otherDocIds = Array.from(
     new Set(
@@ -1701,7 +2770,6 @@ export function resolveMultiDocumentRows(
         nameMatches.map((m) => (m !== -1 ? m : null))
       );
     } else {
-      // External doc has no matching names (e.g. a pure list of CPFs/numbers): fall back cleanly to row index
       rowMappingByDocId.set(
         otherId,
         baseRows.map((_, i) => (i < otherRows.length ? i : null))
@@ -1722,12 +2790,21 @@ export function resolveMultiDocumentRows(
   };
 
   const rows: ResolvedCrachaRowEntry[] = baseRows.map((_, idx) => {
+    const identComposed = composePrefixedText(
+      readSlotValue(mapping.identPrefixo, idx),
+      readSlotValue(mapping.identPrincipal, idx)
+    );
+    const rpComposed = composePrefixedText(
+      readSlotValue(mapping.rpPrefixo, idx),
+      readSlotValue(mapping.rpPrincipal, idx)
+    );
+
     if (targetMode === 'identificacao') {
       const backVal = readSlotValue(mapping.identBack, idx);
       return {
-        nomeCompleto: readSlotValue(mapping.identPrincipal, idx),
+        nomeCompleto: identComposed,
         cpf: readSlotValue(mapping.identSecundario, idx),
-        rpTexto: readSlotValue(mapping.rpPrincipal, idx),
+        rpTexto: rpComposed,
         topTextOverride: readSlotValue(mapping.identTop, idx),
         bottomTextOverride: readSlotValue(mapping.identBottom, idx),
         versoIgual: !(mapping.identBack.docId && mapping.identBack.colId),
@@ -1737,9 +2814,9 @@ export function resolveMultiDocumentRows(
 
     const backVal = readSlotValue(mapping.rpBack, idx);
     return {
-      nomeCompleto: readSlotValue(mapping.identPrincipal, idx),
+      nomeCompleto: identComposed,
       cpf: readSlotValue(mapping.identSecundario, idx),
-      rpTexto: readSlotValue(mapping.rpPrincipal, idx),
+      rpTexto: rpComposed,
       topTextOverride: readSlotValue(mapping.rpTop, idx),
       bottomTextOverride: readSlotValue(mapping.rpBottom, idx),
       versoIgual: !(mapping.rpBack.docId && mapping.rpBack.colId),

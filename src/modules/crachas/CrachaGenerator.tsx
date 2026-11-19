@@ -30,6 +30,7 @@ import {
 } from './crachaPdf';
 import {
   buildInitialMultiMapping,
+  composePrefixedText,
   EMPTY_SLOT_REF,
   extractCrachaDocumentData,
   reconcileMultiMapping,
@@ -739,10 +740,21 @@ const SlotSourcePicker: React.FC<SlotSourcePickerProps> = ({
   const activeSource = sources.find((s) => s.id === slot.docId) || sources[0] || null;
   const multiFile = sources.length > 1;
   const isEmpty = !slot.docId || !slot.colId;
+  const selectedCol =
+    !isEmpty && activeSource
+      ? activeSource.columns.find((c) => c.id === slot.colId) || null
+      : null;
 
   return (
-    <div className="space-y-1">
-      <span className="block text-[11px] text-[#C6D4CC]">{label}</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="block text-[11px] font-medium text-[#C6D4CC]">{label}</span>
+        {selectedCol && selectedCol.detectedRole !== 'outro' && (
+          <span className="text-[10px] font-medium text-[#E5C17B]/90">
+            {selectedCol.detectedRoleLabel}
+          </span>
+        )}
+      </div>
       <div className={multiFile ? 'grid grid-cols-1 sm:grid-cols-12 gap-1.5' : ''}>
         {multiFile && (
           <select
@@ -786,14 +798,31 @@ const SlotSourcePicker: React.FC<SlotSourcePickerProps> = ({
           } min-h-[38px] px-2.5 text-xs disabled:opacity-45`}
         >
           <option value="">{emptyLabel}</option>
-          {activeSource?.columns.map((col) => (
-            <option key={col.id} value={col.id}>
-              {col.label}
-              {col.sample ? ` — ex: ${col.sample.slice(0, 28)}` : ''}
-            </option>
-          ))}
+          {activeSource?.columns.map((col) => {
+            const roleTag =
+              col.detectedRole !== 'outro' ? ` [${col.detectedRoleLabel}]` : '';
+            const sampleTag = col.sample
+              ? ` — ex: ${col.sample.slice(0, 30)}${col.sample.length > 30 ? '…' : ''}`
+              : '';
+            return (
+              <option key={col.id} value={col.id}>
+                {col.label}
+                {roleTag}
+                {sampleTag}
+              </option>
+            );
+          })}
         </select>
       </div>
+
+      {selectedCol && (
+        <div className="flex items-baseline gap-1.5 px-1 text-[11px] leading-snug">
+          <span className="text-[#83B499] shrink-0">Exemplo:</span>
+          <span className="font-mono text-[#E8EEEA] truncate" title={selectedCol.sample}>
+            {selectedCol.sample || '(vazio na 1ª linha)'}
+          </span>
+        </div>
+      )}
     </div>
   );
 };
@@ -1191,7 +1220,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   : 'Subir arquivo(s) para preencher crachás'}
             </span>
             <span className="text-[11px] text-[#98A89F]">
-              PDF, Word (.docx/.doc/.odt), Excel, CSV, TXT ou foto — escolha qual dado vai em Nome e Identidade/CPF
+              PDF, Word (.docx/.doc/.odt), Excel, CSV, TXT ou foto — leitura fiel das colunas com montagem flexível
             </span>
           </button>
 
@@ -1236,36 +1265,71 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     </button>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {importedDocs.map((src, idx) => (
                       <div
                         key={src.id}
-                        className="flex items-center justify-between gap-2 rounded-lg bg-[#121715] border border-white/[0.08] px-2.5 py-2"
+                        className="rounded-lg bg-[#121715] border border-white/[0.08] px-2.5 py-2 space-y-2"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileSpreadsheet className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-[#E8EEEA] truncate">
-                              {importedDocs.length > 1 ? `Arq. ${idx + 1}: ` : ''}
-                              {src.fileName}
-                            </p>
-                            <p className="text-[10px] text-[#83B499]">
-                              {src.rows.length}{' '}
-                              {src.rows.length === 1 ? 'registro' : 'registros'} ·{' '}
-                              {src.columns.length}{' '}
-                              {src.columns.length === 1 ? 'campo' : 'campos'}
-                            </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-[#E8EEEA] truncate">
+                                {importedDocs.length > 1 ? `Arq. ${idx + 1}: ` : ''}
+                                {src.fileName}
+                              </p>
+                              <p className="text-[10px] text-[#83B499]">
+                                {src.rows.length}{' '}
+                                {src.rows.length === 1 ? 'registro' : 'registros'} ·{' '}
+                                {src.columns.length}{' '}
+                                {src.columns.length === 1 ? 'coluna' : 'colunas'} ·{' '}
+                                {src.hasExplicitHeader
+                                  ? 'Cabeçalho real da 1ª linha'
+                                  : 'Sem cabeçalho (colunas genéricas)'}
+                              </p>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImportedDoc(src.id)}
+                            title={`Remover ${src.fileName}`}
+                            aria-label={`Remover ${src.fileName}`}
+                            className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-white/[0.06] transition-colors shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImportedDoc(src.id)}
-                          title={`Remover ${src.fileName}`}
-                          aria-label={`Remover ${src.fileName}`}
-                          className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-white/[0.06] transition-colors shrink-0"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+
+                        {/* Mandatory preview of every extracted column + row-below example */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 border-t border-white/[0.06]">
+                          {src.columns.map((col) => (
+                            <div
+                              key={col.id}
+                              className="rounded-md bg-[#0B0E0D] border border-white/[0.06] px-2 py-1.5 min-w-0"
+                            >
+                              <div className="flex items-center justify-between gap-1.5 min-w-0">
+                                <span
+                                  className="text-[11px] font-semibold text-[#E8EEEA] truncate"
+                                  title={col.label}
+                                >
+                                  {col.label}
+                                </span>
+                                {col.detectedRole !== 'outro' && (
+                                  <span className="text-[9px] font-medium text-[#E5C17B] shrink-0">
+                                    {col.detectedRoleLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <p
+                                className="text-[10px] font-mono text-[#98A89F] truncate mt-0.5"
+                                title={col.sample || '(vazio)'}
+                              >
+                                ex: {col.sample || '(vazio)'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1300,7 +1364,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-medium text-[#E5C17B]">
-                    Escolha o arquivo e a informação para cada parte:
+                    Mapeamento dos campos do crachá:
                   </span>
                   <button
                     type="button"
@@ -1319,18 +1383,64 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 </div>
 
                 {activeMode === 'identificacao' ? (
-                  <div className="space-y-2.5">
-                    <SlotSourcePicker
-                      label="Nome / Linha principal"
-                      emptyLabel="(Deixar em branco)"
-                      slot={fieldMapping.identPrincipal}
-                      sources={importedDocs}
-                      onChange={(next) => handleMappingSlotChange('identPrincipal', next)}
-                    />
+                  <div className="space-y-3">
+                    {/* Flexible Prefix + Main Name Assembly */}
+                    <div className="rounded-lg bg-[#101513] border border-[#C8A461]/22 p-2.5 space-y-2.5">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
+                        Montagem do Nome (Prefixo + Principal)
+                      </span>
+
+                      <SlotSourcePicker
+                        label="Prefixo (opcional — ex: Posto/Grad)"
+                        emptyLabel="(Sem prefixo)"
+                        slot={fieldMapping.identPrefixo}
+                        sources={importedDocs}
+                        onChange={(next) => handleMappingSlotChange('identPrefixo', next)}
+                      />
+
+                      <SlotSourcePicker
+                        label="Nome Principal (ex: Nome de Guerra ou Nome)"
+                        emptyLabel="(Deixar em branco)"
+                        slot={fieldMapping.identPrincipal}
+                        sources={importedDocs}
+                        onChange={(next) => handleMappingSlotChange('identPrincipal', next)}
+                      />
+
+                      {(() => {
+                        const prefSrc = importedDocs.find(
+                          (d) => d.id === fieldMapping.identPrefixo.docId
+                        );
+                        const mainSrc = importedDocs.find(
+                          (d) => d.id === fieldMapping.identPrincipal.docId
+                        );
+                        const prefSample =
+                          prefSrc?.columns.find(
+                            (c) => c.id === fieldMapping.identPrefixo.colId
+                          )?.sample || '';
+                        const mainSample =
+                          mainSrc?.columns.find(
+                            (c) => c.id === fieldMapping.identPrincipal.colId
+                          )?.sample || '';
+                        const composed = composePrefixedText(prefSample, mainSample);
+                        const displayPreview = config.uppercase
+                          ? composed.toUpperCase()
+                          : composed;
+                        return (
+                          <div className="rounded-md bg-[#0B0E0D] border border-white/[0.06] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] text-[#83B499] shrink-0">
+                              Prévia (1º crachá):
+                            </span>
+                            <span className="font-mono text-xs font-semibold text-[#F4E6C4] truncate">
+                              {displayPreview || '—'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
 
                     <SlotSourcePicker
-                      label="Identidade ou CPF / Linha inferior"
-                      emptyLabel="(Deixar em branco — sem identidade/CPF)"
+                      label="Documento (CPF / Identidade)"
+                      emptyLabel="(Deixar em branco — sem documento)"
                       slot={fieldMapping.identSecundario}
                       sources={importedDocs}
                       onChange={(next) => handleMappingSlotChange('identSecundario', next)}
@@ -1365,14 +1475,60 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
-                    <SlotSourcePicker
-                      label="Texto principal do centro (RP)"
-                      emptyLabel="(Deixar em branco)"
-                      slot={fieldMapping.rpPrincipal}
-                      sources={importedDocs}
-                      onChange={(next) => handleMappingSlotChange('rpPrincipal', next)}
-                    />
+                  <div className="space-y-3">
+                    {/* Flexible Prefix + Main Text Assembly (RP) */}
+                    <div className="rounded-lg bg-[#101513] border border-[#C8A461]/22 p-2.5 space-y-2.5">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
+                        Montagem do Texto Central (Prefixo + Principal)
+                      </span>
+
+                      <SlotSourcePicker
+                        label="Prefixo (opcional — ex: Posto/Grad)"
+                        emptyLabel="(Sem prefixo)"
+                        slot={fieldMapping.rpPrefixo}
+                        sources={importedDocs}
+                        onChange={(next) => handleMappingSlotChange('rpPrefixo', next)}
+                      />
+
+                      <SlotSourcePicker
+                        label="Texto Principal do centro (RP)"
+                        emptyLabel="(Deixar em branco)"
+                        slot={fieldMapping.rpPrincipal}
+                        sources={importedDocs}
+                        onChange={(next) => handleMappingSlotChange('rpPrincipal', next)}
+                      />
+
+                      {(() => {
+                        const prefSrc = importedDocs.find(
+                          (d) => d.id === fieldMapping.rpPrefixo.docId
+                        );
+                        const mainSrc = importedDocs.find(
+                          (d) => d.id === fieldMapping.rpPrincipal.docId
+                        );
+                        const prefSample =
+                          prefSrc?.columns.find(
+                            (c) => c.id === fieldMapping.rpPrefixo.colId
+                          )?.sample || '';
+                        const mainSample =
+                          mainSrc?.columns.find(
+                            (c) => c.id === fieldMapping.rpPrincipal.colId
+                          )?.sample || '';
+                        const composed = composePrefixedText(prefSample, mainSample);
+                        const displayPreview = config.uppercase
+                          ? composed.toUpperCase()
+                          : composed;
+                        return (
+                          <div className="rounded-md bg-[#0B0E0D] border border-white/[0.06] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] text-[#83B499] shrink-0">
+                              Prévia (1º crachá):
+                            </span>
+                            <span className="font-mono text-xs font-semibold text-[#F4E6C4] truncate">
+                              {displayPreview || '—'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
 
                     <div className="grid grid-cols-1 gap-2">
                       <SlotSourcePicker
