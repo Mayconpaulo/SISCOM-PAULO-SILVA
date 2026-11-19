@@ -1393,43 +1393,66 @@ export function paginateAlteracaoBlocksInDom(
 
   const pages: string[][] = [];
   let currentPageHtmls: string[] = [...lockedPrefixHtmls];
-  let currentPageSpacerMask: boolean[] = lockedPrefixHtmls.map(() => false);
+  let currentPageStrippableSpacerMask: boolean[] = lockedPrefixHtmls.map(() => false);
   let currentHeight = initialPrefixHeight;
   let currentMaxPx = options.startOnContinuationPage ? contMaxPx : page1MaxPx;
 
-  const pushToCurrentPage = (html: string, h: number, isSpacer = false) => {
+  const pushToCurrentPage = (html: string, h: number, isStrippableSpacer = false) => {
     currentPageHtmls.push(html);
-    currentPageSpacerMask.push(isSpacer);
+    currentPageStrippableSpacerMask.push(isStrippableSpacer);
     currentHeight += h;
   };
 
   const startNextPage = () => {
     while (
       currentPageHtmls.length > 0 &&
-      currentPageSpacerMask[currentPageSpacerMask.length - 1]
+      currentPageStrippableSpacerMask[currentPageStrippableSpacerMask.length - 1]
     ) {
       currentPageHtmls.pop();
-      currentPageSpacerMask.pop();
+      currentPageStrippableSpacerMask.pop();
     }
     if (currentPageHtmls.length > 0) {
       pages.push(currentPageHtmls);
     }
     currentPageHtmls = [];
-    currentPageSpacerMask = [];
+    currentPageStrippableSpacerMask = [];
     currentHeight = 0;
     currentMaxPx = contMaxPx;
+  };
+
+  const measureBlockSpanHeight = (fromIdx: number, toIdx: number): number => {
+    let total = 0;
+    for (let k = fromIdx; k <= toIdx; k++) {
+      if (blocks[k].tableMeta) {
+        const fullTableH = blockHeights[k] ?? 40;
+        if (fullTableH + 4 <= contMaxPx) {
+          total += fullTableH + 4;
+        } else {
+          // Table taller than an entire page: keep heading with at least first 2 rows
+          const rowHeights = tableRowHeightsByBlock.get(k) ?? [22];
+          const minRowsH = rowHeights
+            .slice(0, Math.min(2, rowHeights.length))
+            .reduce((a, b) => a + b, 6);
+          total += minRowsH;
+        }
+      } else {
+        total += blockHeights[k] ?? 18;
+      }
+    }
+    return total;
   };
 
   let idx = 0;
   while (idx < blocks.length) {
     const block = blocks[idx];
 
-    if (currentPageHtmls.length === 0 && block.isSpacer) {
+    if (currentPageHtmls.length === 0 && block.isSpacer && !block.preserveIfSpacer) {
       idx++;
       continue;
     }
 
-    // Handle splittable data tables across page breaks (below continuation header!)
+    // Handle data tables: keep the ENTIRE table uncut on the next page whenever it fits on one page;
+    // only split row-by-row if a single table is taller than a full continuation page.
     if (block.tableMeta && block.tableMeta.rowsHtml.length > 0) {
       const { rowsHtml: allRowHtmls, colgroupHtml, headerRowHtml, itemId } = block.tableMeta;
       const allRowHeights =
@@ -1444,7 +1467,12 @@ export function paginateAlteracaoBlocksInDom(
         continue;
       }
 
-      // Split table row-by-row across current and subsequent pages
+      if (currentPageHtmls.length > 0 && fullTableHeight + 4 <= contMaxPx) {
+        startNextPage();
+        continue;
+      }
+
+      // Split giant multi-page table row-by-row across current and subsequent pages
       let rowOffset = 0;
       while (rowOffset < allRowHtmls.length) {
         const isContinuationChunk = rowOffset > 0 && Boolean(headerRowHtml);
@@ -1498,8 +1526,8 @@ export function paginateAlteracaoBlocksInDom(
       continue;
     }
 
-    // Group keepWithNext chains (e.g., MÊS: + spacer + TÍTULO + Subtítulo + spacer + 1st item/table)
-    let groupEnd = idx;
+    // 1) Follow keepWithNext heading chains (e.g., MÊS: + spacer + TÍTULO + Subtítulo + spacer + 1st content block)
+    let firstContentIdx = idx;
     if (block.keepWithNext) {
       let scan = idx;
       while (scan < blocks.length - 1) {
@@ -1509,33 +1537,53 @@ export function paginateAlteracaoBlocksInDom(
           break;
         }
       }
-      groupEnd = scan;
+      firstContentIdx = scan;
     }
 
-    let groupHeight = 0;
-    for (let k = idx; k <= groupEnd; k++) {
-      if (blocks[k].tableMeta) {
-        // Keep heading with at least first 2 rows of table
-        const rowHeights = tableRowHeightsByBlock.get(k) ?? [22];
-        const minRowsH = rowHeights
-          .slice(0, Math.min(2, rowHeights.length))
-          .reduce((a, b) => a + b, 6);
-        groupHeight += minRowsH;
-      } else {
-        groupHeight += blockHeights[k] ?? 18;
+    // 2) Extend across the entire atomic subject/item (e.g., all paragraphs of the same data-alt-item or 2ª Parte signature)
+    //    so no subject is ever cut in half when it fits on a page.
+    let groupEnd = firstContentIdx;
+    const targetAtomicId = blocks[firstContentIdx]?.atomicGroupId ?? block.atomicGroupId;
+    if (targetAtomicId && !block.isSpacer) {
+      let scan = firstContentIdx;
+      while (scan < blocks.length - 1) {
+        let nextNonSpacer = scan + 1;
+        while (nextNonSpacer < blocks.length && blocks[nextNonSpacer].isSpacer) {
+          nextNonSpacer++;
+        }
+        if (
+          nextNonSpacer < blocks.length &&
+          blocks[nextNonSpacer].atomicGroupId === targetAtomicId
+        ) {
+          scan = nextNonSpacer;
+        } else {
+          break;
+        }
       }
+      groupEnd = scan;
     }
 
     const singleHeight = blockHeights[idx] ?? 18;
 
-    if (
-      currentPageHtmls.length > 0 &&
-      block.keepWithNext &&
-      currentHeight + groupHeight > currentMaxPx &&
-      groupHeight <= contMaxPx
-    ) {
-      startNextPage();
-      continue;
+    if (currentPageHtmls.length > 0 && groupEnd > idx) {
+      const fullUnitHeight = measureBlockSpanHeight(idx, groupEnd);
+      if (currentHeight + fullUnitHeight > currentMaxPx && fullUnitHeight <= contMaxPx) {
+        startNextPage();
+        continue;
+      }
+
+      // If the full atomic unit is taller than an entire page, still keep any leading headings
+      // attached to at least their first content block so no heading is orphaned.
+      if (block.keepWithNext && firstContentIdx < groupEnd) {
+        const headingPlusFirstHeight = measureBlockSpanHeight(idx, firstContentIdx);
+        if (
+          currentHeight + headingPlusFirstHeight > currentMaxPx &&
+          headingPlusFirstHeight <= contMaxPx
+        ) {
+          startNextPage();
+          continue;
+        }
+      }
     }
 
     if (currentPageHtmls.length > 0 && currentHeight + singleHeight > currentMaxPx) {
@@ -1543,16 +1591,20 @@ export function paginateAlteracaoBlocksInDom(
       continue;
     }
 
-    pushToCurrentPage(block.html, singleHeight, Boolean(block.isSpacer));
+    pushToCurrentPage(
+      block.html,
+      singleHeight,
+      Boolean(block.isSpacer && !block.preserveIfSpacer)
+    );
     idx++;
   }
 
   while (
     currentPageHtmls.length > 0 &&
-    currentPageSpacerMask[currentPageSpacerMask.length - 1]
+    currentPageStrippableSpacerMask[currentPageStrippableSpacerMask.length - 1]
   ) {
     currentPageHtmls.pop();
-    currentPageSpacerMask.pop();
+    currentPageStrippableSpacerMask.pop();
   }
   if (currentPageHtmls.length > 0) {
     pages.push(currentPageHtmls);

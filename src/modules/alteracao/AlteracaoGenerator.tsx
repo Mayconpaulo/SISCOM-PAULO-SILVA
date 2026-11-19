@@ -42,7 +42,14 @@ import {
   renderBlocksFromStructuredDoc,
 } from './alteracaoFormatter';
 import { paginateAlteracaoBlocksInDom, readAlteracaoFile } from './alteracaoFileReader';
-import { applyChecklistDeltaToLivePages } from './alteracaoLiveReflow';
+import {
+  LiveCaretBookmark,
+  applyChecklistDeltaToLivePages,
+  captureEditorHtmlWithCaretMarker,
+  reflowLiveEditedPages,
+  restoreCaretBookmarkInEditors,
+  tryHandleLinkedBoundaryKey,
+} from './alteracaoLiveReflow';
 import { AlteracaoArchivePanel } from './AlteracaoArchivePanel';
 import {
   AlteracaoArchiveDocRecord,
@@ -271,6 +278,8 @@ interface EditablePageBodyProps {
   editorRef: (el: HTMLDivElement | null) => void;
   onFocus: () => void;
   onChangeHtml: (html: string, overflows: boolean) => void;
+  onTriggerReflow: (immediate: boolean) => void;
+  onBoundaryKey: (key: 'Backspace' | 'Delete') => boolean;
 }
 
 const EditablePageBody: React.FC<EditablePageBodyProps> = ({
@@ -282,10 +291,13 @@ const EditablePageBody: React.FC<EditablePageBodyProps> = ({
   editorRef,
   onFocus,
   onChangeHtml,
+  onTriggerReflow,
+  onBoundaryKey,
 }) => {
   const localRef = useRef<HTMLDivElement | null>(null);
+  const isComposingRef = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = localRef.current;
     if (!el) return;
     const safeHtml = sanitizeAlteracaoHtml(initialHtml);
@@ -298,11 +310,28 @@ const EditablePageBody: React.FC<EditablePageBodyProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncVersion]);
 
-  const handleInput = () => {
+  const handleInput = (forceImmediate = false) => {
     const el = localRef.current;
     if (!el) return;
     const overflows = el.scrollHeight > el.clientHeight + 2;
     onChangeHtml(el.innerHTML, overflows);
+    if (!isComposingRef.current) {
+      onTriggerReflow(forceImmediate || overflows);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      (e.key === 'Backspace' || e.key === 'Delete') &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      !isComposingRef.current
+    ) {
+      if (onBoundaryKey(e.key)) {
+        e.preventDefault();
+      }
+    }
   };
 
   return (
@@ -315,7 +344,21 @@ const EditablePageBody: React.FC<EditablePageBodyProps> = ({
       suppressContentEditableWarning
       spellCheck
       onFocus={onFocus}
-      onInput={handleInput}
+      onInput={() => handleInput(false)}
+      onCompositionStart={() => {
+        isComposingRef.current = true;
+      }}
+      onCompositionEnd={() => {
+        isComposingRef.current = false;
+        handleInput(true);
+      }}
+      onPaste={() => {
+        window.requestAnimationFrame(() => handleInput(true));
+      }}
+      onCut={() => {
+        window.requestAnimationFrame(() => handleInput(true));
+      }}
+      onKeyDown={handleKeyDown}
       style={{
         fontFamily: `"${fontFamily}", "Times New Roman", Times, serif`,
         fontSize: fontSizePt,
@@ -370,6 +413,10 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   const contHeaderRef = useRef<HTMLDivElement | null>(null);
   const highlightResetRef = useRef<(() => void) | null>(null);
   const pagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const pendingCaretRef = useRef<LiveCaretBookmark | null>(null);
+  const reflowTimerRef = useRef<number | null>(null);
+  const pagesHtmlRef = useRef<string[]>(pagesHtml);
+  const fontStyleRef = useRef({ fontFamily, fontSizePt, lineHeight });
   const effectiveScaleRef = useRef<number>(1);
   const pinchZoomRef = useRef<number>(1);
   const totalScaleRef = useRef<number>(1);
@@ -385,6 +432,9 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     relYUnscaled: number;
     curMidWinY: number;
   } | null>(null);
+
+  pagesHtmlRef.current = pagesHtml;
+  fontStyleRef.current = { fontFamily, fontSizePt, lineHeight };
 
   const fitScale =
     viewportWidth > 0 ? Math.min(1, Math.max(0.22, (viewportWidth - 4) / A4_WIDTH_PX)) : 1;
@@ -515,9 +565,20 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     };
   }, []);
 
+  useLayoutEffect(() => {
+    editorRefs.current.length = pagesHtml.length;
+    const pending = pendingCaretRef.current;
+    if (!pending) return;
+    pendingCaretRef.current = null;
+    restoreCaretBookmarkInEditors(editorRefs.current, pending);
+  }, [syncVersion, pagesHtml.length]);
+
   useEffect(() => {
     return () => {
       highlightResetRef.current?.();
+      if (reflowTimerRef.current !== null) {
+        window.clearTimeout(reflowTimerRef.current);
+      }
     };
   }, []);
 
@@ -628,6 +689,119 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     return target;
   };
 
+  const getLivePaginateOptions = (overrideStyle?: {
+    fontFamily?: string;
+    fontSizePt?: string;
+    lineHeight?: string;
+  }) => {
+    const scale = effectiveScaleRef.current || 1;
+    const p1El = page1HeaderRef.current;
+    const contEl = contHeaderRef.current;
+    const page1HeaderHeightPx = p1El
+      ? p1El.offsetHeight || p1El.getBoundingClientRect().height / scale
+      : undefined;
+    const contHeaderHeightPx = contEl
+      ? contEl.offsetHeight || contEl.getBoundingClientRect().height / scale
+      : undefined;
+
+    return {
+      fontFamily: overrideStyle?.fontFamily ?? fontStyleRef.current.fontFamily,
+      fontSizePt: overrideStyle?.fontSizePt ?? fontStyleRef.current.fontSizePt,
+      lineHeight: overrideStyle?.lineHeight ?? fontStyleRef.current.lineHeight,
+      page1HeaderHeightPx,
+      contHeaderHeightPx,
+    };
+  };
+
+  const runLiveLinkedReflow = (
+    editedPageIndex: number,
+    opts?: {
+      forceApply?: boolean;
+      overrideStyle?: { fontFamily?: string; fontSizePt?: string; lineHeight?: string };
+      overridePages?: string[];
+    }
+  ) => {
+    const basePages =
+      opts?.overridePages ??
+      pagesHtmlRef.current.map((html, idx) => editorRefs.current[idx]?.innerHTML ?? html);
+
+    const activeEditor = editorRefs.current[editedPageIndex] ?? null;
+    const hasDomOverflow = editorRefs.current.some(
+      (el) => Boolean(el && el.scrollHeight > el.clientHeight + 2)
+    );
+    const result = reflowLiveEditedPages({
+      livePagesHtml: basePages,
+      paginateOptions: getLivePaginateOptions(opts?.overrideStyle),
+      activePageIndex: editedPageIndex,
+      captureActiveMarkerHtml:
+        activeEditor && document.activeElement === activeEditor
+          ? () => captureEditorHtmlWithCaretMarker(activeEditor)
+          : undefined,
+      hasDomOverflow,
+      forceApply: opts?.forceApply,
+    });
+
+    if (!result.changed) return;
+
+    const sanitizedPages = result.pagesHtml.map((p) => sanitizeAlteracaoHtml(p));
+    pendingCaretRef.current = result.caret;
+    pagesHtmlRef.current = sanitizedPages;
+    setPagesHtml(sanitizedPages);
+    setActivePageIndex((prev) =>
+      result.caret
+        ? Math.min(result.caret.pageIndex, Math.max(0, sanitizedPages.length - 1))
+        : Math.min(prev, Math.max(0, sanitizedPages.length - 1))
+    );
+    setSyncVersion((v) => v + 1);
+  };
+
+  const scheduleLiveReflow = (
+    editedPageIndex: number,
+    immediate: boolean,
+    overrideStyle?: { fontFamily?: string; fontSizePt?: string; lineHeight?: string }
+  ) => {
+    if (reflowTimerRef.current !== null) {
+      window.clearTimeout(reflowTimerRef.current);
+      reflowTimerRef.current = null;
+    }
+    const delay = immediate ? 16 : 90;
+    reflowTimerRef.current = window.setTimeout(() => {
+      reflowTimerRef.current = null;
+      runLiveLinkedReflow(editedPageIndex, { overrideStyle });
+    }, delay);
+  };
+
+  const handleLinkedBoundaryKey = (pageIndex: number, key: 'Backspace' | 'Delete'): boolean => {
+    const livePagesHtml = pagesHtmlRef.current.map(
+      (html, idx) => editorRefs.current[idx]?.innerHTML ?? html
+    );
+    const outcome = tryHandleLinkedBoundaryKey({
+      key,
+      pageIndex,
+      editors: editorRefs.current,
+      livePagesHtml,
+      paginateOptions: getLivePaginateOptions(),
+    });
+    if (!outcome.handled) return false;
+
+    if (reflowTimerRef.current !== null) {
+      window.clearTimeout(reflowTimerRef.current);
+      reflowTimerRef.current = null;
+    }
+
+    const sanitizedPages = outcome.pagesHtml.map((p) => sanitizeAlteracaoHtml(p));
+    pendingCaretRef.current = outcome.caret;
+    pagesHtmlRef.current = sanitizedPages;
+    setPagesHtml(sanitizedPages);
+    setActivePageIndex((prev) =>
+      outcome.caret
+        ? Math.min(outcome.caret.pageIndex, Math.max(0, sanitizedPages.length - 1))
+        : Math.min(prev, Math.max(0, sanitizedPages.length - 1))
+    );
+    setSyncVersion((v) => v + 1);
+    return true;
+  };
+
   const syncPageFromDom = (idx: number) => {
     const el = editorRefs.current[idx];
     if (!el) return;
@@ -642,6 +816,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     try {
       document.execCommand(command, false, value);
       syncPageFromDom(activePageIndex);
+      scheduleLiveReflow(activePageIndex, true);
     } catch {
       setNotice('Não foi possível aplicar esta formatação no navegador atual.');
     }
@@ -651,32 +826,33 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     const safePt = sanitizeCssFontSizePt(ptValue, '12pt');
     setFontSizePt(safePt);
     const target = focusActiveEditor();
-    if (!target) return;
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-
-    const range = selection.getRangeAt(0);
-    if (!target.contains(range.commonAncestorContainer)) return;
-
-    try {
-      const span = document.createElement('span');
-      span.style.fontSize = safePt;
-      span.appendChild(range.extractContents());
-      range.insertNode(span);
-      selection.removeAllRanges();
-      const after = document.createRange();
-      after.selectNodeContents(span);
-      selection.addRange(after);
-      syncPageFromDom(activePageIndex);
-    } catch {
-      // Fall back to base editor fontSizePt already updated above
+    if (target && selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      const range = selection.getRangeAt(0);
+      if (target.contains(range.commonAncestorContainer)) {
+        try {
+          const span = document.createElement('span');
+          span.style.fontSize = safePt;
+          span.appendChild(range.extractContents());
+          range.insertNode(span);
+          selection.removeAllRanges();
+          const after = document.createRange();
+          after.selectNodeContents(span);
+          selection.addRange(after);
+          syncPageFromDom(activePageIndex);
+        } catch {
+          // Fall back to base editor fontSizePt already updated above
+        }
+      }
     }
+    scheduleLiveReflow(activePageIndex, true, { fontSizePt: safePt });
   };
 
   const applySelectionFontFamily = (family: string) => {
     const safeFamily = sanitizeCssFontFamily(family, 'Times New Roman');
     setFontFamily(safeFamily);
     runFormatCommand('fontName', safeFamily);
+    scheduleLiveReflow(activePageIndex, true, { fontFamily: safeFamily });
   };
 
   const handleAddPage = () => {
@@ -701,7 +877,8 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escaped, 'gi');
 
-    const nextPages = pagesHtml.map((html) => {
+    const livePages = pagesHtml.map((html, idx) => editorRefs.current[idx]?.innerHTML ?? html);
+    const replacedPages = livePages.map((html) => {
       const doc = new DOMParser().parseFromString(html, 'text/html');
       const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
       let node: Node | null;
@@ -717,7 +894,14 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     });
 
     if (totalMatches > 0) {
-      setPagesHtml(nextPages);
+      const reflowResult = reflowLiveEditedPages({
+        livePagesHtml: replacedPages,
+        paginateOptions: getLivePaginateOptions(),
+        forceApply: true,
+      });
+      const finalPages = reflowResult.pagesHtml.map((p) => sanitizeAlteracaoHtml(p));
+      setPagesHtml(finalPages);
+      setActivePageIndex((prev) => Math.min(prev, Math.max(0, finalPages.length - 1)));
       setSyncVersion((v) => v + 1);
       setNotice(`${totalMatches} substituída(s).`);
     } else {
@@ -1816,7 +2000,11 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
               <select
                 aria-label="Espaçamento entre linhas"
                 value={lineHeight}
-                onChange={(e) => setLineHeight(sanitizeCssLineHeight(e.target.value, '1.22'))}
+                onChange={(e) => {
+                  const nextLh = sanitizeCssLineHeight(e.target.value, '1.22');
+                  setLineHeight(nextLh);
+                  scheduleLiveReflow(activePageIndex, true, { lineHeight: nextLh });
+                }}
                 title="Espaçamento entre linhas"
                 className="siscom-input h-9 sm:h-8 px-2 font-mono text-xs"
               >
@@ -2361,6 +2549,8 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                           prev[pageIndex] === overflows ? prev : { ...prev, [pageIndex]: overflows }
                         );
                       }}
+                      onTriggerReflow={(immediate) => scheduleLiveReflow(pageIndex, immediate)}
+                      onBoundaryKey={(key) => handleLinkedBoundaryKey(pageIndex, key)}
                     />
                   </div>
                   </div>

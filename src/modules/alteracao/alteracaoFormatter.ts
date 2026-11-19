@@ -37,6 +37,8 @@ export interface AlteracaoHtmlBlock {
   html: string;
   keepWithNext?: boolean;
   isSpacer?: boolean;
+  atomicGroupId?: string;
+  preserveIfSpacer?: boolean;
   tableMeta?: AlteracaoTableBlockMeta;
 }
 
@@ -1910,6 +1912,7 @@ export function renderBlocksFromStructuredDoc(
               blocks.push({
                 html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
                 keepWithNext: true,
+                atomicGroupId: item.id,
               });
             }
             blocks.push(spacer());
@@ -1919,6 +1922,7 @@ export function renderBlocksFromStructuredDoc(
               blocks.push({
                 html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
                 keepWithNext: true,
+                atomicGroupId: item.id,
               });
             }
           }
@@ -1934,13 +1938,17 @@ export function renderBlocksFromStructuredDoc(
             totalTables++;
             blocks.push({
               html: buildAlteracaoTableHtml(rowsHtml, item.id, colgroupHtml),
+              atomicGroupId: item.id,
               tableMeta: { rowsHtml, colgroupHtml, headerRowHtml, itemId: item.id },
             });
           }
         } else {
           item.paragraphs.forEach((para) => {
             totalEntries++;
-            blocks.push({ html: `<p${itemAttr}>${escapeAlteracaoHtml(para)}</p>` });
+            blocks.push({
+              html: `<p${itemAttr}>${escapeAlteracaoHtml(para)}</p>`,
+              atomicGroupId: item.id,
+            });
           });
         }
       });
@@ -1995,6 +2003,7 @@ export function renderBlocksFromStructuredDoc(
         }
         blocks.push({
           html: `<p style="text-align:center;">${formatLineWithBold(line, boldByIdx[idx])}</p>`,
+          atomicGroupId: 'part2-signature',
         });
         return;
       }
@@ -2004,7 +2013,11 @@ export function renderBlocksFromStructuredDoc(
         pushSpacerIfNeeded();
       }
 
-      blocks.push({ html: `<p>${formatLineWithBold(line, boldByIdx[idx])}</p>` });
+      const isPart2Item1Cluster = /^(?:1\.|a\.|b\.)\s*/i.test(line);
+      blocks.push({
+        html: `<p>${formatLineWithBold(line, boldByIdx[idx])}</p>`,
+        atomicGroupId: isPart2Item1Cluster ? 'part2-item-1' : undefined,
+      });
     });
   }
 
@@ -2066,6 +2079,7 @@ export function renderItemBlocksForInsertion(
           blocks.push({
             html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
             keepWithNext: true,
+            atomicGroupId: item.id,
           });
         }
         blocks.push(spacer());
@@ -2075,6 +2089,7 @@ export function renderItemBlocksForInsertion(
           blocks.push({
             html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
             keepWithNext: true,
+            atomicGroupId: item.id,
           });
         }
       }
@@ -2089,12 +2104,16 @@ export function renderItemBlocksForInsertion(
       if (rowsHtml.length > 0) {
         blocks.push({
           html: buildAlteracaoTableHtml(rowsHtml, item.id, colgroupHtml),
+          atomicGroupId: item.id,
           tableMeta: { rowsHtml, colgroupHtml, headerRowHtml, itemId: item.id },
         });
       }
     } else {
       item.paragraphs.forEach((para) => {
-        blocks.push({ html: `<p${itemAttr}>${escapeAlteracaoHtml(para)}</p>` });
+        blocks.push({
+          html: `<p${itemAttr}>${escapeAlteracaoHtml(para)}</p>`,
+          atomicGroupId: item.id,
+        });
       });
     }
   });

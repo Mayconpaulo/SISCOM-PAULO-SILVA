@@ -151,11 +151,41 @@ interface FlatNode {
   isNewPageBoundary?: boolean;
 }
 
+export const CARET_MARKER_ATTR = 'data-siscom-caret';
+
+export interface LiveCaretBookmark {
+  pageIndex: number;
+  blockIndex: number;
+  textOffset: number;
+  isEmptyBlock: boolean;
+}
+
+export interface LiveReflowResult {
+  changed: boolean;
+  pagesHtml: string[];
+  caret: LiveCaretBookmark | null;
+}
+
+function elementContainsCaretMarker(el: HTMLElement): boolean {
+  return el.hasAttribute(CARET_MARKER_ATTR) || Boolean(el.querySelector(`[${CARET_MARKER_ATTR}]`));
+}
+
+function isPart2FooterElement(el: HTMLElement): boolean {
+  if (el.tagName.toUpperCase() === 'TABLE') return false;
+  const styleAttr = (el.getAttribute('style') || '').toLowerCase();
+  const alignAttr = (el.getAttribute('align') || '').toLowerCase();
+  if (/text-align\s*:\s*center/.test(styleAttr) || alignAttr === 'center') return true;
+  const txt = (el.textContent || '').trim();
+  return /^Quartel\b/i.test(txt) || /^[_\-–—]{5,}$/.test(txt);
+}
+
 function elementsToReflowBlocks(
   nodes: Array<{ el?: HTMLElement; block?: AlteracaoHtmlBlock; crossedPageBreak?: boolean }>,
-  prefixEndedWithSpacer: boolean
+  prefixEndedWithSpacer: boolean,
+  opts?: { preserveUserSpacers?: boolean }
 ): AlteracaoHtmlBlock[] {
   const blocks: AlteracaoHtmlBlock[] = [];
+  const preserveUserSpacers = Boolean(opts?.preserveUserSpacers);
   const spacer = (): AlteracaoHtmlBlock => ({ html: '<p><br></p>', isSpacer: true });
 
   const lastIsSpacer = () =>
@@ -168,11 +198,14 @@ function elementsToReflowBlocks(
     return false;
   };
 
+  let inPart2 = false;
+  let inPart2Footer = false;
+
   for (const entry of nodes) {
     if (entry.block) {
       if (entry.block.isSpacer) {
-        if (!lastIsSpacer()) {
-          blocks.push(spacer());
+        if (entry.block.preserveIfSpacer || !lastIsSpacer()) {
+          blocks.push(entry.block.preserveIfSpacer ? entry.block : spacer());
         }
         continue;
       }
@@ -181,11 +214,31 @@ function elementsToReflowBlocks(
     }
 
     const el = entry.el!;
+    const hasCaret = elementContainsCaretMarker(el);
+
     if (isSpacerElement(el)) {
+      if (hasCaret) {
+        blocks.push({ html: el.outerHTML, isSpacer: true, preserveIfSpacer: true });
+        continue;
+      }
+      // Preserve intentional blank lines typed by the user inside a page during live editing,
+      // while avoiding duplicate spacers at old page break boundaries.
+      if (preserveUserSpacers && !entry.crossedPageBreak) {
+        blocks.push({ html: el.outerHTML, isSpacer: true });
+        continue;
+      }
       if (!lastIsSpacer()) {
         blocks.push(spacer());
       }
       continue;
+    }
+
+    const txtNorm = normalizeKey(el.textContent || '');
+    if (el.hasAttribute('data-alt-part2') || /^2[Aª]?\s*PARTE\b/.test(txtNorm)) {
+      inPart2 = true;
+      inPart2Footer = false;
+    } else if (inPart2 && !inPart2Footer && isPart2FooterElement(el)) {
+      inPart2Footer = true;
     }
 
     // If a section/month/group heading crossed a previous page break where its spacer was stripped,
@@ -197,6 +250,9 @@ function elementsToReflowBlocks(
     if (el.tagName.toUpperCase() === 'TABLE') {
       const tblBlock = extractTableMetaFromEl(el);
       const itemId = tblBlock.tableMeta?.itemId;
+      if (itemId) {
+        tblBlock.atomicGroupId = itemId;
+      }
       const prev = blocks[blocks.length - 1];
 
       // Merge split chunks of the SAME table across an old page break so it re-splits cleanly
@@ -237,9 +293,20 @@ function elementsToReflowBlocks(
       continue;
     }
 
+    const itemAttr = el.getAttribute('data-alt-item') || undefined;
+    let atomicGroupId = itemAttr;
+    if (!atomicGroupId && inPart2) {
+      if (inPart2Footer) {
+        atomicGroupId = 'part2-signature';
+      } else if (/^(?:1\.|a\.|b\.)\s*/i.test((el.textContent || '').trim())) {
+        atomicGroupId = 'part2-item-1';
+      }
+    }
+
     blocks.push({
       html: el.outerHTML,
       keepWithNext: isHeadingKeepWithNext(el),
+      atomicGroupId,
     });
   }
 
@@ -821,3 +888,478 @@ export function applyChecklistDeltaToLivePages(params: {
 
   return livePagesHtml;
 }
+
+interface PageBreakSignature {
+  nonSpacerCount: number;
+  tableRowCount: number;
+  firstKey: string;
+  lastKey: string;
+}
+
+function getPageBreakSignature(html: string): PageBreakSignature {
+  const els = parsePageElements(html);
+  const nonSpacers = els.filter((el) => !isSpacerElement(el));
+  let tableRowCount = 0;
+  for (const el of nonSpacers) {
+    if (el.tagName.toUpperCase() === 'TABLE') {
+      tableRowCount += el.querySelectorAll('tr').length;
+    }
+  }
+  const makeKey = (el?: HTMLElement): string => {
+    if (!el) return '';
+    const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    return `${el.tagName}:${txt.slice(0, 48)}:${txt.slice(-32)}`;
+  };
+  return {
+    nonSpacerCount: nonSpacers.length,
+    tableRowCount,
+    firstKey: makeKey(nonSpacers[0]),
+    lastKey: makeKey(nonSpacers[nonSpacers.length - 1]),
+  };
+}
+
+function didPageBreaksChange(beforePages: string[], afterPages: string[]): boolean {
+  if (beforePages.length !== afterPages.length) return true;
+  for (let i = 0; i < beforePages.length; i++) {
+    const a = getPageBreakSignature(beforePages[i]);
+    const b = getPageBreakSignature(afterPages[i]);
+    if (
+      a.nonSpacerCount !== b.nonSpacerCount ||
+      a.tableRowCount !== b.tableRowCount ||
+      a.firstKey !== b.firstKey ||
+      a.lastKey !== b.lastKey
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Temporarily injects an invisible caret marker into the active editor, reads its HTML,
+ * and immediately removes the marker so the live DOM remains untouched if unused.
+ */
+export function captureEditorHtmlWithCaretMarker(editorEl: HTMLDivElement): string | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const origRange = selection.getRangeAt(0);
+  if (!editorEl.contains(origRange.startContainer)) return null;
+
+  const savedStartContainer = origRange.startContainer;
+  const savedStartOffset = origRange.startOffset;
+  const savedEndContainer = origRange.endContainer;
+  const savedEndOffset = origRange.endOffset;
+
+  const marker = document.createElement('span');
+  marker.setAttribute(CARET_MARKER_ATTR, '1');
+
+  const insertRange = origRange.cloneRange();
+  insertRange.collapse(true);
+
+  let html: string | null = null;
+  try {
+    insertRange.insertNode(marker);
+    html = editorEl.innerHTML;
+  } catch {
+    html = null;
+  } finally {
+    if (marker.parentNode) {
+      const parent = marker.parentNode;
+      parent.removeChild(marker);
+      try {
+        // Rejoin split text nodes if marker split a text node
+        parent.normalize();
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      const restored = document.createRange();
+      restored.setStart(savedStartContainer, savedStartOffset);
+      restored.setEnd(savedEndContainer, savedEndOffset);
+      selection.removeAllRanges();
+      selection.addRange(restored);
+    } catch {
+      // ignore if DOM changed
+    }
+  }
+
+  return html;
+}
+
+function extractCaretBookmarkAndCleanHtml(pagesHtml: string[]): {
+  pagesHtml: string[];
+  caret: LiveCaretBookmark | null;
+} {
+  let caret: LiveCaretBookmark | null = null;
+  const cleaned = pagesHtml.map((html, pageIndex) => {
+    if (!html.includes(CARET_MARKER_ATTR)) return html;
+
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const marker = doc.body.querySelector(`[${CARET_MARKER_ATTR}]`);
+    if (!marker) return html;
+
+    // Find top-level child of doc.body containing marker
+    let topNode: Node | null = marker;
+    while (topNode && topNode.parentNode && topNode.parentNode !== doc.body) {
+      topNode = topNode.parentNode;
+    }
+
+    const topChildren = Array.from(doc.body.children);
+    const blockIndex =
+      topNode && topNode.nodeType === Node.ELEMENT_NODE
+        ? Math.max(0, topChildren.indexOf(topNode as HTMLElement))
+        : 0;
+
+    const scopeEl = (topChildren[blockIndex] as HTMLElement | undefined) ?? doc.body;
+    let textOffset = 0;
+    const walker = doc.createTreeWalker(
+      scopeEl,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT
+    );
+    let cur: Node | null;
+    while ((cur = walker.nextNode())) {
+      if (cur === marker) break;
+      if (cur.nodeType === Node.TEXT_NODE) {
+        textOffset += (cur.textContent || '').length;
+      }
+    }
+
+    marker.parentNode?.removeChild(marker);
+    const isEmptyBlock =
+      (scopeEl.textContent || '').replace(/\u00a0/g, '').trim().length === 0;
+
+    caret = {
+      pageIndex,
+      blockIndex,
+      textOffset,
+      isEmptyBlock,
+    };
+
+    const nextHtml = doc.body.innerHTML.trim();
+    return nextHtml || '<p><br></p>';
+  });
+
+  return { pagesHtml: cleaned, caret };
+}
+
+/**
+ * Restores the user's cursor to the exact character offset (even if the block moved to
+ * another page during linked-page reflow) and smoothly scrolls it into view if needed.
+ */
+export function restoreCaretBookmarkInEditors(
+  editors: (HTMLDivElement | null)[],
+  bookmark: LiveCaretBookmark
+): void {
+  const editor = editors[bookmark.pageIndex] ?? editors[editors.length - 1];
+  if (!editor) return;
+
+  try {
+    editor.focus({ preventScroll: true });
+  } catch {
+    editor.focus();
+  }
+
+  const children = Array.from(editor.children) as HTMLElement[];
+  const targetBlock =
+    children[Math.min(bookmark.blockIndex, Math.max(0, children.length - 1))] ?? editor;
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+
+  if (bookmark.isEmptyBlock) {
+    range.setStart(targetBlock, 0);
+    range.collapse(true);
+  } else {
+    let remaining = bookmark.textOffset;
+    let placed = false;
+    const walker = document.createTreeWalker(targetBlock, NodeFilter.SHOW_TEXT);
+    let lastTextNode: Text | null = null;
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const textNode = node as Text;
+      lastTextNode = textNode;
+      const len = textNode.data.length;
+      if (remaining <= len) {
+        range.setStart(textNode, remaining);
+        range.collapse(true);
+        placed = true;
+        break;
+      }
+      remaining -= len;
+    }
+    if (!placed) {
+      if (lastTextNode) {
+        range.setStart(lastTextNode, lastTextNode.data.length);
+        range.collapse(true);
+      } else {
+        range.selectNodeContents(targetBlock);
+        range.collapse(false);
+      }
+    }
+  }
+
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  // Only scroll if the target block is outside the visible viewport
+  try {
+    const rect = targetBlock.getBoundingClientRect();
+    if (rect.top < 72 || rect.bottom > window.innerHeight - 24) {
+      targetBlock.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
+    }
+  } catch {
+    // ignore scroll errors
+  }
+}
+
+function runLinkedPagination(
+  pagesHtml: string[],
+  paginateOptions: PaginateOptions
+): string[] {
+  const pageElsList = pagesHtml.map((html) => parsePageElements(html));
+  const flatEntries: Array<{ el: HTMLElement; crossedPageBreak: boolean }> = [];
+
+  pageElsList.forEach((els, pageIndex) => {
+    els.forEach((el, elIndex) => {
+      flatEntries.push({
+        el,
+        crossedPageBreak: elIndex === 0 && pageIndex > 0,
+      });
+    });
+  });
+
+  const blocks = elementsToReflowBlocks(flatEntries, false, {
+    preserveUserSpacers: true,
+  });
+
+  return paginateAlteracaoBlocksInDom(blocks, {
+    ...paginateOptions,
+    startOnContinuationPage: false,
+    lockedPrefixHtmls: [],
+  });
+}
+
+/**
+ * Reflows all linked A4 sheets continuously as one connected document while:
+ * - Pulling content UP automatically when text/blocks are deleted above,
+ * - Pushing overflowing content DOWN onto subsequent sheets (creating new sheets as needed),
+ * - Never cutting an atomic subject, paragraph, or single-page table in half,
+ * - Returning `changed: false` with zero DOM churn when no page break actually moved,
+ * - Preserving the exact caret position across page boundaries when breaks do move.
+ */
+export function reflowLiveEditedPages(params: {
+  livePagesHtml: string[];
+  paginateOptions: PaginateOptions;
+  activePageIndex?: number;
+  captureActiveMarkerHtml?: () => string | null;
+  hasDomOverflow?: boolean;
+  forceApply?: boolean;
+}): LiveReflowResult {
+  const {
+    livePagesHtml,
+    paginateOptions,
+    activePageIndex = 0,
+    captureActiveMarkerHtml,
+    hasDomOverflow = false,
+    forceApply = false,
+  } = params;
+
+  if (livePagesHtml.length === 0) {
+    return { changed: false, pagesHtml: ['<p><br></p>'], caret: null };
+  }
+
+  // Phase 1: fast pure off-screen check without touching live DOM selection
+  const probeReflowed = runLinkedPagination(livePagesHtml, paginateOptions);
+  const breaksChanged = didPageBreaksChange(livePagesHtml, probeReflowed);
+
+  if (!breaksChanged && !hasDomOverflow && !forceApply) {
+    return { changed: false, pagesHtml: livePagesHtml, caret: null };
+  }
+
+  // Phase 2: page boundary moved (or active page overflows on a trailing blank line) ->
+  // capture live caret marker and reflow once with marker
+  const markedHtml = captureActiveMarkerHtml ? captureActiveMarkerHtml() : null;
+  if (!markedHtml) {
+    if (!breaksChanged && !forceApply) {
+      return { changed: false, pagesHtml: livePagesHtml, caret: null };
+    }
+    return { changed: true, pagesHtml: probeReflowed, caret: null };
+  }
+
+  const markedPages = [...livePagesHtml];
+  if (activePageIndex >= 0 && activePageIndex < markedPages.length) {
+    markedPages[activePageIndex] = markedHtml;
+  }
+
+  const reflowedWithMarker = runLinkedPagination(markedPages, paginateOptions);
+  const { pagesHtml: cleanPages, caret } = extractCaretBookmarkAndCleanHtml(reflowedWithMarker);
+
+  const markedBreaksChanged =
+    breaksChanged ||
+    didPageBreaksChange(livePagesHtml, cleanPages) ||
+    cleanPages.length !== livePagesHtml.length ||
+    (caret !== null && caret.pageIndex !== activePageIndex);
+
+  if (!markedBreaksChanged && !forceApply) {
+    return { changed: false, pagesHtml: livePagesHtml, caret: null };
+  }
+
+  return {
+    changed: true,
+    pagesHtml: cleanPages,
+    caret,
+  };
+}
+
+function isSelectionAtStartOfEditor(editorEl: HTMLDivElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  if (!editorEl.contains(range.startContainer)) return false;
+
+  const pre = document.createRange();
+  pre.selectNodeContents(editorEl);
+  pre.setEnd(range.startContainer, range.startOffset);
+  if (pre.toString().length > 0) return false;
+
+  // Ensure there is no preceding non-empty block or table before the caret
+  const frag = pre.cloneContents();
+  if (frag.querySelector('table')) return false;
+  const blockEls = Array.from(frag.querySelectorAll('p, div, li'));
+  // If cursor is in the 2nd+ empty line at top of page, let native Backspace delete the empty line first
+  if (blockEls.length > 1) return false;
+  return true;
+}
+
+function isSelectionAtEndOfEditor(editorEl: HTMLDivElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  if (!editorEl.contains(range.endContainer)) return false;
+
+  const post = document.createRange();
+  post.selectNodeContents(editorEl);
+  post.setStart(range.endContainer, range.endOffset);
+  if (post.toString().length > 0) return false;
+
+  const frag = post.cloneContents();
+  if (frag.querySelector('table')) return false;
+  const blockEls = Array.from(frag.querySelectorAll('p, div, li'));
+  if (blockEls.length > 1) return false;
+  return true;
+}
+
+/**
+ * Handles Backspace at the very start of Page P (P > 0) and Delete at the very end of Page P (P < N - 1)
+ * so adjacent sheets behave as one continuous linked document.
+ */
+export function tryHandleLinkedBoundaryKey(params: {
+  key: 'Backspace' | 'Delete';
+  pageIndex: number;
+  editors: (HTMLDivElement | null)[];
+  livePagesHtml: string[];
+  paginateOptions: PaginateOptions;
+}): { handled: false } | { handled: true; pagesHtml: string[]; caret: LiveCaretBookmark | null } {
+  const { key, pageIndex, editors, livePagesHtml, paginateOptions } = params;
+  const editorEl = editors[pageIndex];
+  if (!editorEl) return { handled: false };
+
+  if (key === 'Backspace') {
+    if (pageIndex <= 0 || !isSelectionAtStartOfEditor(editorEl)) {
+      return { handled: false };
+    }
+    const prevEls = parsePageElements(livePagesHtml[pageIndex - 1]);
+    const currEls = parsePageElements(livePagesHtml[pageIndex]);
+    if (prevEls.length === 0 || currEls.length === 0) return { handled: false };
+
+    const prevLast = prevEls[prevEls.length - 1];
+    const currFirst = currEls[0];
+
+    const markerHtml = `<span ${CARET_MARKER_ATTR}="1"></span>`;
+    const nextPages = [...livePagesHtml];
+
+    if (isSpacerElement(prevLast)) {
+      // Remove trailing blank line on previous page and keep cursor at start of currFirst
+      prevEls.pop();
+      currFirst.insertAdjacentHTML('afterbegin', markerHtml);
+      nextPages[pageIndex - 1] = prevEls.map((e) => e.outerHTML).join('\n') || '<p><br></p>';
+      nextPages[pageIndex] = currEls.map((e) => e.outerHTML).join('\n');
+    } else if (isSpacerElement(currFirst)) {
+      // Current first line is empty: remove it and place caret at end of previous page's last block
+      currEls.shift();
+      prevLast.insertAdjacentHTML('beforeend', markerHtml);
+      nextPages[pageIndex - 1] = prevEls.map((e) => e.outerHTML).join('\n');
+      nextPages[pageIndex] = currEls.map((e) => e.outerHTML).join('\n');
+    } else if (
+      prevLast.tagName.toUpperCase() !== 'TABLE' &&
+      currFirst.tagName.toUpperCase() !== 'TABLE'
+    ) {
+      // Merge currFirst into prevLast with caret right at the join point
+      prevLast.insertAdjacentHTML('beforeend', markerHtml);
+      while (currFirst.firstChild) {
+        prevLast.appendChild(currFirst.firstChild);
+      }
+      currEls.shift();
+      nextPages[pageIndex - 1] = prevEls.map((e) => e.outerHTML).join('\n');
+      nextPages[pageIndex] = currEls.map((e) => e.outerHTML).join('\n');
+    } else {
+      // Adjacent table: jump cursor smoothly to the end of previous page without corrupting table
+      return {
+        handled: true,
+        pagesHtml: livePagesHtml,
+        caret: {
+          pageIndex: pageIndex - 1,
+          blockIndex: Math.max(0, prevEls.length - 1),
+          textOffset: (prevLast.textContent || '').length,
+          isEmptyBlock: isSpacerElement(prevLast),
+        },
+      };
+    }
+
+    const reflowed = runLinkedPagination(nextPages, paginateOptions);
+    const { pagesHtml, caret } = extractCaretBookmarkAndCleanHtml(reflowed);
+    return { handled: true, pagesHtml, caret };
+  }
+
+  // key === 'Delete'
+  if (pageIndex >= livePagesHtml.length - 1 || !isSelectionAtEndOfEditor(editorEl)) {
+    return { handled: false };
+  }
+
+  const currEls = parsePageElements(livePagesHtml[pageIndex]);
+  const nextEls = parsePageElements(livePagesHtml[pageIndex + 1]);
+  if (currEls.length === 0 || nextEls.length === 0) return { handled: false };
+
+  const currLast = currEls[currEls.length - 1];
+  const nextFirst = nextEls[0];
+  const markerHtml = `<span ${CARET_MARKER_ATTR}="1"></span>`;
+  const nextPages = [...livePagesHtml];
+
+  if (isSpacerElement(nextFirst)) {
+    nextEls.shift();
+    currLast.insertAdjacentHTML('beforeend', markerHtml);
+    nextPages[pageIndex] = currEls.map((e) => e.outerHTML).join('\n');
+    nextPages[pageIndex + 1] = nextEls.map((e) => e.outerHTML).join('\n');
+  } else if (
+    currLast.tagName.toUpperCase() !== 'TABLE' &&
+    nextFirst.tagName.toUpperCase() !== 'TABLE'
+  ) {
+    currLast.insertAdjacentHTML('beforeend', markerHtml);
+    while (nextFirst.firstChild) {
+      currLast.appendChild(nextFirst.firstChild);
+    }
+    nextEls.shift();
+    nextPages[pageIndex] = currEls.map((e) => e.outerHTML).join('\n');
+    nextPages[pageIndex + 1] = nextEls.map((e) => e.outerHTML).join('\n');
+  } else {
+    return { handled: false };
+  }
+
+  const reflowed = runLinkedPagination(nextPages, paginateOptions);
+  const { pagesHtml, caret } = extractCaretBookmarkAndCleanHtml(reflowed);
+  return { handled: true, pagesHtml, caret };
+}
+
