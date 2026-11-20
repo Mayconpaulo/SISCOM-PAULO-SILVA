@@ -970,6 +970,68 @@ function isEntryStartLine(text: string): boolean {
   return /^[-–—]\s*/.test(t) && t.length > 2 && !isSemAlteracaoLine(t);
 }
 
+/**
+ * Matches dated/numbered BI header prefixes ending with ":" such as:
+ * "- a 14, BI Nº 31:", "- em 05, BI nº 102:", "- a 12, Adit BI nº 15:", "- BI Nº 12:".
+ * The opening BI text MUST ALWAYS be pulled onto the same line immediately after ":".
+ */
+function isBiHeaderColonPrefix(text: string): boolean {
+  const clean = cleanInlineWhitespace(text);
+  if (!clean || clean.length > 125 || !/:$/.test(clean)) return false;
+  if (
+    /^[-–—]\s*(?:(?:a|em|de|no\s+dia)\s+\d{1,2}\b|\d{1,2}\s*(?:\/|\.|de\b))/i.test(clean)
+  ) {
+    return true;
+  }
+  if (/^[-–—]\s*(?:BI|BOL|BOLETIM|ADIT|ADITAMENTO|PORTARIA|BOL\s+INT)\b/i.test(clean)) {
+    return true;
+  }
+  return false;
+}
+
+const KNOWN_MAJOR_SECTION_TITLES = new Set([
+  'ASSUNTOS GERAIS E ADMINISTRATIVOS',
+  'INSTRUCAO',
+  'JUSTICA E DISCIPLINA',
+  'SERVICOS DIARIOS',
+  'SERVICO DIARIO',
+  'COMPORTAMENTO',
+  'COMPORTAMENTO MILITAR',
+  'ELOGIOS',
+  'PUNICOES',
+  'CONDECORACOES',
+  'MOVIMENTACAO',
+  'PROMOCOES',
+  'INSPECAO DE SAUDE',
+  'TEMPO DE SERVICO',
+  'ALTERACOES DE OFICIAIS',
+  'ALTERACOES DE SUBTENENTES E SARGENTOS',
+  'ALTERACOES DE CABOS E SOLDADOS',
+  'ALTERACOES DE PRACAS',
+  '1A PARTE',
+  '2A PARTE',
+]);
+
+function isKnownMajorSectionTitle(text: string): boolean {
+  const norm = stripDiacriticsUpper(cleanInlineWhitespace(text)).replace(/[:.\-–—\s]+$/, '');
+  return KNOWN_MAJOR_SECTION_TITLES.has(norm) || /^ALTERACOES\s+DE\s+/.test(norm);
+}
+
+function cleanSubtitleAgainstTitle(title: string, subtitle: string): string {
+  const cleanSub = cleanInlineWhitespace(subtitle);
+  if (!cleanSub) return '';
+  const normTitle = stripDiacriticsUpper(title);
+  const normSub = stripDiacriticsUpper(cleanSub);
+  if (!normTitle) return cleanSub;
+  if (normSub === normTitle) return '';
+  const dashMatch = cleanSub.match(/^(.+?)(?:\s+[-–—]\s*|\s*[-–—]\s+)(.+)$/);
+  if (dashMatch && stripDiacriticsUpper(dashMatch[1]) === normTitle) {
+    const stripped = dashMatch[2].trim();
+    return stripDiacriticsUpper(stripped) === normTitle ? '' : stripped;
+  }
+  return cleanSub;
+}
+
 function isUppercaseHeadingCandidate(text: string): boolean {
   const clean = cleanInlineWhitespace(text);
   if (!clean || clean.length > 90) return false;
@@ -989,25 +1051,31 @@ function isUppercaseHeadingCandidate(text: string): boolean {
 
   const letters = clean.replace(/[^A-Za-zÀ-ÿ]/g, '');
   if (letters.length < 3) return false;
-  return clean === clean.toUpperCase();
+  const withoutPrep = clean.replace(/\b(?:de|da|do|das|dos|e|em|para|por|com|a|o|as|os)\b/g, '');
+  const contentLetters = withoutPrep.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  return contentLetters.length >= 3 && withoutPrep === withoutPrep.toUpperCase();
 }
 
 function splitTitleSubtitleDash(
   text: string,
-  allowSplit: boolean
+  allowSplit: boolean,
+  isBoldLine = false
 ): { title: string; subtitle: string; isSubtitleOnly?: boolean } | null {
   if (!allowSplit) return null;
   const clean = cleanInlineWhitespace(text);
   if (!clean || isEntryStartLine(clean) || isSemAlteracaoLine(clean)) return null;
-  if (/[.;!?]$/.test(clean)) return null;
+  if (/[;!?]$/.test(clean)) return null;
+  if (/\.$/.test(clean) && !isBoldLine && !ABBREV_END_RE.test(clean)) return null;
   if (/\bBI\s*N[º°o]/i.test(clean) || /\bnominado a seguir\b/i.test(clean)) return null;
 
-  const dashMatch = clean.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  // Match first separator dash with whitespace on at least one side (never breaks hyphenated words like SUB-TENENTE).
+  // Everything after that dash is the complete Subtitle (even if it contains additional dashes).
+  const dashMatch = clean.match(/^(.+?)(?:\s+[-–—]\s*|\s*[-–—]\s+)(.+)$/);
   if (!dashMatch) return null;
 
   const left = dashMatch[1].trim();
   const right = dashMatch[2].trim();
-  if (!left || !right || left.length > 90 || right.length > 160) return null;
+  if (!left || !right || left.length > 90 || right.length > 260) return null;
   if (/:/.test(left)) return null;
 
   // Never mistake date/bulletin/document prefixes for a Section Title
@@ -1034,7 +1102,12 @@ function splitTitleSubtitleDash(
     };
   }
 
-  const leftIsAllCaps = left === left.toUpperCase();
+  // Allow lowercase Portuguese prepositions inside an uppercase Title (e.g. "ASSUNTOS GERAIS e ADMINISTRATIVOS")
+  if (/^\d/.test(left)) return null;
+  const leftWithoutPrep = left.replace(/\b(?:de|da|do|das|dos|e|em|para|por|com|a|o|as|os)\b/g, '');
+  const leftContentLetters = leftWithoutPrep.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  const leftIsAllCaps =
+    leftContentLetters.length >= 3 && leftWithoutPrep === leftWithoutPrep.toUpperCase();
   if (!leftIsAllCaps) return null;
 
   return {
@@ -1338,20 +1411,50 @@ function isPeriodoLine(lineText: string): boolean {
   return /^PER[ÍI]ODO\s*:/i.test(cleanInlineWhitespace(lineText));
 }
 
+/**
+ * Detects standalone header lines requesting CP / PREC-CP (which are omitted from our Alterações).
+ * Never matches CPF, CPO, CPOR, CPEX, etc.
+ */
+function isStandaloneCpLine(text: string): boolean {
+  const clean = cleanInlineWhitespace(text);
+  if (!clean || clean.length > 80) return false;
+  return /^(?:PREC[\s\/\-–—]*CP|C\.?\s*P\.?)(?:\s*:\s*[\dA-Za-z.\-\/\s]*|\s+[\d.\-\/\s]{2,}|\s*$)/i.test(
+    clean
+  );
+}
+
+/**
+ * Strips inline "CP: ..." / "PREC-CP: ..." fragments from extracted header field values
+ * without ever touching CPF, CPO, CPOR, etc.
+ */
+function stripInlineCpField(val: string): string {
+  const cleaned = cleanInlineWhitespace(val)
+    .replace(
+      /(?:^|[\s,;|\-–—]+)(?:PREC[\s\/\-–—]*CP|C\.?P\.?)\s*:\s*(?:[\d.\-\/]+(?:\s+[\d.\-\/]+)*)?(?=\s*(?:$|[,;|]|PER[ÍI]ODO\b|SEMESTRE\b|FOLHA\b|QAS\b|QMS\b|POSTO\b|IDENTIDADE\b))/gi,
+      ' '
+    )
+    .replace(
+      /(?:^|[\s,;|\-–—]+)(?:PREC[\s\/\-–—]*CP|C\.?P\.?)\s+[\d.\-\/]{3,}(?=\s*(?:$|[,;|]|PER[ÍI]ODO\b|SEMESTRE\b|FOLHA\b))/gi,
+      ' '
+    )
+    .replace(/\s*[-–—|;,:]+\s*$/, '');
+  return cleanInlineWhitespace(cleaned);
+}
+
 function extractInlineHeaderDates(lineText: string, header: AlteracaoHeaderExtract) {
-  const clean = cleanInlineWhitespace(lineText);
+  const clean = stripInlineCpField(cleanInlineWhitespace(lineText));
   const semMatch = clean.match(
     /\b((?:1|2|PRIMEIRO|SEGUNDO)\s*[º°o]?\s*SEM(?:ESTRE)?\s*(?:(?:DE|\/|-)\s*\d{4})?)\b/i
   );
   if (semMatch && !header.semestre) {
-    header.semestre = semMatch[1].trim();
+    header.semestre = stripInlineCpField(semMatch[1]);
   }
 
   const perMatch = clean.match(
     /\bPER[ÍI]ODO\s*:\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}\s*(?:a|ate|até|-)\s*\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}|\S.+)$/i
   );
   if (perMatch && !header.periodo) {
-    header.periodo = perMatch[1].trim();
+    header.periodo = stripInlineCpField(perMatch[1]);
   }
 
   const folhaMatch = clean.match(/\bFOLHA\s+N[º°o]?\s*(\d+)\b/i);
@@ -1390,7 +1493,7 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
         ) {
           break;
         }
-        if (isFolhaNumberLine(prev)) {
+        if (isFolhaNumberLine(prev) || isStandaloneCpLine(prev)) {
           skipIndices.add(idxBack);
           extractInlineHeaderDates(prev, header);
           continue;
@@ -1403,7 +1506,7 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
         ) {
           skipIndices.add(idxBack);
           if (!header.omExtenso) {
-            header.omExtenso = prev;
+            header.omExtenso = stripInlineCpField(prev);
           }
         }
       }
@@ -1425,6 +1528,7 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
           isFolhaNumberLine(nextText) ||
           isSemestreLine(nextText) ||
           isPeriodoLine(nextText) ||
+          isStandaloneCpLine(nextText) ||
           (j === i + 4 && nextText.length <= 65 && !/[.;!?]$/.test(nextText))
         ) {
           skipIndices.add(j);
@@ -1458,7 +1562,10 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
 
     extractInlineHeaderDates(text, header);
 
-    if (/^MINISTERIO DA DEFESA\b/.test(u)) {
+    if (isStandaloneCpLine(text)) {
+      // Reference Alteração header may contain a standalone CP / PREC-CP line: always drop it
+      skipIndices.add(i);
+    } else if (/^MINISTERIO DA DEFESA\b/.test(u)) {
       header.ministerio = text;
       skipIndices.add(i);
     } else if (/^EXERCITO BRASILEIRO\b/.test(u)) {
@@ -1468,7 +1575,7 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
       header.tituloDocumento = text;
       skipIndices.add(i);
     } else if (/^GUARNICAO\b/.test(u)) {
-      header.guarnicao = text;
+      header.guarnicao = stripInlineCpField(text);
       skipIndices.add(i);
     } else if (isFolhaNumberLine(text)) {
       const m = text.match(/(\d+)/);
@@ -1487,38 +1594,41 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
       /\b(BI|OM|ES|BEC|GAC|RC|MEC)\b/i.test(text) &&
       text.length < 45
     ) {
-      header.omCodom = text;
+      header.omCodom = stripInlineCpField(text);
       skipIndices.add(i);
     } else if (/^NOME\s*:/i.test(text)) {
-      const val = text.replace(/^NOME\s*:\s*/i, '').trim();
+      const val = stripInlineCpField(text.replace(/^NOME\s*:\s*/i, ''));
       if (val) header.nomeCompleto = val;
       if (boldSubstring && val.toUpperCase().includes(boldSubstring.toUpperCase())) {
         header.nomeGuerra = boldSubstring;
       }
       skipIndices.add(i);
     } else if (/^POSTO\s*\/?\s*GRADUA[ÇC][ÃA]O\s*:/i.test(text)) {
-      const val = text.replace(/^POSTO\s*\/?\s*GRADUA[ÇC][ÃA]O\s*:\s*/i, '').trim();
+      const val = stripInlineCpField(text.replace(/^POSTO\s*\/?\s*GRADUA[ÇC][ÃA]O\s*:\s*/i, ''));
       if (val) header.postoGraduacao = val;
       skipIndices.add(i);
     } else if (/^QAS\s*\/?\s*QMS\s*:/i.test(text)) {
-      const val = text.replace(/^QAS\s*\/?\s*QMS\s*:\s*/i, '').trim();
+      const val = stripInlineCpField(text.replace(/^QAS\s*\/?\s*QMS\s*:\s*/i, ''));
       if (val) header.qasQms = val;
       skipIndices.add(i);
     } else if (/^IDENTIDADE\s*:/i.test(text)) {
-      const val = text.replace(/^IDENTIDADE\s*:\s*/i, '').trim();
-      const splitPeriodo = val.match(/^(.+?)\s+PER[ÍI]ODO\s*:\s*(.+)$/i);
+      const rawVal = text.replace(/^IDENTIDADE\s*:\s*/i, '').trim();
+      const splitPeriodo = rawVal.match(/^(.+?)\s+PER[ÍI]ODO\s*:\s*(.+)$/i);
       if (splitPeriodo) {
-        header.identidade = splitPeriodo[1].trim();
-        header.periodo = splitPeriodo[2].trim();
-      } else if (val) {
-        header.identidade = val;
+        const cleanId = stripInlineCpField(splitPeriodo[1]);
+        const cleanPer = stripInlineCpField(splitPeriodo[2]);
+        if (cleanId) header.identidade = cleanId;
+        if (cleanPer) header.periodo = cleanPer;
+      } else {
+        const cleanId = stripInlineCpField(rawVal);
+        if (cleanId) header.identidade = cleanId;
       }
       skipIndices.add(i);
     } else if (isSemestreLine(text)) {
-      header.semestre = text;
+      header.semestre = stripInlineCpField(text);
       skipIndices.add(i);
     } else if (isPeriodoLine(text)) {
-      const val = text.replace(/^PER[ÍI]ODO\s*:\s*/i, '').trim();
+      const val = stripInlineCpField(text.replace(/^PER[ÍI]ODO\s*:\s*/i, ''));
       if (val) header.periodo = val;
       skipIndices.add(i);
     } else if (bodyStartIdx > 0 && i < bodyStartIdx) {
@@ -1537,7 +1647,12 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
     const item = rawLines[i];
     if (!item.tableRows) {
       const t = item.text;
-      if (isFolhaNumberLine(t) || isSemestreLine(t) || isPeriodoLine(t)) {
+      if (
+        isFolhaNumberLine(t) ||
+        isSemestreLine(t) ||
+        isPeriodoLine(t) ||
+        isStandaloneCpLine(t)
+      ) {
         sawSkipped = true;
         continue;
       }
@@ -1982,31 +2097,36 @@ export function renderBlocksFromStructuredDoc(
       let lastRenderedSubtitleKey = '';
 
       grp.items.forEach((item, itemIdx) => {
-        const subKey = stripDiacriticsUpper(item.subtitle);
+        const effectiveSubtitle = cleanSubtitleAgainstTitle(grp.displayTitle, item.subtitle);
+        const subKey = stripDiacriticsUpper(effectiveSubtitle);
         const sameSubtitleAsPrevTableContinuation =
           item.kind === 'table' &&
           itemIdx > 0 &&
+          subKey !== '' &&
           subKey === lastRenderedSubtitleKey;
 
         const itemAttr = ` data-alt-item="${escapeAlteracaoHtml(item.id)}"`;
+        // Bind Subtitle + Table atomically, while text BI paragraphs flow smoothly line-by-line
+        // across page boundaries without dragging entire multi-paragraph blocks back and forth.
+        const subAtomicId = item.kind === 'table' ? item.id : undefined;
 
         if (!sameSubtitleAsPrevTableContinuation) {
           if (itemIdx === 0) {
-            if (item.subtitle) {
+            if (effectiveSubtitle) {
               blocks.push({
-                html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
+                html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(effectiveSubtitle)}</strong></p>`,
                 keepWithNext: true,
-                atomicGroupId: item.id,
+                atomicGroupId: subAtomicId,
               });
             }
             blocks.push(spacer());
           } else {
             blocks.push(spacer());
-            if (item.subtitle) {
+            if (effectiveSubtitle) {
               blocks.push({
-                html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
+                html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(effectiveSubtitle)}</strong></p>`,
                 keepWithNext: true,
-                atomicGroupId: item.id,
+                atomicGroupId: subAtomicId,
               });
             }
           }
@@ -2031,7 +2151,6 @@ export function renderBlocksFromStructuredDoc(
             totalEntries++;
             blocks.push({
               html: `<p${itemAttr}>${escapeAlteracaoHtml(para)}</p>`,
-              atomicGroupId: item.id,
             });
           });
         }
@@ -2165,7 +2284,8 @@ export function renderItemBlocksForInsertion(
 
   itemsToInsert.forEach((item, idx) => {
     const isFirst = opts.isFirstItemInGroup && idx === 0;
-    const subKey = stripDiacriticsUpper(item.subtitle);
+    const effectiveSubtitle = cleanSubtitleAgainstTitle(displayTitle, item.subtitle);
+    const subKey = stripDiacriticsUpper(effectiveSubtitle);
     const sameSubtitleAsPrevTableContinuation =
       item.kind === 'table' &&
       !isFirst &&
@@ -2173,24 +2293,25 @@ export function renderItemBlocksForInsertion(
       subKey === lastRenderedSubtitleKey;
 
     const itemAttr = ` data-alt-item="${escapeAlteracaoHtml(item.id)}"`;
+    const subAtomicId = item.kind === 'table' ? item.id : undefined;
 
     if (!sameSubtitleAsPrevTableContinuation) {
       if (isFirst) {
-        if (item.subtitle) {
+        if (effectiveSubtitle) {
           blocks.push({
-            html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
+            html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(effectiveSubtitle)}</strong></p>`,
             keepWithNext: true,
-            atomicGroupId: item.id,
+            atomicGroupId: subAtomicId,
           });
         }
         blocks.push(spacer());
       } else {
         blocks.push(spacer());
-        if (item.subtitle) {
+        if (effectiveSubtitle) {
           blocks.push({
-            html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(item.subtitle)}</strong></p>`,
+            html: `<p${itemAttr}><strong>${escapeAlteracaoHtml(effectiveSubtitle)}</strong></p>`,
             keepWithNext: true,
-            atomicGroupId: item.id,
+            atomicGroupId: subAtomicId,
           });
         }
       }
@@ -2213,7 +2334,6 @@ export function renderItemBlocksForInsertion(
       item.paragraphs.forEach((para) => {
         blocks.push({
           html: `<p${itemAttr}>${escapeAlteracaoHtml(para)}</p>`,
-          atomicGroupId: item.id,
         });
       });
     }
@@ -2416,9 +2536,10 @@ export function formatAlteracaoLinesToBlocks(
         prevComp &&
         !isComportamentoHeadingLine(prevComp.text) &&
         !isEntryStartLine(text) &&
-        !shouldBreakBeforeLine(lastRawLineForComportamento, raw, prevComp.text)
+        (isBiHeaderColonPrefix(prevComp.text) ||
+          !shouldBreakBeforeLine(lastRawLineForComportamento, raw, prevComp.text))
       ) {
-        prevComp.text = `${prevComp.text} ${text}`;
+        prevComp.text = `${prevComp.text.replace(/\s+:$/, ':')} ${text}`;
       } else {
         comportamentoLines.push({
           text: isEntryStartLine(text) ? normalizeEntryColon(text) : text,
@@ -2477,12 +2598,52 @@ export function formatAlteracaoLinesToBlocks(
     const prevParaEndedSentence =
       !lastPara || (/[.;!?]$/.test(lastPara) && !ABBREV_END_RE.test(lastPara));
     const prevParaEndsColon = /:$/.test(lastPara);
-    const canStartHeading = prevParaEndedSentence && !prevParaEndsColon;
+    const prevIsBiColon = isBiHeaderColonPrefix(lastPara);
+    // Allow starting a new Title/Subtitle whenever we're NOT waiting for BI body text right after
+    // "- a DD, BI Nº XX:", and either there is no open paragraph, the previous line ended a sentence,
+    // or the previous line ended with an intentional hard line break (e.g. "Menção: MB").
+    const canStartHeading =
+      !prevIsBiColon &&
+      (!lastPara ||
+        prevParaEndedSentence ||
+        lastRawLineForEntry?.hardBreakAfter === true ||
+        raw.hardBreakBefore === true ||
+        (!prevParaEndsColon && Boolean(raw.isBold)));
 
     const nextLine = i + 1 < bodyLines.length ? bodyLines[i + 1] : undefined;
+    const nextStartsEntryOrTable = Boolean(
+      nextLine && (Boolean(nextLine.tableRows) || isEntryStartLine(nextLine.text))
+    );
+
+    const consumeWrappedSubtitle = (initialRaw: RawAlteracaoLine, baseSubtitle: string): string => {
+      let acc = baseSubtitle;
+      let prevHeadingRaw = initialRaw;
+      while (prevHeadingRaw.hardBreakAfter === false && i + 1 < bodyLines.length) {
+        const cont = bodyLines[i + 1];
+        if (!cont || cont.tableRows) break;
+        const contText = cleanInlineWhitespace(cont.text);
+        if (
+          !contText ||
+          isEntryStartLine(contText) ||
+          isSemAlteracaoLine(contText) ||
+          normalizeMonthHeading(contText) ||
+          isPart1Line(contText) ||
+          isPart2Line(contText) ||
+          isAnyComportamentoLine(contText) ||
+          splitTitleSubtitleDash(contText, true, Boolean(cont.isBold)) ||
+          isKnownMajorSectionTitle(contText)
+        ) {
+          break;
+        }
+        acc = `${acc} ${contText}`;
+        prevHeadingRaw = cont;
+        i++;
+      }
+      return cleanInlineWhitespace(acc);
+    };
 
     // 0. Guard: standalone "Férias" / "FÉRIAS" line is ALWAYS subtitle, NEVER title
-    if (isNonTitleTopic(text) && !isEntryStartLine(text)) {
+    if (!prevIsBiColon && isNonTitleTopic(text) && !isEntryStartLine(text)) {
       const parentTitle = resolveActiveTitle();
       currentTitle = parentTitle;
       lastTitleInMonth = parentTitle;
@@ -2498,30 +2659,47 @@ export function formatAlteracaoLinesToBlocks(
         !normalizeMonthHeading(nextLine.text) &&
         !isPart2Line(nextLine.text) &&
         !/[.;!?]$/.test(nextLine.text) &&
-        nextLine.text.length <= 140
+        nextLine.text.length <= 160
       ) {
-        currentSubtitle = `${normalizeFeriasPrefix(text)} - ${cleanInlineWhitespace(nextLine.text)}`;
         i++;
+        currentSubtitle = consumeWrappedSubtitle(
+          nextLine,
+          `${normalizeFeriasPrefix(text)} - ${cleanInlineWhitespace(nextLine.text)}`
+        );
       } else {
         currentSubtitle = normalizeFeriasPrefix(text);
       }
       continue;
     }
 
-    // 1. Check "TÍTULO - Subtítulo" on single line (never mid-sentence)
-    const splitDash = splitTitleSubtitleDash(text, Boolean(raw.isBold) || canStartHeading);
+    // 1. Check "TÍTULO - Subtítulo" on single line: Title in bold, EVERYTHING after dash is Subtitle in bold
+    const splitDash = splitTitleSubtitleDash(
+      text,
+      !prevIsBiColon &&
+        (Boolean(raw.isBold) ||
+          Boolean(raw.boldSubstring) ||
+          canStartHeading ||
+          nextStartsEntryOrTable),
+      Boolean(raw.isBold)
+    );
     if (splitDash) {
       if (splitDash.isSubtitleOnly || !splitDash.title) {
         const parentTitle = resolveActiveTitle();
         currentTitle = parentTitle;
         lastTitleInMonth = parentTitle;
         lastKnownTitleOverall = parentTitle;
-        currentSubtitle = splitDash.subtitle;
+        currentSubtitle = cleanSubtitleAgainstTitle(
+          parentTitle,
+          consumeWrappedSubtitle(raw, splitDash.subtitle)
+        );
       } else {
         currentTitle = splitDash.title;
         lastTitleInMonth = splitDash.title;
         lastKnownTitleOverall = splitDash.title;
-        currentSubtitle = splitDash.subtitle;
+        currentSubtitle = cleanSubtitleAgainstTitle(
+          splitDash.title,
+          consumeWrappedSubtitle(raw, splitDash.subtitle)
+        );
       }
       currentEntryItem = null;
       lastRawLineForEntry = null;
@@ -2529,11 +2707,18 @@ export function formatAlteracaoLinesToBlocks(
     }
 
     // 2. Check standalone Bold/Uppercase Title line (e.g., "INSTRUÇÃO" followed by Subtitle or table)
+    const nextLooksLikeSubtitleOrEntry = Boolean(
+      nextLine &&
+        (Boolean(nextLine.tableRows) ||
+          isEntryStartLine(nextLine.text) ||
+          (nextLine.isBold && !isUppercaseHeadingCandidate(nextLine.text)))
+    );
     const isStandaloneUpper =
-      (raw.isBold || canStartHeading) && isUppercaseHeadingCandidate(text);
+      !prevIsBiColon &&
+      (Boolean(raw.isBold) || canStartHeading || nextLooksLikeSubtitleOrEntry) &&
+      isUppercaseHeadingCandidate(text);
 
     if (isStandaloneUpper) {
-      const afterNextLine = i + 2 < bodyLines.length ? bodyLines[i + 2] : undefined;
       currentTitle = text.toUpperCase();
       lastTitleInMonth = currentTitle;
       lastKnownTitleOverall = currentTitle;
@@ -2541,24 +2726,79 @@ export function formatAlteracaoLinesToBlocks(
       currentEntryItem = null;
       lastRawLineForEntry = null;
 
-      if (
-        nextLine &&
-        !nextLine.tableRows &&
-        !isEntryStartLine(nextLine.text) &&
-        !isSemAlteracaoLine(nextLine.text) &&
-        !normalizeMonthHeading(nextLine.text) &&
-        !isPart2Line(nextLine.text) &&
-        !isAnyComportamentoLine(nextLine.text) &&
-        !/[.;!?]$/.test(nextLine.text) &&
-        nextLine.text.length <= 140 &&
-        (!isUppercaseHeadingCandidate(nextLine.text) ||
-          Boolean(
-            afterNextLine &&
-              (afterNextLine.tableRows || isEntryStartLine(afterNextLine.text))
-          ))
+      // If this Title soft-wrapped onto the next line containing "REMAINDER - Subtitle"
+      if (raw.hardBreakAfter === false && i + 1 < bodyLines.length && !bodyLines[i + 1].tableRows) {
+        const wrappedNext = bodyLines[i + 1];
+        const wrappedSplit = splitTitleSubtitleDash(
+          wrappedNext.text,
+          true,
+          Boolean(wrappedNext.isBold)
+        );
+        if (wrappedSplit && wrappedSplit.title && !wrappedSplit.isSubtitleOnly) {
+          currentTitle = `${currentTitle} ${wrappedSplit.title}`.toUpperCase();
+          lastTitleInMonth = currentTitle;
+          lastKnownTitleOverall = currentTitle;
+          i++;
+          currentSubtitle = cleanSubtitleAgainstTitle(
+            currentTitle,
+            consumeWrappedSubtitle(wrappedNext, wrappedSplit.subtitle)
+          );
+          continue;
+        }
+      }
+
+      // Skip any immediately repeated duplicate Title line (bold or non-bold)
+      while (
+        i + 1 < bodyLines.length &&
+        !bodyLines[i + 1].tableRows &&
+        stripDiacriticsUpper(bodyLines[i + 1].text) === stripDiacriticsUpper(currentTitle)
       ) {
-        currentSubtitle = cleanInlineWhitespace(nextLine.text);
         i++;
+      }
+
+      const candSubLine = i + 1 < bodyLines.length ? bodyLines[i + 1] : undefined;
+      const afterCandSubLine = i + 2 < bodyLines.length ? bodyLines[i + 2] : undefined;
+
+      if (candSubLine && !candSubLine.tableRows) {
+        const candClean = cleanInlineWhitespace(candSubLine.text);
+        const candSplit = splitTitleSubtitleDash(candClean, true, Boolean(candSubLine.isBold));
+
+        if (candSplit) {
+          if (
+            candSplit.isSubtitleOnly ||
+            stripDiacriticsUpper(candSplit.title) === stripDiacriticsUpper(currentTitle)
+          ) {
+            // e.g. "INSTRUÇÃO" followed by "INSTRUÇÃO - 1º TAF" -> keep ONLY "1º TAF" as Subtitle
+            i++;
+            currentSubtitle = cleanSubtitleAgainstTitle(
+              currentTitle,
+              consumeWrappedSubtitle(candSubLine, candSplit.subtitle)
+            );
+          }
+          // Else candSubLine is a DIFFERENT "TÍTULO2 - Subtítulo2" -> leave it for the next iteration!
+        } else if (
+          candClean &&
+          !isEntryStartLine(candClean) &&
+          !isSemAlteracaoLine(candClean) &&
+          !normalizeMonthHeading(candClean) &&
+          !isPart1Line(candClean) &&
+          !isPart2Line(candClean) &&
+          !isAnyComportamentoLine(candClean) &&
+          !isKnownMajorSectionTitle(candClean) &&
+          !/[.;!?]$/.test(candClean) &&
+          candClean.length <= 220 &&
+          (!isUppercaseHeadingCandidate(candClean) ||
+            Boolean(
+              afterCandSubLine &&
+                (afterCandSubLine.tableRows || isEntryStartLine(afterCandSubLine.text))
+            ))
+        ) {
+          i++;
+          currentSubtitle = cleanSubtitleAgainstTitle(
+            currentTitle,
+            consumeWrappedSubtitle(candSubLine, candClean)
+          );
+        }
       }
       continue;
     }
@@ -2569,7 +2809,7 @@ export function formatAlteracaoLinesToBlocks(
       !isEntryStartLine(text) &&
       !isSemAlteracaoLine(text) &&
       !/[.;!?,:]$/.test(text) &&
-      text.length <= 140 &&
+      text.length <= 200 &&
       (lastTitleInMonth || lastKnownTitleOverall) &&
       (raw.isBold ||
         (nextLine &&
@@ -2578,9 +2818,16 @@ export function formatAlteracaoLinesToBlocks(
           !/\b(?:BI\s*n[º°o]|publicado|portaria|conforme)\b/i.test(text)))
     ) {
       const parentTitle = resolveActiveTitle();
+      if (stripDiacriticsUpper(text) === stripDiacriticsUpper(parentTitle)) {
+        // Never duplicate the active Title as a Subtitle
+        continue;
+      }
       currentTitle = parentTitle;
       lastTitleInMonth = parentTitle;
-      currentSubtitle = text;
+      currentSubtitle = cleanSubtitleAgainstTitle(
+        parentTitle,
+        consumeWrappedSubtitle(raw, text)
+      );
       currentEntryItem = null;
       lastRawLineForEntry = null;
       continue;
@@ -2594,10 +2841,17 @@ export function formatAlteracaoLinesToBlocks(
           normalized
         ) || /\b(?:BI|BOL|BOLETIM|ADIT|ADITAMENTO|PORTARIA)\s*N[º°o]/i.test(normalized);
 
-      // Keep undated sub-bullets (e.g. "- Corrida: ...", "- Pensionista: ...") inside their parent BI
-      // so the subtitle is not duplicated and each sub-line stays on its own line.
+      // Keep undated sub-bullets inside their parent BI; if the previous line is "- a DD, BI Nº XX:",
+      // pull this opening text right up after the colon.
       if (currentEntryItem && currentEntryItem.paragraphs.length > 0 && !isNewDatedBiEntry) {
-        currentEntryItem.paragraphs.push(normalized);
+        const lastIdx = currentEntryItem.paragraphs.length - 1;
+        const prevLine = currentEntryItem.paragraphs[lastIdx];
+        if (isBiHeaderColonPrefix(prevLine)) {
+          const strippedLead = normalized.replace(/^[-–—]\s*/, '');
+          currentEntryItem.paragraphs[lastIdx] = `${prevLine.replace(/\s+:$/, ':')} ${strippedLead}`;
+        } else {
+          currentEntryItem.paragraphs.push(normalized);
+        }
         lastRawLineForEntry = raw;
         continue;
       }
@@ -2619,7 +2873,9 @@ export function formatAlteracaoLinesToBlocks(
       continue;
     }
 
-    // 6. Continuation line inside an entry: distinguish soft wrap (ran out of space) vs intentional line break
+    // 6. Continuation line inside an entry:
+    //    - ALWAYS pull BI body text up immediately after "- a XX, BI Nº YY:"
+    //    - Otherwise distinguish soft wrap (ran out of space) vs intentional line break
     if (currentEntryItem && currentEntryItem.paragraphs.length > 0) {
       const idx = currentEntryItem.paragraphs.length - 1;
       const prev = currentEntryItem.paragraphs[idx];
@@ -2630,8 +2886,16 @@ export function formatAlteracaoLinesToBlocks(
         const afterColon = cleanedCont.replace(/^:\s*/, '');
         const trimmedPrev = prev.replace(/\s*:?\s*$/, ':');
         currentEntryItem.paragraphs[idx] = afterColon ? `${trimmedPrev} ${afterColon}` : trimmedPrev;
+      } else if (isBiHeaderColonPrefix(prev)) {
+        // Pull the opening text of the BI onto the SAME line immediately after "- a DD, BI Nº XX:"
+        currentEntryItem.paragraphs[idx] = `${prev.replace(/\s+:$/, ':')} ${cleanedCont}`;
       } else if (isIntentionalBreak) {
-        // Source document intentionally started a new line (e.g., ended well before right margin or explicit paragraph break)
+        // Never leak a stray repeated non-bold copy of the active Title into the BI body
+        if (stripDiacriticsUpper(cleanedCont) === stripDiacriticsUpper(resolveActiveTitle())) {
+          lastRawLineForEntry = raw;
+          continue;
+        }
+        // Source document intentionally started a new line (e.g., TAF/pensionista sub-lines)
         currentEntryItem.paragraphs.push(normalizeEntryColon(cleanedCont));
       } else if (/:$/.test(prev)) {
         currentEntryItem.paragraphs[idx] = `${prev.replace(/\s+:$/, ':')} ${cleanedCont}`;
@@ -2644,6 +2908,9 @@ export function formatAlteracaoLinesToBlocks(
     }
 
     // Fallback: orphan line before any "- " bullet inside a section
+    if (stripDiacriticsUpper(text) === stripDiacriticsUpper(resolveActiveTitle())) {
+      continue;
+    }
     currentEntryItem = ensureCurrentEntryItem();
     const norm = normalizeEntryColon(text);
     currentEntryItem.paragraphs.push(norm);

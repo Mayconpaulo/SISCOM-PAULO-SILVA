@@ -215,29 +215,16 @@ function elementsToReflowBlocks(
 
   let inPart2 = false;
   let inPart2Footer = false;
-  // Track when a body paragraph of a given item has already been seen, and whether a spacer separated them
-  const seenBodyItemIds = new Set<string>();
-  const brokenItemIds = new Set<string>();
-  let lastNonSpacerItemId: string | undefined;
-  let lastNonSpacerWasHeading = false;
 
   for (const entry of nodes) {
     if (entry.block) {
       if (entry.block.isSpacer) {
-        if (lastNonSpacerItemId && !lastNonSpacerWasHeading) {
-          brokenItemIds.add(lastNonSpacerItemId);
-        }
         if (entry.block.preserveIfSpacer || !lastIsSpacer()) {
           blocks.push(entry.block.preserveIfSpacer ? entry.block : spacer());
         }
         continue;
       }
       blocks.push(entry.block);
-      lastNonSpacerWasHeading = Boolean(entry.block.keepWithNext);
-      lastNonSpacerItemId = entry.block.atomicGroupId;
-      if (!entry.block.keepWithNext && entry.block.atomicGroupId) {
-        seenBodyItemIds.add(entry.block.atomicGroupId);
-      }
       continue;
     }
 
@@ -245,10 +232,6 @@ function elementsToReflowBlocks(
     const hasCaret = elementContainsCaretMarker(el);
 
     if (isSpacerElement(el)) {
-      // Any blank line after a body (non-heading) block breaks that item's atomic group
-      if (lastNonSpacerItemId && !lastNonSpacerWasHeading) {
-        brokenItemIds.add(lastNonSpacerItemId);
-      }
       if (hasCaret) {
         blocks.push({
           html: stripStaleAltAttrsFromSpacer(el),
@@ -289,6 +272,20 @@ function elementsToReflowBlocks(
       const itemId = tblBlock.tableMeta?.itemId;
       if (itemId) {
         tblBlock.atomicGroupId = itemId;
+        // Link the table's immediately preceding Subtitle (skipping at most 1 spacer) to the table
+        let back = blocks.length - 1;
+        let skippedSpacers = 0;
+        while (back >= 0 && blocks[back].isSpacer && skippedSpacers < 1) {
+          back--;
+          skippedSpacers++;
+        }
+        if (
+          back >= 0 &&
+          blocks[back].keepWithNext &&
+          blocks[back].html.includes(`data-alt-item="${itemId}"`)
+        ) {
+          blocks[back].atomicGroupId = itemId;
+        }
       }
       const prev = blocks[blocks.length - 1];
 
@@ -327,9 +324,6 @@ function elementsToReflowBlocks(
       }
 
       blocks.push(tblBlock);
-      lastNonSpacerWasHeading = false;
-      lastNonSpacerItemId = itemId;
-      if (itemId) seenBodyItemIds.add(itemId);
       continue;
     }
 
@@ -347,34 +341,15 @@ function elementsToReflowBlocks(
       } else if (/^(?:1\.|a\.|b\.)\s*/i.test(rawTxt)) {
         atomicGroupId = 'part2-item-1';
       }
-    } else {
-      const itemAttr = el.getAttribute('data-alt-item') || undefined;
-      if (itemAttr) {
-        const startsNewDatedBi =
-          !keepWithNext &&
-          seenBodyItemIds.has(itemAttr) &&
-          /^[-–—]\s*(?:a\s+\d{1,2}|em\s+\d{1,2}|\d{1,2}[\/\.])/i.test(rawTxt);
-        if (startsNewDatedBi) {
-          brokenItemIds.add(itemAttr);
-        }
-        // Only keep Subtitle + its immediate BI bound together; never bind across a user spacer or a second BI
-        if (!brokenItemIds.has(itemAttr)) {
-          atomicGroupId = itemAttr;
-        }
-      }
     }
+    // Regular text BI paragraphs deliberately have NO atomicGroupId so they flow smoothly
+    // one paragraph/line at a time across sheets without yo-yoing whole multi-line blocks.
 
     blocks.push({
       html: el.outerHTML,
       keepWithNext,
       atomicGroupId,
     });
-
-    lastNonSpacerWasHeading = keepWithNext;
-    lastNonSpacerItemId = atomicGroupId;
-    if (!keepWithNext && atomicGroupId) {
-      seenBodyItemIds.add(atomicGroupId);
-    }
   }
 
   return blocks;

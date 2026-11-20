@@ -1735,12 +1735,18 @@ export function paginateAlteracaoBlocksInDom(
       continue;
     }
 
-    // 1) Follow keepWithNext heading chains (e.g., MÊS: + spacer + TÍTULO + Subtítulo + spacer + 1st content block)
+    // 1) Follow keepWithNext heading chains (e.g., MÊS: + spacer + TÍTULO + Subtítulo + spacer + 1st content block),
+    //    bridging at most 1 consecutive spacer per heading so user blank lines never chain unrelated blocks.
     let firstContentIdx = idx;
     if (block.keepWithNext) {
       let scan = idx;
+      let consecutiveSpacers = 0;
       while (scan < blocks.length - 1) {
-        if (blocks[scan].keepWithNext || blocks[scan].isSpacer) {
+        if (blocks[scan].keepWithNext) {
+          consecutiveSpacers = 0;
+          scan++;
+        } else if (blocks[scan].isSpacer && consecutiveSpacers < 1) {
+          consecutiveSpacers++;
           scan++;
         } else {
           break;
@@ -1749,8 +1755,8 @@ export function paginateAlteracaoBlocksInDom(
       firstContentIdx = scan;
     }
 
-    // 2) Extend strictly across the immediate atomic unit (Título + Subtítulo + its BI, or Comportamento, or 2ª Parte signature).
-    //    NEVER cross user-inserted blank spacer lines between body paragraphs, and never drag giant half-page blocks down.
+    // 2) Extend strictly across small truly-fixed clusters (Subtitle + Table, Comportamento, 2ª Parte item 1 / signature).
+    //    Regular text BI paragraphs have no atomicGroupId, so they flow smoothly line-by-line across pages.
     let groupEnd = firstContentIdx;
     const targetAtomicId = blocks[firstContentIdx]?.atomicGroupId ?? block.atomicGroupId;
     if (targetAtomicId && !block.isSpacer) {
@@ -1792,17 +1798,22 @@ export function paginateAlteracaoBlocksInDom(
         targetAtomicId === 'part2-signature' ||
         targetAtomicId === 'part2-item-1' ||
         targetAtomicId === 'comportamento';
-      // Keep compact Título + Subtítulo + BI intact, but never leave half a page blank for a huge multi-line BI
-      const maxAtomicUnitPx = isSpecialFixedCluster
-        ? contMaxPx
-        : Math.min(contMaxPx * 0.42, 380);
+
+      // When a heading (keepWithNext) has NO atomic cluster on its body (normal text BI),
+      // groupEnd === firstContentIdx: keep heading(s) attached to their first paragraph so
+      // no Título/Subtítulo is orphaned at the bottom of a page, while all following paragraphs
+      // flow individually one-by-one.
+      const maxAtomicUnitPx =
+        isSpecialFixedCluster || !targetAtomicId
+          ? contMaxPx
+          : Math.min(contMaxPx * 0.45, 420);
 
       if (currentHeight + fullUnitHeight > currentMaxPx && fullUnitHeight <= maxAtomicUnitPx) {
         startNextPage();
         continue;
       }
 
-      // If the full atomic unit is taller than the atomic cap, still keep leading headings
+      // If a fixed cluster (e.g. tall table) exceeds the atomic cap, still keep leading headings
       // attached to at least their first content block so no Título/Subtítulo is ever orphaned.
       if (block.keepWithNext && firstContentIdx < groupEnd) {
         const headingPlusFirstHeight = measureBlockSpanHeight(idx, firstContentIdx);
