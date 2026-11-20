@@ -785,6 +785,98 @@
         "updatedByName",
         "updatedAt"
       ]
+    },
+    "DemandaItem": {
+      "title": "DemandaItem",
+      "description": "Demanda pessoal/operacional com prazo, prioridade e lembretes progressivos até o dia do vencimento",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "ID do documento da demanda"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário proprietário da demanda"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Descrição objetiva do que precisa ser feito"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1000,
+          "description": "Observações ou detalhes complementares da demanda"
+        },
+        "dueDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Data limite no formato YYYY-MM-DD"
+        },
+        "dueTime": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 5,
+          "description": "Horário limite opcional no formato HH:mm ou vazio"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["baixa", "media", "alta"],
+          "description": "Nível de prioridade da demanda"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pendente", "concluida"],
+          "description": "Estado atual da demanda"
+        },
+        "remindBeforeDays": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30,
+          "description": "Quantos dias antes iniciar notificações progressivas até o dia limite"
+        },
+        "completedAt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Carimbo ISO de conclusão ou string vazia quando pendente"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de criação no servidor"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de atualização no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "ownerUid",
+        "title",
+        "notes",
+        "dueDate",
+        "dueTime",
+        "priority",
+        "status",
+        "remindBeforeDays",
+        "completedAt",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -803,6 +895,10 @@
     "/users/{userId}/alteracao_docs/{docId}": {
       "schema": { "$ref": "#/entities/AlteracaoArchiveDoc" },
       "description": "Alterações editáveis arquivadas na conta do usuário"
+    },
+    "/users/{userId}/demandas/{demandaId}": {
+      "schema": { "$ref": "#/entities/DemandaItem" },
+      "description": "Demandas e prazos pessoais do usuário com alertas progressivos"
     },
     "/recovery/{username}": {
       "schema": { "$ref": "#/entities/RecoverySecret" },

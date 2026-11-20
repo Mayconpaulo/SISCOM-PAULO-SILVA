@@ -418,3 +418,18 @@ export function getGoogleColorHex(colorId?: string): string | null {
   const found = GOOGLE_EVENT_COLORS.find((c) => c.id === colorId);
   return found ? found.hex : null;
 }
+
+/**
+ * Returns true if an event occurs today or in the future (ends at or after 00:00 of today).
+ * Past events (that ended strictly before the start of today) return false.
+ */
+export function isTodayOrFutureEvent(
+  event: Pick<AgendaEvent, 'startAt' | 'endAt' | 'allDay'>,
+  now = new Date()
+): boolean {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const start = parseEventDate(event.startAt, event.allDay, false);
+  const end = parseEventDate(event.endAt || event.startAt, event.allDay, true);
+  return end.getTime() >= startOfToday.getTime() || start.getTime() >= startOfToday.getTime();
+}
+

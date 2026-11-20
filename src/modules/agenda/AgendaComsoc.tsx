@@ -78,6 +78,7 @@ import {
   formatTimeShort,
   getEffectiveComsocScope,
   getGoogleColorHex,
+  isTodayOrFutureEvent,
   parseAttachmentsJson,
   parseAttendeesJson,
   parseContactsCacheJson,
@@ -362,11 +363,22 @@ export function AgendaComsoc() {
   const linkedCalendarSummary =
     savedGoogleConfig?.selectedCalendarSummary || DEFAULT_INSTITUTIONAL_CALENDAR_EMAIL;
 
-  // Derived scope counts & pending lists
-  const pendingTriageEvents = useMemo(
-    () => events.filter((ev) => getEffectiveComsocScope(ev) === 'pending'),
-    [events]
-  );
+  // Derived scope counts & pending lists (Triage only shows today or future activities)
+  const pendingTriageEvents = useMemo(() => {
+    const now = new Date();
+    return events
+      .filter(
+        (ev) =>
+          getEffectiveComsocScope(ev) === 'pending' &&
+          ev.status !== 'cancelado' &&
+          isTodayOrFutureEvent(ev, now)
+      )
+      .sort((a, b) => {
+        const startA = parseEventDate(a.startAt, a.allDay, false).getTime();
+        const startB = parseEventDate(b.startAt, b.allDay, false).getTime();
+        return startA - startB;
+      });
+  }, [events]);
 
   const comsocEventsCount = useMemo(
     () => events.filter((ev) => getEffectiveComsocScope(ev) === 'comsoc').length,

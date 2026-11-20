@@ -21,6 +21,11 @@ import {
   renderScreenIcon,
 } from './modules/registry';
 import { HomeAgendaPreview } from './modules/agenda/HomeAgendaPreview';
+import { DemandasProvider } from './modules/demandas/DemandasContext';
+import { DemandasFloatingQuickAdd } from './modules/demandas/DemandasFloatingQuickAdd';
+import { DemandasNotificationToasts } from './modules/demandas/DemandasNotificationToasts';
+import { DemandasPanelModal } from './modules/demandas/DemandasPanelModal';
+import { HomeDemandasWidgets } from './modules/demandas/HomeDemandasWidgets';
 import {
   CREST_LAYOUT_TRANSITION,
   MODULE_EXPAND_TRANSITION,
@@ -361,6 +366,7 @@ function WorkspaceShell() {
   const visibleCards = FEATURE_MODULES.filter((mod) => hasModuleAccess(mod.id));
 
   return (
+    <DemandasProvider userId={account.uid}>
     <div
       className={`workspace-shell-root min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col relative selection:bg-[#2D5A43]/55 selection:text-[#F4E6C4] ${
         activeScreen !== 'home' ? 'lg:h-screen lg:overflow-hidden' : ''
@@ -482,7 +488,7 @@ function WorkspaceShell() {
 
       {/* Home Launcher */}
       {activeScreen === 'home' && (
-        <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-2 pb-12">
+        <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-2 pb-24 sm:pb-16">
           <div className="w-full max-w-[548px] flex flex-col items-center space-y-5 sm:space-y-6">
             <div className="flex flex-col items-center text-center space-y-2.5">
               <motion.div
@@ -528,6 +534,8 @@ function WorkspaceShell() {
             {hasModuleAccess('agenda') && (
               <HomeAgendaPreview onOpenAgenda={() => navigateToScreen('agenda')} />
             )}
+
+            <HomeDemandasWidgets />
 
             <AnimatePresence>
               {accessNotice && (
@@ -618,6 +626,14 @@ function WorkspaceShell() {
         <OfflineIndicator />
       </div>
 
+      {!shieldLocked && (
+        <>
+          <DemandasNotificationToasts />
+          <DemandasFloatingQuickAdd />
+          <DemandasPanelModal />
+        </>
+      )}
+
       {firebaseUser && (
         <PrivacyShieldModal
           open={shieldLocked}
@@ -628,6 +644,7 @@ function WorkspaceShell() {
         />
       )}
     </div>
+    </DemandasProvider>
   );
 }
 

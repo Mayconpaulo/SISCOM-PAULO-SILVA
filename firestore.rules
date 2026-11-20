@@ -79,6 +79,18 @@ service cloud.firestore {
         );
     }
 
+    function canAccessOwnDemandas(userId) {
+      return isOwner(userId)
+        && isValidId(userId)
+        && (
+          isBootstrappedAdmin()
+          || (
+            exists(/databases/$(database)/documents/users/$(userId))
+            && get(/databases/$(database)/documents/users/$(userId)).data.active == true
+          )
+        );
+    }
+
     function canAccessAgenda() {
       return isBootstrappedAdmin()
         || (
@@ -296,6 +308,51 @@ service cloud.firestore {
         && header.identidade is string && header.identidade.size() <= 80
         && header.semestre is string && header.semestre.size() <= 120
         && header.periodo is string && header.periodo.size() <= 160;
+    }
+
+    function isValidDemandaItem(data, userId, demandaId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerUid',
+          'title',
+          'notes',
+          'dueDate',
+          'dueTime',
+          'priority',
+          'status',
+          'remindBeforeDays',
+          'completedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerUid',
+          'title',
+          'notes',
+          'dueDate',
+          'dueTime',
+          'priority',
+          'status',
+          'remindBeforeDays',
+          'completedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == demandaId
+        && isValidId(data.ownerUid)
+        && data.ownerUid == userId
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.notes is string && data.notes.size() <= 1000
+        && data.dueDate is string && data.dueDate.size() == 10 && data.dueDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.dueTime is string && (data.dueTime.size() == 0 || (data.dueTime.size() == 5 && data.dueTime.matches('^\\d{2}:\\d{2}$')))
+        && data.priority in ['baixa', 'media', 'alta']
+        && data.status in ['pendente', 'concluida']
+        && data.remindBeforeDays is int && data.remindBeforeDays >= 0 && data.remindBeforeDays <= 30
+        && data.completedAt is string && data.completedAt.size() <= 40
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     function isValidAlteracaoDoc(data, userId, docId) {
@@ -732,6 +789,37 @@ service cloud.firestore {
             'updatedAt'
           ]);
         allow delete: if canAccessOwnAlteracaoArchive(userId) && isValidId(docId);
+      }
+
+      match /demandas/{demandaId} {
+        allow get: if canAccessOwnDemandas(userId) && isValidId(demandaId);
+        allow list: if isOwner(userId)
+          && isValidId(userId)
+          && resource.data.ownerUid == request.auth.uid;
+        allow create: if canAccessOwnDemandas(userId)
+          && isValidId(demandaId)
+          && isValidDemandaItem(incoming(), userId, demandaId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if canAccessOwnDemandas(userId)
+          && isValidId(demandaId)
+          && isValidDemandaItem(incoming(), userId, demandaId)
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title',
+            'notes',
+            'dueDate',
+            'dueTime',
+            'priority',
+            'status',
+            'remindBeforeDays',
+            'completedAt',
+            'updatedAt'
+          ]);
+        allow delete: if canAccessOwnDemandas(userId) && isValidId(demandaId);
       }
     }
 

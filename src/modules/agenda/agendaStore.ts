@@ -26,6 +26,7 @@ import type {
   GoogleEventVisibility,
   GoogleSendUpdates,
 } from './agendaTypes';
+import { isTodayOrFutureEvent } from './agendaTypes';
 
 const EVENTS_COLLECTION = 'agenda_events';
 const AUDIT_COLLECTION = 'agenda_audit';
@@ -462,6 +463,12 @@ export async function mirrorGoogleEventsToFirestore(params: {
     const primaryReminderMinutes = rem.reminders[0]?.minutes ?? 60;
 
     if (!matched) {
+      const shouldTriage = isTodayOrFutureEvent({
+        startAt: rem.startAt,
+        endAt: rem.endAt,
+        allDay: rem.allDay,
+      });
+
       await createAgendaEvent(
         {
           title: rem.summary || '(Sem título)',
@@ -480,7 +487,7 @@ export async function mirrorGoogleEventsToFirestore(params: {
           googleHtmlLink: rem.htmlLink,
           syncStatus: 'synced',
           lastSyncedAt: nowIso,
-          comsocScope: 'pending',
+          comsocScope: shouldTriage ? 'pending' : 'general',
           colorId: rem.colorId,
           recurrenceRule: rem.recurrenceRule,
           visibility: rem.visibility,
@@ -499,7 +506,9 @@ export async function mirrorGoogleEventsToFirestore(params: {
         params.actor,
         true
       );
-      createdPending += 1;
+      if (shouldTriage) {
+        createdPending += 1;
+      }
     } else if (!matched.pendingGoogleSync) {
       // Only refresh mirrored fields if nothing is locally waiting to be pushed
       const changed =
