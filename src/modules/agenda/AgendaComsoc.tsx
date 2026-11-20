@@ -40,6 +40,7 @@ import {
   SiscomSegmentedTabs,
   SiscomSpinner,
 } from '../../shared/ui';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import {
   AgendaEventModal,
   CategoryDotLabel,
@@ -1490,188 +1491,439 @@ export function AgendaComsoc() {
     );
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Feedback Alerts */}
-      {notice && (
-        <SiscomAlert tone="success" onDismiss={() => setNotice(null)}>
-          {notice}
-        </SiscomAlert>
-      )}
-      {errorMsg && (
-        <SiscomAlert
-          tone="error"
-          onDismiss={() => {
-            setErrorMsg(null);
-            setUnauthorizedDomainHelp(null);
-          }}
+  const selectedDayPanel = (
+    <div className="siscom-card p-4 sm:p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-[#C8A461]">
+            {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} · Dia
+          </p>
+          <h3 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4] mt-0.5">
+            {formatFullDayTitle(selectedDay)}
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={() => openCreateModal(selectedDay)}
+          className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-xs shrink-0"
         >
-          <div className="space-y-2">
-            <p>{errorMsg}</p>
-            {unauthorizedDomainHelp && (
-              <div className="rounded-lg border border-red-400/25 bg-[#120A0A]/80 p-3 space-y-2 text-xs text-[#E4EAE6]">
-                <p className="font-semibold text-[#F4E6C4]">
-                  Como liberar este domínio em 30 segundos:
-                </p>
-                <ol className="list-decimal list-inside space-y-1 text-[#C6D4CC]">
-                  <li>
-                    Copie o domínio exato abaixo:{' '}
-                    <code className="px-1.5 py-0.5 rounded bg-black/50 text-[#E5C17B] font-mono text-[11px] break-all">
-                      {unauthorizedDomainHelp.domain}
-                    </code>
-                  </li>
-                  <li>
-                    Abra <strong>Firebase Authentication → Settings → Domínios autorizados</strong>{' '}
-                    do projeto <strong>gen-lang-client-0187607531</strong> e clique em{' '}
-                    <strong>Adicionar domínio</strong>.
-                  </li>
-                  <li>Volte aqui e clique novamente em “Sincronizar com Google”.</li>
-                </ol>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(unauthorizedDomainHelp.domain);
-                      setCopiedDomain(true);
-                      setTimeout(() => setCopiedDomain(false), 2500);
-                    }}
-                    className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>{copiedDomain ? 'Domínio copiado!' : 'Copiar domínio'}</span>
-                  </button>
-                  <a
-                    href={unauthorizedDomainHelp.consoleUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="siscom-btn siscom-btn-gold !min-h-[32px] !px-2.5 text-[11px]"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Abrir Domínios Autorizados</span>
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-        </SiscomAlert>
-      )}
+          <Plus className="w-3.5 h-3.5" />
+          <span>Agendar</span>
+        </button>
+      </div>
 
-      {/* Active Reminders Strip */}
-      {activeReminders.length > 0 && (
-        <div className="rounded-xl border border-[#C29B56]/40 bg-gradient-to-r from-[#221D12] via-[#1A1A14] to-[#121815] p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#C29B56]/20 border border-[#C29B56]/40 flex items-center justify-center text-[#E5C17B] shrink-0">
-              <BellRing className="w-4 h-4" />
-            </div>
-            <div className="space-y-0.5">
-              <p className="text-xs font-display font-semibold text-[#F4E6C4]">
-                {activeReminders.length === 1
-                  ? 'Lembrete ativo da Agenda'
-                  : `${activeReminders.length} lembretes ativos`}
-              </p>
-              <p className="text-xs text-[#C6D4CC]">
-                {activeReminders.slice(0, 2).map((ev, idx) => {
-                  const dt = parseEventDate(ev.startAt, ev.allDay, false);
-                  return (
-                    <span key={ev.id}>
-                      {idx > 0 ? ' · ' : ''}
-                      <strong className="text-[#E5C17B]">{ev.title}</strong> (
-                      {ev.allDay ? 'Dia inteiro' : formatTimeShort(dt)})
-                    </span>
-                  );
-                })}
-                {activeReminders.length > 2 ? ` e +${activeReminders.length - 2}` : ''}
-              </p>
-            </div>
-          </div>
-
-          {notifPermission === 'default' && (
-            <button
-              type="button"
-              onClick={() => void handleEnableBrowserNotifications()}
-              className="siscom-btn siscom-btn-gold !min-h-[36px] text-xs shrink-0"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span>Ativar alertas do navegador</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Dual Calendar Switch (COMSOC vs Geral) + Tinder Triage Deck Trigger */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#121815]/95 p-3 sm:p-3.5">
-        <div className="inline-flex rounded-lg border border-white/10 bg-[#0C100F] p-1 gap-1 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setCalendarScope('comsoc')}
-            className={`flex-1 sm:flex-initial min-h-[38px] px-3.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              calendarScope === 'comsoc'
-                ? 'bg-[#2D5A43] text-white shadow-sm'
-                : 'text-[#98A89F] hover:text-[#E4EAE6]'
-            }`}
-          >
-            <CalendarIcon className="w-3.5 h-3.5" />
-            <span>Calendário COMSOC</span>
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                calendarScope === 'comsoc'
-                  ? 'bg-black/25 text-[#F4E6C4]'
-                  : 'bg-white/8 text-[#98A89F]'
-              }`}
-            >
-              {comsocEventsCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setCalendarScope('general')}
-            className={`flex-1 sm:flex-initial min-h-[38px] px-3.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              calendarScope === 'general'
-                ? 'bg-[#2D5A43] text-white shadow-sm'
-                : 'text-[#98A89F] hover:text-[#E4EAE6]'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Calendário Geral</span>
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                calendarScope === 'general'
-                  ? 'bg-black/25 text-[#F4E6C4]'
-                  : 'bg-white/8 text-[#98A89F]'
-              }`}
-            >
-              {events.length}
-            </span>
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 justify-between sm:justify-end">
-          {pendingTriageEvents.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setTriageOpen(true)}
-              className="siscom-btn siscom-btn-gold !min-h-[38px] text-xs w-full sm:w-auto"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Triagem ({pendingTriageEvents.length})</span>
-            </button>
-          )}
+      {selectedDayEvents.length === 0 ? (
+        <div className="py-8 text-center space-y-2.5">
+          <CalendarIcon className="w-7 h-7 text-[#697870] mx-auto opacity-70" />
+          <p className="text-xs text-[#98A89F]">
+            Nenhuma atividade em{' '}
+            {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} neste dia.
+          </p>
           <button
             type="button"
             onClick={() => openCreateModal(selectedDay)}
-            className="siscom-btn siscom-btn-primary !min-h-[38px] text-xs w-full sm:w-auto"
+            className="siscom-btn siscom-btn-secondary !min-h-[36px] text-xs"
           >
-            <Plus className="w-4 h-4" />
-            <span>Nova atividade</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Cadastrar atividade neste dia</span>
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="space-y-3">
+          {selectedDayEvents.map((ev) => renderEventCard(ev, true))}
+        </div>
+      )}
+    </div>
+  );
 
-      {/* Top Controls Card: View Modes, Date Nav, Search/Filter & Locked Institutional Calendar Strip */}
-      <section className="siscom-card p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
+  return (
+    <>
+      <WorkspaceSplitLayout
+        sidebarWidthClass="lg:w-[375px] xl:w-[405px]"
+        sidebar={
+          <div className="space-y-4">
+            {/* Dual Calendar Switch (COMSOC vs Geral) + Actions */}
+            <div className="siscom-card p-3.5 space-y-3">
+              <div className="grid grid-cols-2 rounded-lg border border-white/10 bg-[#0C100F] p-1 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCalendarScope('comsoc')}
+                  className={`min-h-[38px] px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    calendarScope === 'comsoc'
+                      ? 'bg-[#2D5A43] text-white shadow-sm'
+                      : 'text-[#98A89F] hover:text-[#E4EAE6]'
+                  }`}
+                >
+                  <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">COMSOC</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                      calendarScope === 'comsoc'
+                        ? 'bg-black/25 text-[#F4E6C4]'
+                        : 'bg-white/8 text-[#98A89F]'
+                    }`}
+                  >
+                    {comsocEventsCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCalendarScope('general')}
+                  className={`min-h-[38px] px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    calendarScope === 'general'
+                      ? 'bg-[#2D5A43] text-white shadow-sm'
+                      : 'text-[#98A89F] hover:text-[#E4EAE6]'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Geral</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                      calendarScope === 'general'
+                        ? 'bg-black/25 text-[#F4E6C4]'
+                        : 'bg-white/8 text-[#98A89F]'
+                    }`}
+                  >
+                    {events.length}
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openCreateModal(selectedDay)}
+                  className="siscom-btn siscom-btn-primary flex-1 !min-h-[38px] text-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova atividade</span>
+                </button>
+                {pendingTriageEvents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTriageOpen(true)}
+                    className="siscom-btn siscom-btn-gold !min-h-[38px] !px-3 text-xs shrink-0"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Triagem ({pendingTriageEvents.length})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Search & Category Filters */}
+            <div className="siscom-card p-3.5 space-y-2.5">
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#697870] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar título, local, convidado..."
+                  className="siscom-input !pl-10 !min-h-[40px] text-xs"
+                />
+              </div>
+
+              <select
+                aria-label="Filtrar por categoria"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as 'all' | AgendaCategory)}
+                className="siscom-input !min-h-[40px] text-xs"
+              >
+                <option value="all">Todas as categorias da COMSOC</option>
+                {AGENDA_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Institutional Google Calendar Strip */}
+            <div className="rounded-xl border border-[#C29B56]/25 bg-[#0E1311] p-3.5 space-y-3">
+              {isAdmin ? (
+                <>
+                  <div className="space-y-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg border border-[#C29B56]/35 bg-[#1B1810] flex items-center justify-center text-[#E5C17B] shrink-0">
+                        <CalendarIcon className="w-4 h-4" />
+                      </div>
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h3 className="font-display text-xs font-semibold text-[#F4E6C4]">
+                            Calendário Institucional
+                          </h3>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                              googleSession.connected
+                                ? 'bg-[#2D5A43]/30 text-[#A7D3BA] border-[#83B499]/35'
+                                : 'bg-[#1D1B14] text-[#E5C17B] border-[#C29B56]/30'
+                            }`}
+                          >
+                            {googleSession.connected ? 'Google ativo' : 'Espelhado'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#98A89F] leading-snug">
+                          <strong className="text-[#E4EAE6]">{linkedCalendarSummary}</strong>
+                          {' · '}
+                          <span className="font-mono text-[#C6D4CC]">
+                            {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)}
+                          </span>
+                          {contactSuggestions.length > 0 && (
+                            <span> · {contactSuggestions.length} contato(s)</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={syncingGoogle}
+                        onClick={() => void handleAdminSyncGoogle()}
+                        className="flex-1 inline-flex items-center justify-center gap-2 min-h-[36px] px-3 rounded-lg bg-white text-[#1F1F1F] hover:bg-[#F3F4F6] font-medium text-xs transition-colors cursor-pointer disabled:opacity-60"
+                      >
+                        {syncingGoogle ? (
+                          <SiscomSpinner className="w-3.5 h-3.5" tone="olive" />
+                        ) : (
+                          <GoogleGIcon className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                          {syncingGoogle
+                            ? 'Sincronizando...'
+                            : googleSession.connected
+                              ? 'Sincronizar agora'
+                              : 'Sincronizar com Google'}
+                        </span>
+                      </button>
+
+                      {pendingPushEvents.length > 0 && googleSession.connected && (
+                        <button
+                          type="button"
+                          onClick={handleAdminRequestPushQueue}
+                          className="siscom-btn siscom-btn-gold !min-h-[36px] !px-2.5 text-xs"
+                        >
+                          <CloudUpload className="w-3.5 h-3.5" />
+                          <span>Fila ({pendingPushEvents.length})</span>
+                        </button>
+                      )}
+
+                      {googleSession.connected && googleCalendars.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAdminCalPicker((v) => !v)}
+                          className="siscom-btn siscom-btn-secondary !min-h-[36px] !px-2.5 text-xs"
+                          title="Alterar calendário associado (somente Administrador)"
+                        >
+                          <Settings2 className="w-3.5 h-3.5" />
+                          {showAdminCalPicker ? (
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
+
+                      {googleSession.connected && (
+                        <button
+                          type="button"
+                          onClick={() => void handleAdminDisconnectGoogle()}
+                          title="Encerrar sessão Google neste navegador"
+                          className="siscom-btn siscom-btn-secondary !min-h-[36px] !px-2.5 text-xs"
+                        >
+                          <Unlink className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {pendingPushEvents.length > 0 && !googleSession.connected && (
+                    <p className="text-[11px] text-[#E5C17B] border-t border-white/8 pt-2">
+                      Há <strong>{pendingPushEvents.length} atividade(s)</strong> aguardando envio ao
+                      Google Calendar. Clique em <strong>Sincronizar com Google</strong> para enviá-las.
+                    </p>
+                  )}
+
+                  {/* Admin-only collapsible calendar switcher */}
+                  {showAdminCalPicker && googleSession.connected && googleCalendars.length > 0 && (
+                    <div className="pt-2.5 border-t border-white/8 space-y-1.5">
+                      <label
+                        htmlFor="admin-cal-select"
+                        className="block text-[10px] font-mono uppercase tracking-wider text-[#C8A461]"
+                      >
+                        Alterar calendário associado:
+                      </label>
+                      <select
+                        id="admin-cal-select"
+                        value={linkedCalendarId}
+                        disabled={syncingGoogle}
+                        onChange={(e) => void handleAdminSwitchCalendar(e.target.value)}
+                        className="siscom-input !min-h-[36px] text-xs w-full"
+                      >
+                        {googleCalendars.map((cal) => (
+                          <option key={cal.id} value={cal.id}>
+                            {cal.summary} {cal.primary ? '(Principal da conta)' : '(Secundário)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Non-admin view: zero Google login buttons, zero calendar switcher — already pre-associated! */
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span className="w-7 h-7 rounded-lg border border-[#83B499]/30 bg-[#2D5A43]/25 flex items-center justify-center text-[#A7D3BA] shrink-0">
+                      <Lock className="w-3.5 h-3.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[#F4E6C4] truncate">
+                        {linkedCalendarSummary}
+                      </p>
+                      <p className="text-[11px] text-[#98A89F]">
+                        Sync {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)} · Gerenciado pelo Admin
+                      </p>
+                    </div>
+                  </div>
+
+                  {pendingPushEvents.length > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#C29B56]/30 bg-[#221D12] text-[11px] text-[#E5C17B]">
+                      <CloudUpload className="w-3.5 h-3.5" />
+                      {pendingPushEvents.length} aguardando envio ao Google
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Selected Day Details Panel (anchored inside fixed left sidebar when in Month view) */}
+            {viewMode === 'month' && !loadingEvents && (
+              <div className="hidden lg:block">{selectedDayPanel}</div>
+            )}
+          </div>
+        }
+        bottomBar={
+          <div className="w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
+            <span>
+              {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} ·{' '}
+              {formatFullDayTitle(selectedDay)}
+            </span>
+            <span className="font-mono text-[#E5C17B]">
+              {visibleEvents.length} atividade{visibleEvents.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Feedback Alerts */}
+          {notice && (
+            <SiscomAlert tone="success" onDismiss={() => setNotice(null)}>
+              {notice}
+            </SiscomAlert>
+          )}
+          {errorMsg && (
+            <SiscomAlert
+              tone="error"
+              onDismiss={() => {
+                setErrorMsg(null);
+                setUnauthorizedDomainHelp(null);
+              }}
+            >
+              <div className="space-y-2">
+                <p>{errorMsg}</p>
+                {unauthorizedDomainHelp && (
+                  <div className="rounded-lg border border-red-400/25 bg-[#120A0A]/80 p-3 space-y-2 text-xs text-[#E4EAE6]">
+                    <p className="font-semibold text-[#F4E6C4]">
+                      Como liberar este domínio em 30 segundos:
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 text-[#C6D4CC]">
+                      <li>
+                        Copie o domínio exato abaixo:{' '}
+                        <code className="px-1.5 py-0.5 rounded bg-black/50 text-[#E5C17B] font-mono text-[11px] break-all">
+                          {unauthorizedDomainHelp.domain}
+                        </code>
+                      </li>
+                      <li>
+                        Abra <strong>Firebase Authentication → Settings → Domínios autorizados</strong>{' '}
+                        do projeto <strong>gen-lang-client-0187607531</strong> e clique em{' '}
+                        <strong>Adicionar domínio</strong>.
+                      </li>
+                      <li>Volte aqui e clique novamente em “Sincronizar com Google”.</li>
+                    </ol>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(unauthorizedDomainHelp.domain);
+                          setCopiedDomain(true);
+                          setTimeout(() => setCopiedDomain(false), 2500);
+                        }}
+                        className="siscom-btn siscom-btn-secondary !min-h-[32px] !px-2.5 text-[11px]"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{copiedDomain ? 'Domínio copiado!' : 'Copiar domínio'}</span>
+                      </button>
+                      <a
+                        href={unauthorizedDomainHelp.consoleUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="siscom-btn siscom-btn-gold !min-h-[32px] !px-2.5 text-[11px]"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Abrir Domínios Autorizados</span>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SiscomAlert>
+          )}
+
+          {/* Active Reminders Strip */}
+          {activeReminders.length > 0 && (
+            <div className="rounded-xl border border-[#C29B56]/40 bg-gradient-to-r from-[#221D12] via-[#1A1A14] to-[#121815] p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#C29B56]/20 border border-[#C29B56]/40 flex items-center justify-center text-[#E5C17B] shrink-0">
+                  <BellRing className="w-4 h-4" />
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-display font-semibold text-[#F4E6C4]">
+                    {activeReminders.length === 1
+                      ? 'Lembrete ativo da Agenda'
+                      : `${activeReminders.length} lembretes ativos`}
+                  </p>
+                  <p className="text-xs text-[#C6D4CC]">
+                    {activeReminders.slice(0, 2).map((ev, idx) => {
+                      const dt = parseEventDate(ev.startAt, ev.allDay, false);
+                      return (
+                        <span key={ev.id}>
+                          {idx > 0 ? ' · ' : ''}
+                          <strong className="text-[#E5C17B]">{ev.title}</strong> (
+                          {ev.allDay ? 'Dia inteiro' : formatTimeShort(dt)})
+                        </span>
+                      );
+                    })}
+                    {activeReminders.length > 2 ? ` e +${activeReminders.length - 2}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {notifPermission === 'default' && (
+                <button
+                  type="button"
+                  onClick={() => void handleEnableBrowserNotifications()}
+                  className="siscom-btn siscom-btn-gold !min-h-[36px] text-xs shrink-0"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Ativar alertas do navegador</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* View Mode & Date Navigation Header */}
+          <section className="siscom-card p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
             <SiscomSegmentedTabs
               options={VIEW_OPTIONS}
               value={viewMode}
@@ -1681,7 +1933,7 @@ export function AgendaComsoc() {
             />
 
             {viewMode !== 'history' && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleNavigateDate(-1)}
@@ -1710,209 +1962,18 @@ export function AgendaComsoc() {
                 </h2>
               </div>
             )}
-          </div>
-        </div>
+          </section>
 
-        {/* Search & Category Filter Row */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-2.5">
-          <div className="relative">
-            <Search className="w-4 h-4 text-[#697870] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por título, local, convidado, responsável ou descrição..."
-              className="siscom-input !pl-10 !min-h-[40px] text-xs"
-            />
-          </div>
-
-          <select
-            aria-label="Filtrar por categoria"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as 'all' | AgendaCategory)}
-            className="siscom-input !min-h-[40px] text-xs"
-          >
-            <option value="all">Todas as categorias da COMSOC</option>
-            {AGENDA_CATEGORIES.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Institutional Google Calendar Strip — Admin manages binding/sync, Non-Admins see it pre-linked! */}
-        <div className="rounded-xl border border-[#C29B56]/25 bg-[#0E1311] p-3.5 sm:p-4 space-y-3">
-          {isAdmin ? (
-            <>
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-lg border border-[#C29B56]/35 bg-[#1B1810] flex items-center justify-center text-[#E5C17B] shrink-0">
-                    <CalendarIcon className="w-4 h-4" />
-                  </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-display text-xs sm:text-sm font-semibold text-[#F4E6C4]">
-                        Calendário Institucional Vinculado
-                      </h3>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                          googleSession.connected
-                            ? 'bg-[#2D5A43]/30 text-[#A7D3BA] border-[#83B499]/35'
-                            : 'bg-[#1D1B14] text-[#E5C17B] border-[#C29B56]/30'
-                        }`}
-                      >
-                        {googleSession.connected ? 'Sessão Google ativa' : 'Espelhado no SISCOM'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#98A89F]">
-                      Conta vinculada:{' '}
-                      <strong className="text-[#E4EAE6]">{linkedCalendarSummary}</strong>
-                      {' · '}Última sync:{' '}
-                      <span className="font-mono text-[#C6D4CC]">
-                        {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)}
-                      </span>
-                      {contactSuggestions.length > 0 && (
-                        <span> · {contactSuggestions.length} contato(s)</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    disabled={syncingGoogle}
-                    onClick={() => void handleAdminSyncGoogle()}
-                    className="inline-flex items-center justify-center gap-2 min-h-[38px] px-3.5 rounded-lg bg-white text-[#1F1F1F] hover:bg-[#F3F4F6] font-medium text-xs transition-colors cursor-pointer disabled:opacity-60"
-                  >
-                    {syncingGoogle ? (
-                      <SiscomSpinner className="w-4 h-4" tone="olive" />
-                    ) : (
-                      <GoogleGIcon className="w-4 h-4" />
-                    )}
-                    <span>
-                      {syncingGoogle
-                        ? 'Sincronizando...'
-                        : googleSession.connected
-                          ? 'Sincronizar agora'
-                          : 'Sincronizar com Google'}
-                    </span>
-                  </button>
-
-                  {pendingPushEvents.length > 0 && googleSession.connected && (
-                    <button
-                      type="button"
-                      onClick={handleAdminRequestPushQueue}
-                      className="siscom-btn siscom-btn-gold !min-h-[38px] !px-3 text-xs"
-                    >
-                      <CloudUpload className="w-3.5 h-3.5" />
-                      <span>Enviar fila ({pendingPushEvents.length})</span>
-                    </button>
-                  )}
-
-                  {googleSession.connected && googleCalendars.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAdminCalPicker((v) => !v)}
-                      className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-2.5 text-xs"
-                      title="Alterar calendário associado (somente Administrador)"
-                    >
-                      <Settings2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Alterar</span>
-                      {showAdminCalPicker ? (
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      ) : (
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  )}
-
-                  {googleSession.connected && (
-                    <button
-                      type="button"
-                      onClick={() => void handleAdminDisconnectGoogle()}
-                      title="Encerrar sessão Google neste navegador"
-                      className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-2.5 text-xs"
-                    >
-                      <Unlink className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {pendingPushEvents.length > 0 && !googleSession.connected && (
-                <p className="text-[11px] text-[#E5C17B] border-t border-white/8 pt-2">
-                  Há <strong>{pendingPushEvents.length} atividade(s)</strong> aguardando envio ao
-                  Google Calendar. Clique em <strong>Sincronizar com Google</strong> para enviá-las.
-                </p>
-              )}
-
-              {/* Admin-only collapsible calendar switcher */}
-              {showAdminCalPicker && googleSession.connected && googleCalendars.length > 0 && (
-                <div className="pt-2.5 border-t border-white/8 flex flex-col sm:flex-row sm:items-center gap-2.5">
-                  <label
-                    htmlFor="admin-cal-select"
-                    className="text-[11px] font-mono uppercase tracking-wider text-[#C8A461] shrink-0"
-                  >
-                    Alterar calendário associado:
-                  </label>
-                  <select
-                    id="admin-cal-select"
-                    value={linkedCalendarId}
-                    disabled={syncingGoogle}
-                    onChange={(e) => void handleAdminSwitchCalendar(e.target.value)}
-                    className="siscom-input !min-h-[36px] text-xs flex-1"
-                  >
-                    {googleCalendars.map((cal) => (
-                      <option key={cal.id} value={cal.id}>
-                        {cal.summary} {cal.primary ? '(Principal da conta)' : '(Secundário)'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          ) : (
-            /* Non-admin view: zero Google login buttons, zero calendar switcher — already pre-associated! */
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="w-7 h-7 rounded-lg border border-[#83B499]/30 bg-[#2D5A43]/25 flex items-center justify-center text-[#A7D3BA] shrink-0">
-                  <Lock className="w-3.5 h-3.5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-[#F4E6C4] truncate">
-                    Calendário institucional conectado:{' '}
-                    <span className="text-[#A7D3BA]">{linkedCalendarSummary}</span>
-                  </p>
-                  <p className="text-[11px] text-[#98A89F]">
-                    Sincronizado em {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)} ·
-                    Gerenciado pelo Administrador
-                  </p>
-                </div>
-              </div>
-
-              {pendingPushEvents.length > 0 && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#C29B56]/30 bg-[#221D12] text-[11px] text-[#E5C17B]">
-                  <CloudUpload className="w-3.5 h-3.5" />
-                  {pendingPushEvents.length} aguardando envio ao Google
-                </span>
-              )}
+          {/* Main Content Area */}
+          {loadingEvents ? (
+            <div className="siscom-card p-12 flex flex-col items-center justify-center gap-3">
+              <SiscomSpinner className="w-6 h-6" />
+              <p className="text-xs text-[#98A89F]">Carregando atividades da Agenda...</p>
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* Main Content Area */}
-      {loadingEvents ? (
-        <div className="siscom-card p-12 flex flex-col items-center justify-center gap-3">
-          <SiscomSpinner className="w-6 h-6" />
-          <p className="text-xs text-[#98A89F]">Carregando atividades da Agenda...</p>
-        </div>
-      ) : viewMode === 'month' ? (
-        /* ── MONTHLY VIEW ─────────────────────────────────────────────────── */
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_410px] gap-4 items-start">
-          <section className="siscom-card overflow-hidden">
+          ) : viewMode === 'month' ? (
+            /* ── MONTHLY VIEW ─────────────────────────────────────────────────── */
+            <div className="space-y-4">
+              <section className="siscom-card overflow-hidden">
             <div className="grid grid-cols-7 border-b border-white/8 bg-[#0E1311]">
               {WEEKDAYS_PT.map((wd) => (
                 <div
@@ -2002,49 +2063,8 @@ export function AgendaComsoc() {
             </div>
           </section>
 
-          {/* Selected Day Side Panel */}
-          <aside className="siscom-card p-4 sm:p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-wider text-[#C8A461]">
-                  {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} · Dia
-                </p>
-                <h3 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4] mt-0.5">
-                  {formatFullDayTitle(selectedDay)}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => openCreateModal(selectedDay)}
-                className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-xs shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Agendar</span>
-              </button>
-            </div>
-
-            {selectedDayEvents.length === 0 ? (
-              <div className="py-10 text-center space-y-2.5">
-                <CalendarIcon className="w-8 h-8 text-[#697870] mx-auto opacity-70" />
-                <p className="text-xs text-[#98A89F]">
-                  Nenhuma atividade em{' '}
-                  {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} neste dia.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => openCreateModal(selectedDay)}
-                  className="siscom-btn siscom-btn-secondary !min-h-[36px] text-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Cadastrar atividade neste dia</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {selectedDayEvents.map((ev) => renderEventCard(ev, true))}
-              </div>
-            )}
-          </aside>
+          {/* Mobile Selected Day Panel (renders below calendar on touch screens; desktop uses fixed left sidebar) */}
+          <div className="lg:hidden">{selectedDayPanel}</div>
         </div>
       ) : viewMode === 'week' ? (
         /* ── WEEKLY VIEW ──────────────────────────────────────────────────── */
@@ -2229,6 +2249,8 @@ export function AgendaComsoc() {
           )}
         </section>
       )}
+        </div>
+      </WorkspaceSplitLayout>
 
       {/* Tinder-Style Swipe Triage Deck */}
       <AgendaTriageDeck
@@ -2268,6 +2290,6 @@ export function AgendaComsoc() {
           if (!confirmBusy) setPendingConfirm(null);
         }}
       />
-    </div>
+    </>
   );
 }

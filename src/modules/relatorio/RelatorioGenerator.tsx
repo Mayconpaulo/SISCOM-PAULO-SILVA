@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants, stepSlideVariants } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 import {
@@ -700,9 +701,10 @@ export const RelatorioGenerator: React.FC = () => {
   const vtr = activeDoc.vtrDisponibilidade;
 
   return (
-    <main className="flex-1 max-w-[1380px] w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-5 items-start">
-      {/* Left Column: Report Controls + Guided 3-Question Creation + Diversos List */}
-      <aside className="no-print space-y-4">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[420px] xl:w-[450px]"
+      sidebar={
+        <div className="space-y-4">
         {/* Saved Reports Switcher + Primary Actions */}
         <section className="metal-surface rounded-xl p-4 sm:p-5 space-y-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -1595,16 +1597,17 @@ export const RelatorioGenerator: React.FC = () => {
             )}
           </AnimatePresence>
         </section>
-      </aside>
-
-      {/* Right Column: Live A4 Vertical Sheet Preview */}
-      <section className="min-w-0 w-full flex flex-col items-center">
+        </div>
+      }
+      bottomBar={
+        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
+          <span>Pré-visualização do Relatório</span>
+          <span className="font-mono text-[#E5C17B]">A4 Vertical · 210 × 297 mm</span>
+        </div>
+      }
+    >
+      <div className="w-full flex flex-col items-center print-wrapper">
         <div className="w-full max-w-[740px]">
-          <div className="no-print flex items-center justify-between text-xs text-[#98A89F] mb-2 px-1">
-            <span>Pré-visualização do Relatório</span>
-            <span className="font-mono text-[#83B499]">A4 Vertical · 210 × 297 mm</span>
-          </div>
-
           <PinchZoomSheetFrame
             maxWidthClass="max-w-[740px]"
             className="rounded-xl shadow-2xl border border-white/10 bg-white"
@@ -2026,7 +2029,7 @@ export const RelatorioGenerator: React.FC = () => {
             </div>
           </PinchZoomSheetFrame>
         </div>
-      </section>
-    </main>
+      </div>
+    </WorkspaceSplitLayout>
   );
 };

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Download,
   FileSpreadsheet,
@@ -43,6 +45,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 
@@ -847,8 +850,14 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+  const crachasStripRef = useRef<HTMLDivElement>(null);
 
   const config = configs[activeMode];
+  const [perPageDraft, setPerPageDraft] = useState<string>(() => String(config.perPage));
+
+  useEffect(() => {
+    setPerPageDraft(String(config.perPage));
+  }, [config.perPage]);
 
   useEffect(() => {
     try {
@@ -1160,9 +1169,10 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
   );
 
   return (
-    <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print-wrapper">
-      {/* Left Configuration Column */}
-      <section className="no-print lg:col-span-5 metal-surface rounded-xl p-5 sm:p-6 space-y-5">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[400px] xl:w-[430px]"
+      sidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Top Primary Document Upload & Field Mapping */}
         <div className="space-y-3 pb-4 border-b border-white/[0.07]">
           <div className="flex items-center justify-between gap-2">
@@ -1593,33 +1603,33 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              id="cracha-per-page"
-              type="number"
-              min={1}
-              max={200}
-              value={config.perPage}
-              onChange={(e) => handlePerPageChange(Number(e.target.value))}
-              className="siscom-input w-24 min-h-[40px] px-3 font-mono text-sm"
-            />
-            <div className="flex-1 grid grid-cols-5 gap-1.5">
-              {[1, 2, 4, 6, 8].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => handlePerPageChange(preset)}
-                  className={`siscom-btn min-h-[40px] px-0 font-mono text-xs ${
-                    config.perPage === preset
-                      ? 'siscom-btn-primary'
-                      : 'siscom-btn-secondary text-[#98A89F]'
-                  }`}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
+          <input
+            id="cracha-per-page"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={200}
+            value={perPageDraft}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setPerPageDraft(raw);
+              if (raw.trim() === '') return;
+              const parsed = Math.floor(Number(raw));
+              if (Number.isFinite(parsed) && parsed >= 1) {
+                handlePerPageChange(parsed);
+              }
+            }}
+            onBlur={() => {
+              const parsed = Math.floor(Number(perPageDraft));
+              const clamped = Number.isFinite(parsed)
+                ? Math.max(1, Math.min(200, parsed))
+                : config.perPage;
+              handlePerPageChange(clamped);
+              setPerPageDraft(String(clamped));
+            }}
+            placeholder="Digite a quantidade (1 a 200)"
+            className="siscom-input w-full min-h-[40px] px-3 font-mono text-sm"
+          />
         </div>
 
         {/* Tamanho */}
@@ -1814,17 +1824,44 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   <span>Copiar 1º</span>
                 </button>
               )}
+              {config.perPage > 1 && (
+                <div className="inline-flex items-center gap-0.5 pl-1 border-l border-white/[0.08]">
+                  <button
+                    type="button"
+                    aria-label="Rolar crachás para a esquerda"
+                    onClick={() =>
+                      crachasStripRef.current?.scrollBy({ left: -292, behavior: 'smooth' })
+                    }
+                    className="h-7 w-7 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-[#E8EEEA] hover:bg-white/[0.06] transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Rolar crachás para a direita"
+                    onClick={() =>
+                      crachasStripRef.current?.scrollBy({ left: 292, behavior: 'smooth' })
+                    }
+                    className="h-7 w-7 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-[#E8EEEA] hover:bg-white/[0.06] transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+          <div
+            ref={crachasStripRef}
+            className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth"
+          >
             {activeEntries.map((entry, idx) => {
               void fontsTick;
               const diag = getCrachaTextDiagnostics(config, entry);
               return (
               <div
                 key={`entry-${idx}`}
-                className="rounded-lg bg-[#0C100F] border border-white/[0.08] p-3 space-y-2.5"
+                className="w-[268px] sm:w-[290px] shrink-0 snap-start rounded-lg bg-[#0C100F] border border-white/[0.08] p-3 space-y-2.5"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -2010,41 +2047,40 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             </SiscomAlert>
           )}
         </AnimatePresence>
-      </section>
-
-      {/* Right Live A4 Sheet Preview (Supports multi-page) */}
-      <section className="lg:col-span-7 min-w-0 w-full flex flex-col items-center space-y-4 print-wrapper">
-        <div className="no-print w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
+        </div>
+      }
+      bottomBar={
+        <div className="w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
           <span>
             A4 · {activeMode === 'identificacao' ? 'Identificação' : 'RP'} ·{' '}
             {config.sidedness === 'frente_verso' ? 'Frente e verso' : 'Frente'}
           </span>
-          <span className="font-mono">
+          <span className="font-mono text-[#E5C17B]">
             {config.widthMm} × {config.heightMm} mm · {layout.pages.length} pág.
           </span>
         </div>
-
-        <div className="w-full min-w-0 flex flex-col items-center gap-5 print-wrapper">
-          {layout.pages.map((pageUnits, pageIndex) => (
-            <div key={`sheet-${pageIndex}`} className="print-page-item w-full max-w-[620px] space-y-1.5">
-              {layout.pages.length > 1 && (
-                <div className="no-print flex items-center justify-between text-[11px] text-[#98A89F] px-0.5">
-                  <span className="font-mono">Pág. {pageIndex + 1}/{layout.pages.length}</span>
-                  <span>{pageUnits.length} {pageUnits.length === 1 ? 'crachá' : 'crachás'}</span>
-                </div>
-              )}
-              <PinchZoomSheetFrame
-                maxWidthClass="max-w-[620px]"
-                className="rounded-lg border border-white/15 shadow-2xl bg-white"
-              >
-                <div className="w-full bg-white print-wrapper">
-                  <CrachaSheetSvg config={config} pageUnits={pageUnits} pageIndex={pageIndex} />
-                </div>
-              </PinchZoomSheetFrame>
-            </div>
-          ))}
-        </div>
-      </section>
-    </main>
+      }
+    >
+      <div className="w-full min-w-0 flex flex-col items-center gap-5 print-wrapper">
+        {layout.pages.map((pageUnits, pageIndex) => (
+          <div key={`sheet-${pageIndex}`} className="print-page-item w-full max-w-[620px] space-y-1.5">
+            {layout.pages.length > 1 && (
+              <div className="no-print flex items-center justify-between text-[11px] text-[#98A89F] px-0.5">
+                <span className="font-mono">Pág. {pageIndex + 1}/{layout.pages.length}</span>
+                <span>{pageUnits.length} {pageUnits.length === 1 ? 'crachá' : 'crachás'}</span>
+              </div>
+            )}
+            <PinchZoomSheetFrame
+              maxWidthClass="max-w-[620px]"
+              className="rounded-lg border border-white/15 shadow-2xl bg-white"
+            >
+              <div className="w-full bg-white print-wrapper">
+                <CrachaSheetSvg config={config} pageUnits={pageUnits} pageIndex={pageIndex} />
+              </div>
+            </PinchZoomSheetFrame>
+          </div>
+        ))}
+      </div>
+    </WorkspaceSplitLayout>
   );
 };

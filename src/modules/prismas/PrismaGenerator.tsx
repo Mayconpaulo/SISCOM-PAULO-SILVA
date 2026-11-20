@@ -21,6 +21,7 @@ import {
 } from './prismaPdf';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 
@@ -336,9 +337,10 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
   };
 
   return (
-    <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print-wrapper">
-      {/* Left Control Column */}
-      <section className="no-print lg:col-span-5 metal-surface rounded-xl p-5 sm:p-6 space-y-5">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[380px] xl:w-[410px]"
+      sidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* 1 or 2 Prismas per Page */}
         <div className="space-y-2">
           <span className="siscom-field-label">Quantidade</span>
@@ -512,15 +514,16 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
             </SiscomAlert>
           )}
         </AnimatePresence>
-      </section>
-
-      {/* Right Live A4 Sheet Preview */}
-      <section className="lg:col-span-7 min-w-0 w-full flex flex-col items-center space-y-3 print-wrapper">
-        <div className="no-print w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>A4 · {count === 1 ? '1 prisma' : '2 prismas'}</span>
-          <span className="font-mono">210 × 297 mm</span>
         </div>
-
+      }
+      bottomBar={
+        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
+          <span>A4 · {count === 1 ? '1 prisma' : '2 prismas'}</span>
+          <span className="font-mono text-[#E5C17B]">210 × 297 mm</span>
+        </div>
+      }
+    >
+      <div className="w-full flex flex-col items-center print-wrapper">
         <PinchZoomSheetFrame
           maxWidthClass="max-w-[620px]"
           className="rounded-lg border border-white/15 shadow-2xl bg-white"
@@ -529,7 +532,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
             <PrismaSheetPreview count={count} prismas={prismas} uppercase={uppercase} />
           </div>
         </PinchZoomSheetFrame>
-      </section>
-    </main>
+      </div>
+    </WorkspaceSplitLayout>
   );
 };

@@ -25,6 +25,7 @@ import {
 import { isSafeImageObjectOrDataUrl } from '../../../shared/htmlSanitizer';
 import { getSecureVaultItem, setSecureVaultItem } from '../../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../../shared/PinchZoomSheetFrame';
+import { WorkspaceSplitLayout } from '../../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants } from '../../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../../shared/ui';
 
@@ -375,9 +376,10 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
   const cardScaleFactor = PESAMES_CIRCLE.diam / CROP_UI_DIAM;
 
   return (
-    <main className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 items-start">
-      {/* Left Configuration Panel */}
-      <aside className="no-print metal-surface rounded-xl p-4 sm:p-5 space-y-5">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[400px] xl:w-[425px]"
+      sidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Card Model Switcher */}
         <div className="space-y-2">
           <span className="siscom-field-label">Modelo</span>
@@ -670,18 +672,19 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
             )}
           </AnimatePresence>
         </section>
-      </aside>
-
-      {/* Right Live Card Preview (1080 x 1350) */}
-      <section className="min-w-0 w-full flex flex-col items-center">
+        </div>
+      }
+      bottomBar={
+        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
+          <span>Pêsames · {photoMode === 'com_foto' ? 'Com foto' : 'Sem foto'}</span>
+          <span className="font-mono text-[#E5C17B]">
+            {PESAMES_W_PX} × {PESAMES_H_PX} PNG
+          </span>
+        </div>
+      }
+    >
+      <div className="w-full flex flex-col items-center">
         <div className="w-full max-w-[520px]">
-          <div className="no-print flex items-center justify-between text-xs text-[#98A89F] mb-2.5 px-1">
-            <span>Pêsames · {photoMode === 'com_foto' ? 'Com foto' : 'Sem foto'}</span>
-            <span className="font-mono text-[#83B499]">
-              {PESAMES_W_PX} × {PESAMES_H_PX} PNG
-            </span>
-          </div>
-
           <PinchZoomSheetFrame
             maxWidthClass="max-w-[520px]"
             className="rounded-xl shadow-2xl border border-white/10 bg-black"
@@ -805,7 +808,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
             </svg>
           </PinchZoomSheetFrame>
         </div>
-      </section>
-    </main>
+      </div>
+    </WorkspaceSplitLayout>
   );
 };

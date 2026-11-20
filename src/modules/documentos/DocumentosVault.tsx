@@ -31,6 +31,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { extractCrachaDocumentData } from './documentoFileParser';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
 
 const STORAGE_KEY = 'siscom_documentos_vault_v1';
@@ -131,6 +132,14 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
     () => documents.find((d) => d.id === selectedDocId) || null,
     [documents, selectedDocId]
   );
+
+  const [rowCountDraft, setRowCountDraft] = useState<string>('15');
+
+  useEffect(() => {
+    if (activeDoc) {
+      setRowCountDraft(String(activeDoc.rowCount));
+    }
+  }, [activeDoc?.id, activeDoc?.rowCount]);
 
   useEffect(() => {
     try {
@@ -361,13 +370,14 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
   // ==================== FOLDER VIEW ====================
   if (!activeDoc) {
     return (
+      <div className="flex-1 min-h-0 w-full lg:overflow-y-auto lg:overscroll-contain">
       <motion.main
         key="docs-folder"
         variants={fadeSlideVariants}
         initial="initial"
         animate="animate"
         transition={UI_TRANSITION}
-        className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 space-y-6"
+        className="max-w-6xl w-full mx-auto p-4 sm:p-6 space-y-6"
       >
         <div
           onDragOver={(e) => {
@@ -507,6 +517,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
           ))}
         </div>
       </motion.main>
+      </div>
     );
   }
 
@@ -555,12 +566,15 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
   };
 
   return (
-    <main className="flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print-wrapper">
+    <>
       {/* Ensure browser print dialog opens in A4 Landscape while this view is active */}
       <style>{`@media print { @page { size: A4 landscape; margin: 0; } }`}</style>
 
-      {/* Left Control Panel */}
-      <section className="no-print lg:col-span-4 metal-surface rounded-xl p-5 sm:p-6 space-y-5">
+      <WorkspaceSplitLayout
+        sidebarWidthClass="lg:w-[370px] xl:w-[400px]"
+        mobileBottomBarPosition="top"
+        sidebar={
+          <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] pb-3.5">
           <button
             type="button"
@@ -594,38 +608,34 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              id="doc-row-count"
-              type="number"
-              min={1}
-              max={100}
-              value={activeDoc.rowCount}
-              onChange={(e) =>
-                updateActiveDoc((d) => ({
-                  ...d,
-                  rowCount: Math.max(1, Math.min(100, Number(e.target.value) || 1)),
-                }))
+          <input
+            id="doc-row-count"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={100}
+            value={rowCountDraft}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setRowCountDraft(raw);
+              if (raw.trim() === '') return;
+              const parsed = Math.floor(Number(raw));
+              if (Number.isFinite(parsed) && parsed >= 1) {
+                const clamped = Math.max(1, Math.min(100, parsed));
+                updateActiveDoc((d) => ({ ...d, rowCount: clamped }));
               }
-              className="siscom-input w-24 min-h-[40px] px-3 font-mono text-sm"
-            />
-            <div className="flex-1 grid grid-cols-4 gap-1.5">
-              {[15, 25, 35, 50].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => updateActiveDoc((d) => ({ ...d, rowCount: preset }))}
-                  className={`siscom-btn min-h-[40px] px-0 font-mono text-xs ${
-                    rowsCount === preset
-                      ? 'siscom-btn-primary'
-                      : 'siscom-btn-secondary text-[#98A89F]'
-                  }`}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
+            }}
+            onBlur={() => {
+              const parsed = Math.floor(Number(rowCountDraft));
+              const clamped = Number.isFinite(parsed)
+                ? Math.max(1, Math.min(100, parsed))
+                : activeDoc.rowCount;
+              updateActiveDoc((d) => ({ ...d, rowCount: clamped }));
+              setRowCountDraft(String(clamped));
+            }}
+            placeholder="Digite a quantidade de linhas (1 a 100)"
+            className="siscom-input w-full min-h-[40px] px-3 font-mono text-sm"
+          />
 
           <AnimatePresence>
             {metrics.isCompressed && (
@@ -733,7 +743,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             </button>
           </div>
 
-          <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1">
+          <div className="space-y-2">
             {activeDoc.columns.map((col, idx) => (
               <div
                 key={col.id}
@@ -887,68 +897,70 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             </SiscomAlert>
           )}
         </AnimatePresence>
-      </section>
+          </div>
+        }
+        bottomBar={
+          <div className="w-full flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label="Fonte do documento"
+                value={activeDoc.fontFamily}
+                onChange={(e) =>
+                  updateActiveDoc((d) => ({
+                    ...d,
+                    fontFamily: e.target.value as StoredTableDocument['fontFamily'],
+                  }))
+                }
+                className="siscom-input min-h-[36px] px-2.5 text-xs"
+              >
+                <option value="Arial">Arial</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Open Sans">Open Sans</option>
+              </select>
 
-      {/* Right Workspace: Toolbar + Interactive A4 Landscape Sheet */}
-      <section className="lg:col-span-8 flex flex-col items-center space-y-3.5 print-wrapper">
-        {/* Compact Style Toolbar */}
-        <div className="no-print w-full metal-elevated rounded-xl px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label="Fonte do documento"
-              value={activeDoc.fontFamily}
-              onChange={(e) =>
-                updateActiveDoc((d) => ({
-                  ...d,
-                  fontFamily: e.target.value as StoredTableDocument['fontFamily'],
-                }))
-              }
-              className="siscom-input min-h-[36px] px-2.5 text-xs"
-            >
-              <option value="Arial">Arial</option>
-              <option value="Times New Roman">Times New Roman</option>
-              <option value="Open Sans">Open Sans</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={() => updateActiveDoc((d) => ({ ...d, headerBold: !d.headerBold }))}
-              className={`siscom-btn min-h-[36px] px-3 text-xs ${
-                activeDoc.headerBold
-                  ? 'siscom-btn-primary'
-                  : 'siscom-btn-secondary text-[#98A89F]'
-              }`}
-            >
-              Negrito
-            </button>
-
-            {Object.keys(activeDoc.cellValues).length > 0 && (
               <button
                 type="button"
-                onClick={() => updateActiveDoc((d) => ({ ...d, cellValues: {} }))}
-                className="siscom-btn siscom-btn-secondary min-h-[36px] px-3 text-xs text-[#98A89F]"
+                onClick={() => updateActiveDoc((d) => ({ ...d, headerBold: !d.headerBold }))}
+                className={`siscom-btn min-h-[36px] px-3 text-xs ${
+                  activeDoc.headerBold
+                    ? 'siscom-btn-primary'
+                    : 'siscom-btn-secondary text-[#98A89F]'
+                }`}
               >
-                Limpar células
+                Negrito
               </button>
-            )}
-          </div>
 
-          <div className="flex items-center gap-2 text-xs text-[#98A89F]">
-            <select
-              aria-label="Zoom da folha A4"
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              className="siscom-input min-h-[36px] px-2.5 font-mono text-xs"
-            >
-              <option value={65}>65%</option>
-              <option value={85}>85%</option>
-              <option value={100}>100%</option>
-            </select>
-          </div>
-        </div>
+              {Object.keys(activeDoc.cellValues).length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => updateActiveDoc((d) => ({ ...d, cellValues: {} }))}
+                  className="siscom-btn siscom-btn-secondary min-h-[36px] px-3 text-xs text-[#98A89F]"
+                >
+                  Limpar células
+                </button>
+              )}
+            </div>
 
+            <div className="flex items-center gap-3 text-xs text-[#98A89F]">
+              <span className="hidden sm:inline font-mono text-[11px] text-[#E5C17B]">
+                A4 Horizontal · {LANDSCAPE_A4_W_MM} × {LANDSCAPE_A4_H_MM} mm
+              </span>
+              <select
+                aria-label="Zoom da folha A4"
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="siscom-input min-h-[36px] px-2.5 font-mono text-xs"
+              >
+                <option value={65}>65%</option>
+                <option value={85}>85%</option>
+                <option value={100}>100%</option>
+              </select>
+            </div>
+          </div>
+        }
+      >
         {/* Live A4 Landscape Sheet (297mm x 210mm) */}
-        <div className="w-full overflow-x-auto pb-6 flex justify-center print-wrapper">
+        <div className="w-full overflow-x-auto pb-4 flex justify-center print-wrapper">
           <div
             style={{
               width: `${LANDSCAPE_A4_W_MM}mm`,
@@ -1086,7 +1098,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             </div>
           </div>
         </div>
-      </section>
-    </main>
+      </WorkspaceSplitLayout>
+    </>
   );
 };

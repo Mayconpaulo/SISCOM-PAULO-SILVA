@@ -18,6 +18,7 @@ import {
   updateOwnAdminProfile,
 } from '../../core/auth/authService';
 import { FIREBASE_PROJECT_ID } from '../../core/auth/firebase';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
 
 const DEFAULT_NEW_USER_PERMS: ModulePermissions = {
@@ -169,37 +170,12 @@ export function AdminPanel() {
   };
 
   return (
-    <main className="flex-1 max-w-[1180px] w-full mx-auto p-4 sm:p-6 space-y-6">
-      <AnimatePresence>
-        {(notice || errorMsg) && (
-          <SiscomAlert
-            tone={errorMsg ? 'error' : 'success'}
-            onDismiss={() => {
-              setNotice(null);
-              setErrorMsg(null);
-            }}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span>{errorMsg || notice}</span>
-              {needsEmailSetup && (
-                <a
-                  href={`https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/providers`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[#E5C17B] underline font-medium"
-                >
-                  <span>Ativar E-mail/senha no Firebase</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
-            </div>
-          </SiscomAlert>
-        )}
-      </AnimatePresence>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Meu Login de Administrador */}
-        <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[400px] xl:w-[435px]"
+      sidebar={
+        <div className="space-y-5">
+          {/* Meu Login de Administrador */}
+          <section className="metal-surface rounded-xl p-4 sm:p-5 space-y-4">
           <div className="flex items-center gap-2 border-b border-white/8 pb-3">
             <KeyRound className="w-4 h-4 text-[#E5C17B]" />
             <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
@@ -395,10 +371,47 @@ export function AdminPanel() {
             </button>
           </form>
         </section>
-      </div>
+        </div>
+      }
+      bottomBar={
+        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
+          <span>Administração · Gestão de Acessos</span>
+          <span className="font-mono text-[#E5C17B]">
+            {managedUsers.length} conta{managedUsers.length === 1 ? '' : 's'}
+          </span>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        <AnimatePresence>
+          {(notice || errorMsg) && (
+            <SiscomAlert
+              tone={errorMsg ? 'error' : 'success'}
+              onDismiss={() => {
+                setNotice(null);
+                setErrorMsg(null);
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>{errorMsg || notice}</span>
+                {needsEmailSetup && (
+                  <a
+                    href={`https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/providers`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[#E5C17B] underline font-medium"
+                  >
+                    <span>Ativar E-mail/senha no Firebase</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            </SiscomAlert>
+          )}
+        </AnimatePresence>
 
-      {/* Lista em Tempo Real com Checkboxes */}
-      <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
+        {/* Lista em Tempo Real com Checkboxes */}
+        <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
         <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-[#E5C17B]" />
@@ -502,7 +515,8 @@ export function AdminPanel() {
             </tbody>
           </table>
         </div>
-      </section>
-    </main>
+        </section>
+      </div>
+    </WorkspaceSplitLayout>
   );
 }

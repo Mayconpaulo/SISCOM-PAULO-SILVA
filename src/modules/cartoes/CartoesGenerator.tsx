@@ -78,7 +78,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
           initial="initial"
           animate="animate"
           exit="exit"
-          className="flex-1 flex flex-col"
+          className="workspace-split-container flex-1 min-h-0 lg:h-full lg:overflow-hidden flex flex-col"
         >
           <ErrorBoundary inline scopeLabel="Cartão de Aniversário">
             <AniversarioCardWorkspace
@@ -95,7 +95,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
           initial="initial"
           animate="animate"
           exit="exit"
-          className="flex-1 flex flex-col"
+          className="workspace-split-container flex-1 min-h-0 lg:h-full lg:overflow-hidden flex flex-col"
         >
           <ErrorBoundary inline scopeLabel="Cartão de Pêsames">
             <PesamesCardWorkspace
@@ -112,7 +112,7 @@ export const CartoesGenerator: React.FC<CartoesGeneratorProps> = ({
           initial="initial"
           animate="animate"
           exit="exit"
-          className="flex-1 flex flex-col"
+          className="workspace-split-container flex-1 min-h-0 lg:h-full lg:overflow-hidden flex flex-col"
         >
           <ErrorBoundary inline scopeLabel="Cartão de Boas-Vindas">
             <BoasVindasWorkspace

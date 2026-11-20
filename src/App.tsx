@@ -361,7 +361,11 @@ function WorkspaceShell() {
   const visibleCards = FEATURE_MODULES.filter((mod) => hasModuleAccess(mod.id));
 
   return (
-    <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col relative selection:bg-[#2D5A43]/55 selection:text-[#F4E6C4]">
+    <div
+      className={`workspace-shell-root min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col relative selection:bg-[#2D5A43]/55 selection:text-[#F4E6C4] ${
+        activeScreen !== 'home' ? 'lg:h-screen lg:overflow-hidden' : ''
+      }`}
+    >
       {/* Subtle institutional ambient depth on Home */}
       {activeScreen === 'home' && (
         <div
@@ -385,7 +389,7 @@ function WorkspaceShell() {
 
       {/* Minimalist Top Bar */}
       {activeScreen !== 'home' ? (
-        <header className="no-print sticky top-0 z-30 h-14 px-3.5 sm:px-6 border-b border-[#C29B56]/18 bg-[#0E1311]/92 backdrop-blur-md grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <header className="no-print sticky top-0 z-30 h-14 shrink-0 px-3.5 sm:px-6 border-b border-[#C29B56]/18 bg-[#0E1311]/92 backdrop-blur-md grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <motion.div
             initial={{ opacity: 0, x: -6 }}
             animate={{ opacity: 1, x: 0 }}
@@ -596,7 +600,7 @@ function WorkspaceShell() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 6 }}
               transition={{ duration: 0.24, ease: SISCOM_EASE }}
-              className="relative z-10 flex-1 flex flex-col"
+              className="workspace-split-container relative z-10 flex-1 flex flex-col min-h-0 lg:overflow-hidden"
             >
               <ErrorBoundary
                 key={`${activeScreen}-${moduleResetTick}`}

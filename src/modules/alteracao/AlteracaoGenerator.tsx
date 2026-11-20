@@ -56,6 +56,7 @@ import {
   parseStructuredDocJson,
 } from './alteracaoArchiveService';
 import { inferPortugueseContinuacaoArticle } from '../../shared/portugueseGender';
+import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import {
   sanitizeAlteracaoHtml,
   sanitizeCssFontFamily,
@@ -1506,9 +1507,11 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   };
 
   return (
-    <main className="flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print-wrapper">
-      {/* Left Sidebar: Upload PDF + Dados do Militar */}
-      <section className="no-print lg:col-span-4 metal-surface rounded-xl p-5 sm:p-6 space-y-5">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[370px] xl:w-[400px]"
+      mobileBottomBarPosition="top"
+      sidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Top Primary PDF Upload Dropzone */}
         <div className="space-y-3 pb-4 border-b border-white/[0.07]">
           <input
@@ -1812,7 +1815,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
               </div>
             </div>
 
-            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2">
+            <div className="space-y-2">
               {groupedChecklist.map((group) => {
                 const allGroupChecked = group.items.every((i) => enabledItemIdSet.has(i.id));
                 return (
@@ -1935,12 +1938,10 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             </button>
           </div>
         </div>
-      </section>
-
-      {/* Right Workspace: Word-like Toolbar + Interactive A4 Document */}
-      <section className="lg:col-span-8 min-w-0 w-full flex flex-col items-center space-y-4 print-wrapper">
-        {/* Word-like Ribbon Toolbar */}
-        <div className="no-print w-full metal-elevated rounded-xl p-2.5 sm:p-3 space-y-2.5 sticky top-2 z-20">
+        </div>
+      }
+      bottomBar={
+        <div className="w-full space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             {/* Undo / Redo */}
             <div className="flex items-center gap-0.5 pr-2 border-r border-white/[0.08]">
@@ -2392,16 +2393,17 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             )}
           </AnimatePresence>
         </div>
-
-        {/* Editable A4 Pages Stack — whole sheet fits mobile width cleanly; pinch-zoom allows full bidirectional pan */}
-        <div
-          ref={pagesViewportRef}
-          style={{
-            touchAction: 'pan-x pan-y',
-            WebkitOverflowScrolling: 'touch',
-          }}
-          className="w-full min-w-0 overflow-x-auto pb-6 space-y-6 print-wrapper print-zoom-reset"
-        >
+      }
+    >
+      {/* Editable A4 Pages Stack — whole sheet fits mobile width cleanly; pinch-zoom allows full bidirectional pan */}
+      <div
+        ref={pagesViewportRef}
+        style={{
+          touchAction: 'pan-x pan-y',
+          WebkitOverflowScrolling: 'touch',
+        }}
+        className="w-full min-w-0 overflow-x-auto pb-4 space-y-6 print-wrapper print-zoom-reset"
+      >
           {pagesHtml.map((pageHtml, pageIndex) => {
             const folhaStr = String(header.folhaInicial + pageIndex).padStart(2, '0');
             const isOverflowing = overflowPages[pageIndex];
@@ -2558,8 +2560,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
               </div>
             );
           })}
-        </div>
-      </section>
-    </main>
+      </div>
+    </WorkspaceSplitLayout>
   );
 };

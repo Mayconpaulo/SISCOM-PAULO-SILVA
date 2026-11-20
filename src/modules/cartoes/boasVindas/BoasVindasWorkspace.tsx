@@ -9,6 +9,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { PinchZoomSheetFrame } from '../../../shared/PinchZoomSheetFrame';
+import { WorkspaceSplitLayout } from '../../../shared/WorkspaceSplitLayout';
 import { SiscomAlert, SiscomSpinner } from '../../../shared/ui';
 import { BOAS_VINDAS_TITLE_PATH, BOAS_VINDAS_TITLE_VIEWBOX } from './boasVindasVectorTitle';
 import {
@@ -461,9 +462,10 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
   const allHorizontalYs = [by0, ...layout.sharedHorizontalSeamsMm, by1];
 
   return (
-    <main className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 items-start">
-      {/* Left Configuration Panel */}
-      <aside className="no-print metal-surface rounded-xl p-4 sm:p-5 space-y-5">
+    <WorkspaceSplitLayout
+      sidebarWidthClass="lg:w-[390px] xl:w-[415px]"
+      sidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         <div className="space-y-2">
           <span className="siscom-field-label">Modelo</span>
 
@@ -722,22 +724,23 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
             )}
           </AnimatePresence>
         </section>
-      </aside>
-
-      {/* Right Live A4 Preview */}
-      <section className="min-w-0 w-full flex flex-col items-center">
+        </div>
+      }
+      bottomBar={
+        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
+          <span>
+            A4 · {layout.effectiveCount}× ({layout.cardW} × {layout.cardH} mm)
+          </span>
+          <span className="font-mono text-[#E5C17B]">210 × 297 mm</span>
+        </div>
+      }
+    >
+      <div className="w-full flex flex-col items-center print-wrapper">
         <div className="w-full max-w-[680px]">
-            <div className="no-print flex items-center justify-between text-xs text-[#98A89F] mb-2.5 px-1">
-              <span>
-                A4 · {layout.effectiveCount}× ({layout.cardW} × {layout.cardH} mm)
-              </span>
-              <span className="font-mono text-[#83B499]">210 × 297 mm</span>
-            </div>
-
-            <PinchZoomSheetFrame
-              maxWidthClass="max-w-[680px]"
-              className="rounded-xl shadow-2xl border border-white/10 bg-white"
-            >
+          <PinchZoomSheetFrame
+            maxWidthClass="max-w-[680px]"
+            className="rounded-xl shadow-2xl border border-white/10 bg-white"
+          >
               <svg
                 viewBox={`0 0 ${A4_W_MM} ${A4_H_MM}`}
                 className="print-a4-sheet w-full h-auto bg-white block select-none"
@@ -808,9 +811,9 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
                   ))}
                 </g>
               </svg>
-            </PinchZoomSheetFrame>
-          </div>
-      </section>
-    </main>
+          </PinchZoomSheetFrame>
+        </div>
+      </div>
+    </WorkspaceSplitLayout>
   );
 };
