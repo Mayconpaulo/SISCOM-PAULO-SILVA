@@ -1502,6 +1502,8 @@ export interface PaginateOptions {
   editorWidthPx?: number;
   startOnContinuationPage?: boolean;
   lockedPrefixHtmls?: string[];
+  /** When true (live editing), keep user-typed trailing blank lines at page bottoms instead of stripping them */
+  preserveTrailingSpacers?: boolean;
 }
 
 /**
@@ -1835,7 +1837,7 @@ export function paginateAlteracaoBlocksInDom(
     pushToCurrentPage(
       block.html,
       singleHeight,
-      Boolean(block.isSpacer && !block.preserveIfSpacer)
+      Boolean(block.isSpacer && !block.preserveIfSpacer && !options.preserveTrailingSpacers)
     );
     idx++;
   }

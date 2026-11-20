@@ -2199,6 +2199,7 @@ export function renderBlocksFromStructuredDoc(
 
     pushSpacerIfNeeded();
     let inCenteredFooter = false;
+    let sawQuartelLine = false;
     let addedSigSpacer = false;
 
     normalizedPart2.forEach((line, idx) => {
@@ -2217,26 +2218,46 @@ export function renderBlocksFromStructuredDoc(
       }
 
       if (inCenteredFooter) {
-        if (/^[_\-–—]{5,}$/.test(line) && !addedSigSpacer) {
+        const isQuartelOrDate =
+          /^Quartel\b/i.test(line) || /,\s*\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}\.?$/i.test(line);
+        const isSigUnderline = /^[_\-–—]{5,}$/.test(line);
+
+        if (isQuartelOrDate) {
           pushSpacerIfNeeded();
+          blocks.push({
+            html: `<p style="text-align:center;">${formatLineWithBold(line, boldByIdx[idx])}</p>`,
+          });
+          sawQuartelLine = true;
+          return;
+        }
+
+        // Always leave signing space (2 blank lines) between "Quartel da Vila Militar..."
+        // and the signature line / Commander's name & role
+        if (!addedSigSpacer) {
+          if (sawQuartelLine) {
+            blocks.push(
+              { html: '<p><br></p>', isSpacer: true, preserveIfSpacer: true },
+              { html: '<p><br></p>', isSpacer: true, preserveIfSpacer: true }
+            );
+          } else {
+            pushSpacerIfNeeded();
+            blocks.push({ html: '<p><br></p>', isSpacer: true, preserveIfSpacer: true });
+          }
           addedSigSpacer = true;
         }
+
         blocks.push({
           html: `<p style="text-align:center;">${formatLineWithBold(line, boldByIdx[idx])}</p>`,
-          atomicGroupId: 'part2-signature',
+          keepWithNext: isSigUnderline,
         });
         return;
       }
 
-      // Add vertical spacing between items 1, b., 2, 3, 4, and 5
-      if (/^(?:b\.|[2-5]\.)\s*/i.test(line)) {
-        pushSpacerIfNeeded();
-      }
-
-      const isPart2Item1Cluster = /^(?:1\.|a\.|b\.)\s*/i.test(line);
+      // Every line in 2ª Parte (1., a., b., 2., 3., 4., 5.) is separated by a blank line
+      // ("uma linha pula linha") and has no rigid atomic grouping so each line flows freely.
+      pushSpacerIfNeeded();
       blocks.push({
         html: `<p>${formatLineWithBold(line, boldByIdx[idx])}</p>`,
-        atomicGroupId: isPart2Item1Cluster ? 'part2-item-1' : undefined,
       });
     });
   }

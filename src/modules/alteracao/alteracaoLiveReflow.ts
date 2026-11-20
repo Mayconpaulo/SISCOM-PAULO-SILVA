@@ -109,6 +109,7 @@ function isHeadingKeepWithNext(el: HTMLElement): boolean {
   if (!txt) return false;
   if (isMonthHeadingEl(el)) return true;
   if (normalizeKey(txt) === '1A PARTE:' || normalizeKey(txt) === '2A PARTE') return true;
+  if (/^[_\-–—]{5,}$/.test(txt)) return true;
   if (isComportamentoHeadingLine(txt)) return true;
   // Bold short subtitle or section heading line (never a bullet/BI entry or full sentence)
   if (/^[-–—•]\s*/.test(txt) || /[.;!?]$/.test(txt)) return false;
@@ -240,10 +241,16 @@ function elementsToReflowBlocks(
         });
         continue;
       }
-      // Preserve intentional blank lines typed by the user inside a page during live editing,
+      // Preserve intentional blank lines typed by the user inside a page during live editing
+      // (including signing space in 2ª Parte and blank lines used to push sections to the next sheet),
       // while avoiding duplicate spacers at old page break boundaries.
-      if (preserveUserSpacers && !entry.crossedPageBreak) {
+      if (preserveUserSpacers && (!entry.crossedPageBreak || !lastIsSpacer())) {
         blocks.push({ html: stripStaleAltAttrsFromSpacer(el), isSpacer: true });
+        continue;
+      }
+      // Keep double signing space inside 2ª Parte footer even during checklist reflows
+      if (inPart2Footer) {
+        blocks.push({ html: stripStaleAltAttrsFromSpacer(el), isSpacer: true, preserveIfSpacer: true });
         continue;
       }
       if (!lastIsSpacer()) {
@@ -331,19 +338,9 @@ function elementsToReflowBlocks(
     const isComportamentoEl =
       !inPart2 && (el.hasAttribute('data-alt-comportamento') || isAnyComportamentoLine(rawTxt));
 
-    let atomicGroupId: string | undefined;
-    if (isComportamentoEl) {
-      // Comportamento is ALWAYS independent from any BI above it!
-      atomicGroupId = 'comportamento';
-    } else if (inPart2) {
-      if (inPart2Footer) {
-        atomicGroupId = 'part2-signature';
-      } else if (/^(?:1\.|a\.|b\.)\s*/i.test(rawTxt)) {
-        atomicGroupId = 'part2-item-1';
-      }
-    }
-    // Regular text BI paragraphs deliberately have NO atomicGroupId so they flow smoothly
-    // one paragraph/line at a time across sheets without yo-yoing whole multi-line blocks.
+    // Comportamento stays independent from any BI above it; 2ª Parte lines and regular text BI
+    // paragraphs deliberately have NO atomicGroupId so every line flows freely one at a time.
+    const atomicGroupId = isComportamentoEl ? 'comportamento' : undefined;
 
     blocks.push({
       html: el.outerHTML,
@@ -1181,6 +1178,7 @@ function runLinkedPagination(
     ...paginateOptions,
     startOnContinuationPage: false,
     lockedPrefixHtmls: [],
+    preserveTrailingSpacers: true,
   });
 }
 
