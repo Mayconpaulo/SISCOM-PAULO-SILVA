@@ -20,6 +20,7 @@ import {
   renderScreenContent,
   renderScreenIcon,
 } from './modules/registry';
+import { HomeAgendaPreview } from './modules/agenda/HomeAgendaPreview';
 import {
   CREST_LAYOUT_TRANSITION,
   MODULE_EXPAND_TRANSITION,
@@ -478,7 +479,7 @@ function WorkspaceShell() {
       {/* Home Launcher */}
       {activeScreen === 'home' && (
         <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-2 pb-12">
-          <div className="w-full max-w-[540px] flex flex-col items-center space-y-7 sm:space-y-8">
+          <div className="w-full max-w-[548px] flex flex-col items-center space-y-5 sm:space-y-6">
             <div className="flex flex-col items-center text-center space-y-2.5">
               <motion.div
                 layoutId="siscom-crest"
@@ -519,6 +520,10 @@ function WorkspaceShell() {
                 {greeting}, {account.displayName}
               </motion.p>
             </div>
+
+            {hasModuleAccess('agenda') && (
+              <HomeAgendaPreview onOpenAgenda={() => navigateToScreen('agenda')} />
+            )}
 
             <AnimatePresence>
               {accessNotice && (
