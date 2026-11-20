@@ -283,6 +283,34 @@ interface EditablePageBodyProps {
   onBoundaryKey: (key: 'Backspace' | 'Delete') => boolean;
 }
 
+const ALT_DATA_ATTRS = [
+  'data-alt-item',
+  'data-alt-group',
+  'data-alt-month',
+  'data-alt-sem-alt',
+  'data-alt-part2',
+  'data-alt-comportamento',
+] as const;
+
+function findTopBlockInEditor(editorEl: HTMLDivElement, node: Node | null): HTMLElement | null {
+  let cur: Node | null = node;
+  while (cur && cur !== editorEl) {
+    if (cur.parentNode === editorEl && cur.nodeType === Node.ELEMENT_NODE) {
+      return cur as HTMLElement;
+    }
+    cur = cur.parentNode;
+  }
+  return null;
+}
+
+function stripAltDataAttrs(el: HTMLElement): void {
+  for (const attr of ALT_DATA_ATTRS) {
+    if (el.hasAttribute(attr)) {
+      el.removeAttribute(attr);
+    }
+  }
+}
+
 const EditablePageBody: React.FC<EditablePageBodyProps> = ({
   initialHtml,
   syncVersion,
@@ -297,6 +325,7 @@ const EditablePageBody: React.FC<EditablePageBodyProps> = ({
 }) => {
   const localRef = useRef<HTMLDivElement | null>(null);
   const isComposingRef = useRef(false);
+  const enterSourceBlockRef = useRef<HTMLElement | null>(null);
 
   useLayoutEffect(() => {
     const el = localRef.current;
@@ -311,9 +340,47 @@ const EditablePageBody: React.FC<EditablePageBodyProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncVersion]);
 
+  const cleanupClonedAltAttrs = (editorEl: HTMLDivElement) => {
+    // 1) Never leave data-alt-* attributes on blank spacer lines created by Enter
+    for (const child of Array.from(editorEl.children)) {
+      const htmlChild = child as HTMLElement;
+      if (htmlChild.tagName === 'TABLE' || htmlChild.querySelector('table')) continue;
+      const txt = (htmlChild.textContent || '').replace(/\u00a0/g, '').trim();
+      if (txt.length === 0) {
+        stripAltDataAttrs(htmlChild);
+      }
+    }
+
+    // 2) If Enter split a block into a new element, strip browser-cloned data-alt-* attrs
+    //    from the newly created element so pushing/moving it never drags the preceding BI block
+    const prevBlock = enterSourceBlockRef.current;
+    enterSourceBlockRef.current = null;
+    if (!prevBlock) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const activeBlock = findTopBlockInEditor(editorEl, sel.getRangeAt(0).startContainer);
+    if (activeBlock && activeBlock !== prevBlock && activeBlock.tagName !== 'TABLE') {
+      const clonedItem =
+        activeBlock.getAttribute('data-alt-item') &&
+        activeBlock.getAttribute('data-alt-item') === prevBlock.getAttribute('data-alt-item');
+      const clonedGroup =
+        activeBlock.getAttribute('data-alt-group') &&
+        activeBlock.getAttribute('data-alt-group') === prevBlock.getAttribute('data-alt-group');
+      const clonedMonth =
+        activeBlock.getAttribute('data-alt-month') &&
+        activeBlock.getAttribute('data-alt-month') === prevBlock.getAttribute('data-alt-month');
+      const clonedPart2 =
+        activeBlock.hasAttribute('data-alt-part2') && prevBlock.hasAttribute('data-alt-part2');
+      if (clonedItem || clonedGroup || clonedMonth || clonedPart2) {
+        stripAltDataAttrs(activeBlock);
+      }
+    }
+  };
+
   const handleInput = (forceImmediate = false) => {
     const el = localRef.current;
     if (!el) return;
+    cleanupClonedAltAttrs(el);
     const overflows = el.scrollHeight > el.clientHeight + 2;
     onChangeHtml(el.innerHTML, overflows);
     if (!isComposingRef.current) {
@@ -322,6 +389,16 @@ const EditablePageBody: React.FC<EditablePageBodyProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposingRef.current) {
+      const el = localRef.current;
+      const sel = window.getSelection();
+      enterSourceBlockRef.current =
+        el && sel && sel.rangeCount > 0
+          ? findTopBlockInEditor(el, sel.getRangeAt(0).startContainer)
+          : null;
+      return;
+    }
+
     if (
       (e.key === 'Backspace' || e.key === 'Delete') &&
       !e.ctrlKey &&
@@ -705,12 +782,25 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
       ? contEl.offsetHeight || contEl.getBoundingClientRect().height / scale
       : undefined;
 
+    const paddingVPx = 7 * MM_TO_PX;
+    const editor0 = editorRefs.current[0];
+    const editor1 = editorRefs.current[1];
+    const page1ContentHeightPx =
+      editor0 && editor0.clientHeight > 160 ? editor0.clientHeight - paddingVPx : undefined;
+    const contContentHeightPx =
+      editor1 && editor1.clientHeight > 200 ? editor1.clientHeight - paddingVPx : undefined;
+    const editorWidthPx =
+      editor0 && editor0.clientWidth > 200 ? editor0.clientWidth : undefined;
+
     return {
       fontFamily: overrideStyle?.fontFamily ?? fontStyleRef.current.fontFamily,
       fontSizePt: overrideStyle?.fontSizePt ?? fontStyleRef.current.fontSizePt,
       lineHeight: overrideStyle?.lineHeight ?? fontStyleRef.current.lineHeight,
       page1HeaderHeightPx,
       contHeaderHeightPx,
+      page1ContentHeightPx,
+      contContentHeightPx,
+      editorWidthPx,
     };
   };
 
@@ -949,23 +1039,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   const measureAndPaginateBlocks = (
     blocks: ReturnType<typeof formatAlteracaoHtmlOrText>['blocks']
   ) => {
-    const scale = effectiveScaleRef.current || 1;
-    const p1El = page1HeaderRef.current;
-    const contEl = contHeaderRef.current;
-    const page1HeaderHeightPx = p1El
-      ? p1El.offsetHeight || p1El.getBoundingClientRect().height / scale
-      : undefined;
-    const contHeaderHeightPx = contEl
-      ? contEl.offsetHeight || contEl.getBoundingClientRect().height / scale
-      : undefined;
-
-    return paginateAlteracaoBlocksInDom(blocks, {
-      fontFamily,
-      fontSizePt,
-      lineHeight,
-      page1HeaderHeightPx,
-      contHeaderHeightPx,
-    });
+    return paginateAlteracaoBlocksInDom(blocks, getLivePaginateOptions());
   };
 
   const applyFormattedResult = (
@@ -1001,28 +1075,12 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
       (html, idx) => editorRefs.current[idx]?.innerHTML ?? html
     );
 
-    const scale = effectiveScaleRef.current || 1;
-    const p1El = page1HeaderRef.current;
-    const contEl = contHeaderRef.current;
-    const page1HeaderHeightPx = p1El
-      ? p1El.offsetHeight || p1El.getBoundingClientRect().height / scale
-      : undefined;
-    const contHeaderHeightPx = contEl
-      ? contEl.offsetHeight || contEl.getBoundingClientRect().height / scale
-      : undefined;
-
     const updatedPages = applyChecklistDeltaToLivePages({
       livePagesHtml,
       structuredDoc,
       prevEnabledIds: prevSet,
       nextEnabledIds: nextSet,
-      paginateOptions: {
-        fontFamily,
-        fontSizePt,
-        lineHeight,
-        page1HeaderHeightPx,
-        contHeaderHeightPx,
-      },
+      paginateOptions: getLivePaginateOptions(),
     }).map((p) => sanitizeAlteracaoHtml(p));
 
     setPagesHtml(updatedPages);

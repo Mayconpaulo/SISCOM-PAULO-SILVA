@@ -714,11 +714,33 @@ function segmentsToTextLine(seg: PositionedChunk[]): RawAlteracaoLine | null {
   const lineText = cleanText(joined);
   if (!lineText) return null;
 
+  const xStart = seg[0].x;
+  const lastChunk = seg[seg.length - 1];
+  const xEnd = lastChunk.x + lastChunk.width;
+
+  // Measure approximate PDF point width of the first token for accurate soft-wrap vs hard-break detection
+  const firstToken = lineText.split(/\s+/)[0] || '';
+  const firstNonEmptyChunk = seg.find((c) => c.text.trim().length > 0) ?? seg[0];
+  let firstWordWidth = firstToken.length * 5.2;
+  if (firstNonEmptyChunk && firstNonEmptyChunk.text.length > 0 && firstNonEmptyChunk.width > 0) {
+    const chunkTrim = firstNonEmptyChunk.text.trimStart();
+    if (chunkTrim.length >= firstToken.length && firstToken.length > 0) {
+      const avgCharW = firstNonEmptyChunk.width / firstNonEmptyChunk.text.length;
+      firstWordWidth = avgCharW * firstToken.length;
+    } else if (firstNonEmptyChunk.width > 0) {
+      firstWordWidth = firstNonEmptyChunk.width;
+    }
+  }
+  firstWordWidth = Math.max(8, Math.min(180, firstWordWidth));
+
   const isBold = totalChars > 0 && boldChars / totalChars >= 0.85;
   return {
     text: lineText,
     isBold,
     boldSubstring: !isBold && boldRunCount === 1 ? singleBoldText : undefined,
+    pdfXStart: xStart,
+    pdfXEnd: xEnd,
+    pdfFirstWordWidth: firstWordWidth,
   };
 }
 
@@ -857,11 +879,23 @@ async function readAlteracaoFromPdfOcr(
 async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-  const allLines: RawAlteracaoLine[] = [];
+
+  interface PdfCollectedEntry {
+    line: RawAlteracaoLine;
+    pageIndex: number;
+    pageWidth: number;
+    rowIndex: number;
+    segCount: number;
+    y: number;
+  }
+
+  const collected: PdfCollectedEntry[] = [];
+  const pageWidths = new Map<number, number>();
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const viewport = page.getViewport({ scale: 1 });
+    pageWidths.set(p, viewport.width);
     const content = await page.getTextContent();
     const styles = content.styles as Record<string, { fontFamily?: string }> | undefined;
 
@@ -920,7 +954,14 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
         : -1;
       if (matchIdx !== -1) {
         if (!emittedGrids.has(matchIdx)) {
-          allLines.push({ text: '', tableRows: gridMatches[matchIdx].matrix });
+          collected.push({
+            line: { text: '', tableRows: gridMatches[matchIdx].matrix },
+            pageIndex: p,
+            pageWidth: viewport.width,
+            rowIndex: rIdx,
+            segCount: 1,
+            y: rowY,
+          });
           emittedGrids.add(matchIdx);
         }
         rIdx++;
@@ -931,7 +972,14 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
       if (!inPart2OnPage && rowY < viewport.height * 0.85) {
         const borderless = tryConsumeBorderlessTable(rows, rIdx, viewport.width);
         if (borderless) {
-          allLines.push({ text: '', tableRows: borderless.matrix });
+          collected.push({
+            line: { text: '', tableRows: borderless.matrix },
+            pageIndex: p,
+            pageWidth: viewport.width,
+            rowIndex: rIdx,
+            segCount: 1,
+            y: rowY,
+          });
           rIdx = borderless.endIdx + 1;
           continue;
         }
@@ -940,17 +988,149 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
       const segments = rowsToLineSegments(rows[rIdx], splitColumnThreshold);
       for (const seg of segments) {
         const line = segmentsToTextLine(seg);
-        if (line) allLines.push(line);
+        if (line) {
+          collected.push({
+            line,
+            pageIndex: p,
+            pageWidth: viewport.width,
+            rowIndex: rIdx,
+            segCount: segments.length,
+            y: rowY,
+          });
+        }
       }
       rIdx++;
     }
   }
 
-  if (allLines.length === 0 && pdf.numPages > 0) {
+  if (collected.length === 0 && pdf.numPages > 0) {
     return readAlteracaoFromPdfOcr(pdf);
   }
 
-  return allLines;
+  // Compute global document body right/left margins so pages with mostly short lines still know the true margin
+  const percentile = (sortedAsc: number[], q: number): number => {
+    if (sortedAsc.length === 0) return 0;
+    const idx = Math.min(sortedAsc.length - 1, Math.max(0, Math.floor(sortedAsc.length * q)));
+    return sortedAsc[idx];
+  };
+
+  const docLongXEnds: number[] = [];
+  const docBodyXStarts: number[] = [];
+  for (const entry of collected) {
+    if (entry.line.tableRows || entry.segCount !== 1) continue;
+    if (isHeaderContentText(entry.line.text)) continue;
+    const xStart = entry.line.pdfXStart ?? 0;
+    const xEnd = entry.line.pdfXEnd ?? 0;
+    docBodyXStarts.push(xStart);
+    if (xEnd - xStart > entry.pageWidth * 0.45) {
+      docLongXEnds.push(xEnd);
+    }
+  }
+  docLongXEnds.sort((a, b) => a - b);
+  docBodyXStarts.sort((a, b) => a - b);
+
+  const fallbackPageW = pageWidths.get(1) ?? 595;
+  const docRightMargin =
+    docLongXEnds.length >= 3
+      ? percentile(docLongXEnds, 0.92)
+      : docLongXEnds.length > 0
+        ? docLongXEnds[docLongXEnds.length - 1]
+        : fallbackPageW * 0.88;
+  const docLeftMargin =
+    docBodyXStarts.length >= 3 ? percentile(docBodyXStarts, 0.15) : 42;
+
+  // Per-page margin & typical single-line vertical step
+  const pageMetrics = new Map<
+    number,
+    { rightMargin: number; leftMargin: number; lineStep: number }
+  >();
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const pageEntries = collected.filter(
+      (e) => e.pageIndex === p && !e.line.tableRows && e.segCount === 1
+    );
+    const pLongEnds = pageEntries
+      .filter(
+        (e) =>
+          !isHeaderContentText(e.line.text) &&
+          (e.line.pdfXEnd ?? 0) - (e.line.pdfXStart ?? 0) > e.pageWidth * 0.45
+      )
+      .map((e) => e.line.pdfXEnd ?? 0)
+      .sort((a, b) => a - b);
+    const pStarts = pageEntries
+      .filter((e) => !isHeaderContentText(e.line.text))
+      .map((e) => e.line.pdfXStart ?? docLeftMargin)
+      .sort((a, b) => a - b);
+
+    const rawPageRight = pLongEnds.length >= 3 ? percentile(pLongEnds, 0.92) : docRightMargin;
+    const rightMargin =
+      rawPageRight < docRightMargin - 16 ? docRightMargin : rawPageRight;
+    const leftMargin = pStarts.length >= 3 ? percentile(pStarts, 0.15) : docLeftMargin;
+
+    const steps: number[] = [];
+    for (let i = 1; i < pageEntries.length; i++) {
+      const dy = pageEntries[i - 1].y - pageEntries[i].y;
+      if (dy >= 6 && dy <= 30) steps.push(dy);
+    }
+    steps.sort((a, b) => a - b);
+    const lineStep = steps.length > 0 ? percentile(steps, 0.5) : 14;
+
+    pageMetrics.set(p, { rightMargin, leftMargin, lineStep });
+  }
+
+  // Classify every consecutive line pair: soft wrap (ran out of space) vs intentional hard line break
+  for (let i = 0; i < collected.length; i++) {
+    const curr = collected[i];
+    if (curr.line.tableRows) continue;
+
+    const metrics = pageMetrics.get(curr.pageIndex) ?? {
+      rightMargin: docRightMargin,
+      leftMargin: docLeftMargin,
+      lineStep: 14,
+    };
+    curr.line.pdfRightMargin = metrics.rightMargin;
+
+    const next = i + 1 < collected.length ? collected[i + 1] : null;
+    if (!next || next.line.tableRows) {
+      curr.line.hardBreakAfter = true;
+      continue;
+    }
+
+    if (next.pageIndex !== curr.pageIndex) {
+      // Across page break: mark hard break if clearly ended short; otherwise leave undefined
+      // so formatter checks against the first body word after continuation headers are stripped.
+      const remaining = metrics.rightMargin - (curr.line.pdfXEnd ?? metrics.rightMargin);
+      if (remaining > 46) {
+        curr.line.hardBreakAfter = true;
+      }
+      continue;
+    }
+
+    if (next.rowIndex === curr.rowIndex) {
+      // Separate columns on the same horizontal row
+      curr.line.hardBreakAfter = true;
+      continue;
+    }
+
+    const dy = curr.y - next.y;
+    const hasVerticalGap = dy > metrics.lineStep * 1.38;
+    const remainingWidth = metrics.rightMargin - (curr.line.pdfXEnd ?? metrics.rightMargin);
+    const nextWordW = next.line.pdfFirstWordWidth ?? 28;
+    const endedShortBeforeMargin = remainingWidth > Math.max(24, nextWordW + 14);
+    const currOffset = (curr.line.pdfXStart ?? metrics.leftMargin) - metrics.leftMargin;
+    const nextOffset = (next.line.pdfXStart ?? metrics.leftMargin) - metrics.leftMargin;
+    const nextIndented = nextOffset > 14 && currOffset <= 10;
+
+    if (endedShortBeforeMargin || hasVerticalGap || nextIndented) {
+      curr.line.hardBreakAfter = true;
+      if (nextIndented) {
+        next.line.hardBreakBefore = true;
+      }
+    } else {
+      curr.line.hardBreakAfter = false;
+    }
+  }
+
+  return collected.map((e) => e.line);
 }
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -1049,6 +1229,7 @@ function extractDocxParagraphRuns(p: Element): Array<{
     isBold: boolean;
     isUnderlined: boolean;
     boldSubstring?: string;
+    hardBreakAfter: boolean;
   }> = [];
 
   for (const acc of subLines) {
@@ -1064,6 +1245,7 @@ function extractDocxParagraphRuns(p: Element): Array<{
       isBold,
       isUnderlined: acc.isUnderlined,
       boldSubstring: !isBold && acc.boldRunCount === 1 ? acc.singleBoldText : undefined,
+      hardBreakAfter: true,
     });
   }
 
@@ -1312,6 +1494,12 @@ export interface PaginateOptions {
   lineHeight: string;
   page1HeaderHeightPx?: number;
   contHeaderHeightPx?: number;
+  /** Direct measured inner content height (clientHeight - vertical padding) of Page 1 editor */
+  page1ContentHeightPx?: number;
+  /** Direct measured inner content height (clientHeight - vertical padding) of continuation editor */
+  contContentHeightPx?: number;
+  /** Direct measured unscaled clientWidth of the live editor element */
+  editorWidthPx?: number;
   startOnContinuationPage?: boolean;
   lockedPrefixHtmls?: string[];
 }
@@ -1329,20 +1517,41 @@ export function paginateAlteracaoBlocksInDom(
   const lockedPrefixHtmls = options.lockedPrefixHtmls ?? [];
   if (blocks.length === 0 && lockedPrefixHtmls.length === 0) return ['<p><br></p>'];
 
-  const frameInnerPx = mmToPx(271) - 4;
+  // Outer A4 height = 297mm, top+bottom page padding = 26mm -> 271mm; outer black border = 2px
+  const frameInnerPx = mmToPx(271) - 2;
   const editorPaddingVPx = mmToPx(7);
-  const page1HeaderPx = options.page1HeaderHeightPx ?? mmToPx(47);
-  const contHeaderPx = Math.max(options.contHeaderHeightPx ?? 0, mmToPx(27));
+  const page1HeaderPx =
+    options.page1HeaderHeightPx && options.page1HeaderHeightPx > 20
+      ? options.page1HeaderHeightPx
+      : mmToPx(47);
+  // Real 3-line continuation header is ~19.5mm (~74px); never clamp upward to 27mm
+  const contHeaderPx =
+    options.contHeaderHeightPx && options.contHeaderHeightPx > 20
+      ? options.contHeaderHeightPx
+      : mmToPx(20);
 
-  const page1MaxPx = Math.max(160, frameInnerPx - page1HeaderPx - editorPaddingVPx - 22);
-  const contMaxPx = Math.max(200, frameInnerPx - contHeaderPx - editorPaddingVPx - 22);
+  const rawPage1UsablePx =
+    options.page1ContentHeightPx && options.page1ContentHeightPx > 160
+      ? options.page1ContentHeightPx
+      : frameInnerPx - page1HeaderPx - editorPaddingVPx;
+  const rawContUsablePx =
+    options.contContentHeightPx && options.contContentHeightPx > 200
+      ? options.contContentHeightPx
+      : frameInnerPx - contHeaderPx - editorPaddingVPx;
+
+  // Minimal 4px subpixel safety margin so content reaches the full bottom of each A4 sheet
+  const page1MaxPx = Math.max(160, rawPage1UsablePx - 4);
+  const contMaxPx = Math.max(200, rawContUsablePx - 4);
 
   const probe = document.createElement('div');
   probe.className = 'alteracao-editor';
   probe.style.position = 'fixed';
   probe.style.left = '-99999px';
   probe.style.top = '0';
-  probe.style.width = '181.5mm';
+  probe.style.width =
+    options.editorWidthPx && options.editorWidthPx > 200
+      ? `${options.editorWidthPx}px`
+      : '181.5mm';
   probe.style.padding = '3.5mm 4mm';
   probe.style.boxSizing = 'border-box';
   probe.style.visibility = 'hidden';
@@ -1540,25 +1749,37 @@ export function paginateAlteracaoBlocksInDom(
       firstContentIdx = scan;
     }
 
-    // 2) Extend across the entire atomic subject/item (e.g., all paragraphs of the same data-alt-item or 2ª Parte signature)
-    //    so no subject is ever cut in half when it fits on a page.
+    // 2) Extend strictly across the immediate atomic unit (Título + Subtítulo + its BI, or Comportamento, or 2ª Parte signature).
+    //    NEVER cross user-inserted blank spacer lines between body paragraphs, and never drag giant half-page blocks down.
     let groupEnd = firstContentIdx;
     const targetAtomicId = blocks[firstContentIdx]?.atomicGroupId ?? block.atomicGroupId;
     if (targetAtomicId && !block.isSpacer) {
+      const allowCrossSpacer = targetAtomicId === 'part2-signature';
       let scan = firstContentIdx;
       while (scan < blocks.length - 1) {
-        let nextNonSpacer = scan + 1;
-        while (nextNonSpacer < blocks.length && blocks[nextNonSpacer].isSpacer) {
-          nextNonSpacer++;
-        }
-        if (
-          nextNonSpacer < blocks.length &&
-          blocks[nextNonSpacer].atomicGroupId === targetAtomicId
-        ) {
-          scan = nextNonSpacer;
-        } else {
+        const directNext = blocks[scan + 1];
+        if (!directNext.isSpacer) {
+          if (directNext.atomicGroupId === targetAtomicId) {
+            scan++;
+            continue;
+          }
           break;
         }
+        // Only cross a spacer when explicitly allowed (2ª Parte signature) or immediately after a heading
+        if (allowCrossSpacer || blocks[scan].keepWithNext) {
+          let nextNonSpacer = scan + 1;
+          while (nextNonSpacer < blocks.length && blocks[nextNonSpacer].isSpacer) {
+            nextNonSpacer++;
+          }
+          if (
+            nextNonSpacer < blocks.length &&
+            blocks[nextNonSpacer].atomicGroupId === targetAtomicId
+          ) {
+            scan = nextNonSpacer;
+            continue;
+          }
+        }
+        break;
       }
       groupEnd = scan;
     }
@@ -1567,13 +1788,22 @@ export function paginateAlteracaoBlocksInDom(
 
     if (currentPageHtmls.length > 0 && groupEnd > idx) {
       const fullUnitHeight = measureBlockSpanHeight(idx, groupEnd);
-      if (currentHeight + fullUnitHeight > currentMaxPx && fullUnitHeight <= contMaxPx) {
+      const isSpecialFixedCluster =
+        targetAtomicId === 'part2-signature' ||
+        targetAtomicId === 'part2-item-1' ||
+        targetAtomicId === 'comportamento';
+      // Keep compact Título + Subtítulo + BI intact, but never leave half a page blank for a huge multi-line BI
+      const maxAtomicUnitPx = isSpecialFixedCluster
+        ? contMaxPx
+        : Math.min(contMaxPx * 0.42, 380);
+
+      if (currentHeight + fullUnitHeight > currentMaxPx && fullUnitHeight <= maxAtomicUnitPx) {
         startNextPage();
         continue;
       }
 
-      // If the full atomic unit is taller than an entire page, still keep any leading headings
-      // attached to at least their first content block so no heading is orphaned.
+      // If the full atomic unit is taller than the atomic cap, still keep leading headings
+      // attached to at least their first content block so no Título/Subtítulo is ever orphaned.
       if (block.keepWithNext && firstContentIdx < groupEnd) {
         const headingPlusFirstHeight = measureBlockSpanHeight(idx, firstContentIdx);
         if (

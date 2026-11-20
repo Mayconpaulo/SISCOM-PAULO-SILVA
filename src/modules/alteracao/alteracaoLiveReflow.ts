@@ -3,6 +3,8 @@ import {
   ParsedAlteracaoSectionItem,
   StructuredAlteracaoDoc,
   buildAlteracaoTableHtml,
+  isAnyComportamentoLine,
+  isComportamentoHeadingLine,
   renderItemBlocksForInsertion,
 } from './alteracaoFormatter';
 import { PaginateOptions, paginateAlteracaoBlocksInDom } from './alteracaoFileReader';
@@ -107,9 +109,11 @@ function isHeadingKeepWithNext(el: HTMLElement): boolean {
   if (!txt) return false;
   if (isMonthHeadingEl(el)) return true;
   if (normalizeKey(txt) === '1A PARTE:' || normalizeKey(txt) === '2A PARTE') return true;
-  // Bold short subtitle or section heading line
+  if (isComportamentoHeadingLine(txt)) return true;
+  // Bold short subtitle or section heading line (never a bullet/BI entry or full sentence)
+  if (/^[-–—•]\s*/.test(txt) || /[.;!?]$/.test(txt)) return false;
   const strong = el.querySelector('strong, b');
-  if (strong && normalizeKey(strong.textContent || '') === normalizeKey(txt) && txt.length <= 140) {
+  if (strong && normalizeKey(strong.textContent || '') === normalizeKey(txt) && txt.length <= 120) {
     return true;
   }
   return false;
@@ -198,18 +202,42 @@ function elementsToReflowBlocks(
     return false;
   };
 
+  const stripStaleAltAttrsFromSpacer = (spacerEl: HTMLElement): string => {
+    const clone = spacerEl.cloneNode(true) as HTMLElement;
+    clone.removeAttribute('data-alt-item');
+    clone.removeAttribute('data-alt-group');
+    clone.removeAttribute('data-alt-month');
+    clone.removeAttribute('data-alt-sem-alt');
+    clone.removeAttribute('data-alt-part2');
+    clone.removeAttribute('data-alt-comportamento');
+    return clone.outerHTML;
+  };
+
   let inPart2 = false;
   let inPart2Footer = false;
+  // Track when a body paragraph of a given item has already been seen, and whether a spacer separated them
+  const seenBodyItemIds = new Set<string>();
+  const brokenItemIds = new Set<string>();
+  let lastNonSpacerItemId: string | undefined;
+  let lastNonSpacerWasHeading = false;
 
   for (const entry of nodes) {
     if (entry.block) {
       if (entry.block.isSpacer) {
+        if (lastNonSpacerItemId && !lastNonSpacerWasHeading) {
+          brokenItemIds.add(lastNonSpacerItemId);
+        }
         if (entry.block.preserveIfSpacer || !lastIsSpacer()) {
           blocks.push(entry.block.preserveIfSpacer ? entry.block : spacer());
         }
         continue;
       }
       blocks.push(entry.block);
+      lastNonSpacerWasHeading = Boolean(entry.block.keepWithNext);
+      lastNonSpacerItemId = entry.block.atomicGroupId;
+      if (!entry.block.keepWithNext && entry.block.atomicGroupId) {
+        seenBodyItemIds.add(entry.block.atomicGroupId);
+      }
       continue;
     }
 
@@ -217,14 +245,22 @@ function elementsToReflowBlocks(
     const hasCaret = elementContainsCaretMarker(el);
 
     if (isSpacerElement(el)) {
+      // Any blank line after a body (non-heading) block breaks that item's atomic group
+      if (lastNonSpacerItemId && !lastNonSpacerWasHeading) {
+        brokenItemIds.add(lastNonSpacerItemId);
+      }
       if (hasCaret) {
-        blocks.push({ html: el.outerHTML, isSpacer: true, preserveIfSpacer: true });
+        blocks.push({
+          html: stripStaleAltAttrsFromSpacer(el),
+          isSpacer: true,
+          preserveIfSpacer: true,
+        });
         continue;
       }
       // Preserve intentional blank lines typed by the user inside a page during live editing,
       // while avoiding duplicate spacers at old page break boundaries.
       if (preserveUserSpacers && !entry.crossedPageBreak) {
-        blocks.push({ html: el.outerHTML, isSpacer: true });
+        blocks.push({ html: stripStaleAltAttrsFromSpacer(el), isSpacer: true });
         continue;
       }
       if (!lastIsSpacer()) {
@@ -233,7 +269,8 @@ function elementsToReflowBlocks(
       continue;
     }
 
-    const txtNorm = normalizeKey(el.textContent || '');
+    const rawTxt = (el.textContent || '').trim();
+    const txtNorm = normalizeKey(rawTxt);
     if (el.hasAttribute('data-alt-part2') || /^2[Aª]?\s*PARTE\b/.test(txtNorm)) {
       inPart2 = true;
       inPart2Footer = false;
@@ -290,24 +327,54 @@ function elementsToReflowBlocks(
       }
 
       blocks.push(tblBlock);
+      lastNonSpacerWasHeading = false;
+      lastNonSpacerItemId = itemId;
+      if (itemId) seenBodyItemIds.add(itemId);
       continue;
     }
 
-    const itemAttr = el.getAttribute('data-alt-item') || undefined;
-    let atomicGroupId = itemAttr;
-    if (!atomicGroupId && inPart2) {
+    const keepWithNext = isHeadingKeepWithNext(el);
+    const isComportamentoEl =
+      !inPart2 && (el.hasAttribute('data-alt-comportamento') || isAnyComportamentoLine(rawTxt));
+
+    let atomicGroupId: string | undefined;
+    if (isComportamentoEl) {
+      // Comportamento is ALWAYS independent from any BI above it!
+      atomicGroupId = 'comportamento';
+    } else if (inPart2) {
       if (inPart2Footer) {
         atomicGroupId = 'part2-signature';
-      } else if (/^(?:1\.|a\.|b\.)\s*/i.test((el.textContent || '').trim())) {
+      } else if (/^(?:1\.|a\.|b\.)\s*/i.test(rawTxt)) {
         atomicGroupId = 'part2-item-1';
+      }
+    } else {
+      const itemAttr = el.getAttribute('data-alt-item') || undefined;
+      if (itemAttr) {
+        const startsNewDatedBi =
+          !keepWithNext &&
+          seenBodyItemIds.has(itemAttr) &&
+          /^[-–—]\s*(?:a\s+\d{1,2}|em\s+\d{1,2}|\d{1,2}[\/\.])/i.test(rawTxt);
+        if (startsNewDatedBi) {
+          brokenItemIds.add(itemAttr);
+        }
+        // Only keep Subtitle + its immediate BI bound together; never bind across a user spacer or a second BI
+        if (!brokenItemIds.has(itemAttr)) {
+          atomicGroupId = itemAttr;
+        }
       }
     }
 
     blocks.push({
       html: el.outerHTML,
-      keepWithNext: isHeadingKeepWithNext(el),
+      keepWithNext,
       atomicGroupId,
     });
+
+    lastNonSpacerWasHeading = keepWithNext;
+    lastNonSpacerItemId = atomicGroupId;
+    if (!keepWithNext && atomicGroupId) {
+      seenBodyItemIds.add(atomicGroupId);
+    }
   }
 
   return blocks;

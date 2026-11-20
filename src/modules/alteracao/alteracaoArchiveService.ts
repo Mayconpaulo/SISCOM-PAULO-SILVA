@@ -190,6 +190,9 @@ export function parseStructuredDocJson(raw: string): StructuredAlteracaoDoc | nu
       return {
         items: parsed.items,
         monthOrder: parsed.monthOrder,
+        comportamentoLines: Array.isArray(parsed.comportamentoLines)
+          ? parsed.comportamentoLines
+          : undefined,
         part2Lines: Array.isArray(parsed.part2Lines) ? parsed.part2Lines : [],
         part2BoldSubstrings: parsed.part2BoldSubstrings,
         extractedHeader: parsed.extractedHeader ?? {},

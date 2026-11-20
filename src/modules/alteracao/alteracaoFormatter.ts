@@ -24,6 +24,15 @@ export interface RawAlteracaoLine {
   boldSubstring?: string;
   tableRows?: string[][];
   tableItemId?: string;
+  /** True when the source document explicitly broke the line after this line (short PDF line before right margin, vertical paragraph gap, or explicit DOCX/HTML paragraph/br). */
+  hardBreakAfter?: boolean;
+  /** True when this line explicitly starts a new line/paragraph (e.g., first-line indent or explicit break). */
+  hardBreakBefore?: boolean;
+  /** Optional PDF geometry for cross-page wrap analysis after continuation headers are stripped. */
+  pdfXStart?: number;
+  pdfXEnd?: number;
+  pdfRightMargin?: number;
+  pdfFirstWordWidth?: number;
 }
 
 export interface AlteracaoTableBlockMeta {
@@ -53,9 +62,15 @@ export interface ParsedAlteracaoSectionItem {
   tableRows?: string[][];
 }
 
+export interface ComportamentoDocLine {
+  text: string;
+  isBold?: boolean;
+}
+
 export interface StructuredAlteracaoDoc {
   items: ParsedAlteracaoSectionItem[];
   monthOrder: string[];
+  comportamentoLines?: ComportamentoDocLine[];
   part2Lines: string[];
   part2BoldSubstrings?: Record<number, string>;
   extractedHeader: AlteracaoHeaderExtract;
@@ -359,6 +374,49 @@ function isPart2Line(text: string): boolean {
 function isSemAlteracaoLine(text: string): boolean {
   const u = stripDiacriticsUpper(text).replace(/^[-–—•*\s]+/, '').replace(/[.\s]+$/, '');
   return u === 'SEM ALTERACAO' || u === 'SEM ALTERACOES';
+}
+
+export function isComportamentoHeadingLine(text: string): boolean {
+  const u = stripDiacriticsUpper(cleanInlineWhitespace(text))
+    .replace(/^[-–—•*\s]+/, '')
+    .replace(/[:.\-–—\s]+$/, '');
+  return (
+    u === 'COMPORTAMENTO' ||
+    u === 'COMPORTAMENTO MILITAR' ||
+    u === 'CLASSIFICACAO DE COMPORTAMENTO' ||
+    u === 'CLASSIFICACAO DO COMPORTAMENTO'
+  );
+}
+
+export function isComportamentoInlineLine(text: string): boolean {
+  const clean = cleanInlineWhitespace(text);
+  return /^(?:[-–—]\s*)?(?:CLASSIFICA[ÇC][ÃA]O\s+D[EO]\s+)?COMPORTAMENTO(?:\s+MILITAR)?\s*[:\-–—]\s*\S+/i.test(
+    clean
+  );
+}
+
+export function isComportamentoStatementLine(text: string): boolean {
+  const clean = cleanInlineWhitespace(text);
+  if (!clean || clean.length > 220) return false;
+  // Never hijack a dated BI publication line like "- a 14, BI Nº 31: Ingressou no excepcional comportamento."
+  if (/^[-–—]\s*(?:a\s+\d{1,2}|em\s+\d{1,2}|\d{1,2}[\/\.])/i.test(clean)) return false;
+  if (/\b(?:BI|BOL|BOLETIM|ADIT|PORTARIA)\s*N[º°o]/i.test(clean)) return false;
+  const u = stripDiacriticsUpper(clean).replace(/^[-–—•*\s]+/, '');
+  return (
+    /^(?:PERMANECE|CONTINUA|ENCONTRA-SE|ACHA-SE|MANTEM-SE|INGRESSOU|PASSOU|CLASSIFICAD[OA]|ENQUADRAD[OA]|REBAIXAD[OA])\b.*\bCOMPORTAMENTO\b/.test(
+      u
+    ) ||
+    /^(?:NO\s+)?(?:EXCEPCIONAL|OTIMO|BOM|INSUFICIENTE|MAU)\s+COMPORTAMENTO\b/.test(u) ||
+    /^COMPORTAMENTO\s+(?:EXCEPCIONAL|OTIMO|BOM|INSUFICIENTE|MAU)\b/.test(u)
+  );
+}
+
+export function isAnyComportamentoLine(text: string): boolean {
+  return (
+    isComportamentoHeadingLine(text) ||
+    isComportamentoInlineLine(text) ||
+    isComportamentoStatementLine(text)
+  );
 }
 
 /**
@@ -919,6 +977,8 @@ function isUppercaseHeadingCandidate(text: string): boolean {
   if (normalizeMonthHeading(clean) || isPart1Line(clean) || isPart2Line(clean)) return false;
   if (isNonTitleTopic(clean)) return false;
   if (/[.;!?]$/.test(clean)) return false;
+  // Reject inline key-value lines like "NOTA FINAL: E" or "CPF: 123..." inside a BI
+  if (/:/.test(clean)) return false;
   if (
     /^(?:DE|DO|DA|DOS|DAS|NO|NA|NOS|NAS|EM|AO|AOS|COM|POR|PARA|PELO|PELA|SEM|SOB|SOBRE|BI|BOL|BOLETIM|PORTARIA|ADITAMENTO|ADIT|OF[ÍI]CIO|MEMO|DIEX)\b/i.test(
       clean
@@ -948,6 +1008,7 @@ function splitTitleSubtitleDash(
   const left = dashMatch[1].trim();
   const right = dashMatch[2].trim();
   if (!left || !right || left.length > 90 || right.length > 160) return null;
+  if (/:/.test(left)) return null;
 
   // Never mistake date/bulletin/document prefixes for a Section Title
   if (
@@ -1085,6 +1146,7 @@ export function htmlToRawAlteracaoLines(html: string): RawAlteracaoLine[] {
         isBold,
         isUnderlined,
         boldSubstring: boldSubstring || undefined,
+        hardBreakAfter: true,
       });
     };
 
@@ -1228,11 +1290,33 @@ export function htmlToRawAlteracaoLines(html: string): RawAlteracaoLine[] {
 }
 
 export function plainTextToRawAlteracaoLines(rawText: string): RawAlteracaoLine[] {
-  return rawText
+  const rawLines = rawText
     .replace(/\r\n?/g, '\n')
     .split('\n')
-    .map((line) => ({ text: cleanInlineWhitespace(line) }))
-    .filter((line) => line.text.length > 0);
+    .map((line) => cleanInlineWhitespace(line))
+    .filter((line) => line.length > 0);
+
+  if (rawLines.length === 0) return [];
+
+  // Infer wrapped column width (for OCR / hard-wrapped plain text) vs intentional short lines
+  const lengths = rawLines
+    .map((l) => l.length)
+    .filter((len) => len >= 40)
+    .sort((a, b) => a - b);
+  const wrapWidth =
+    lengths.length >= 3
+      ? lengths[Math.min(lengths.length - 1, Math.floor(lengths.length * 0.85))]
+      : 0;
+
+  return rawLines.map((text, idx) => {
+    const next = idx + 1 < rawLines.length ? rawLines[idx + 1] : '';
+    const nextFirstWordLen = next ? (next.split(/\s+/)[0]?.length ?? 0) : 0;
+    const hardBreakAfter =
+      !next ||
+      wrapWidth < 52 ||
+      text.length + 1 + nextFirstWordLen <= wrapWidth - 6;
+    return { text, hardBreakAfter };
+  });
 }
 
 function isContinuationHeaderTrigger(lineText: string): boolean {
@@ -1955,6 +2039,23 @@ export function renderBlocksFromStructuredDoc(
     });
   });
 
+  if (doc.comportamentoLines && doc.comportamentoLines.length > 0) {
+    if (blocks.length > 0 && !blocks[blocks.length - 1].isSpacer) {
+      blocks.push(spacer());
+    }
+    doc.comportamentoLines.forEach((compLine) => {
+      const isHeading = Boolean(compLine.isBold || isComportamentoHeadingLine(compLine.text));
+      const inner = isHeading
+        ? `<strong>${escapeAlteracaoHtml(compLine.text)}</strong>`
+        : escapeAlteracaoHtml(compLine.text);
+      blocks.push({
+        html: `<p data-alt-comportamento="true">${inner}</p>`,
+        keepWithNext: isHeading,
+        atomicGroupId: 'comportamento',
+      });
+    });
+  }
+
   if (doc.part2Lines.length > 0) {
     const { lines: normalizedPart2, boldByIdx } = normalizePart2Lines(
       doc.part2Lines,
@@ -2139,6 +2240,7 @@ export function formatAlteracaoLinesToBlocks(
 
   const items: ParsedAlteracaoSectionItem[] = [];
   const monthOrder: string[] = [];
+  const comportamentoLines: ComportamentoDocLine[] = [];
   const part2Lines: string[] = [];
   const part2BoldSubstrings: Record<number, string> = {};
 
@@ -2155,8 +2257,46 @@ export function formatAlteracaoLinesToBlocks(
   let currentTitle = '';
   let currentSubtitle = '';
   let currentEntryItem: ParsedAlteracaoSectionItem | null = null;
+  let lastRawLineForEntry: RawAlteracaoLine | null = null;
+  let lastRawLineForComportamento: RawAlteracaoLine | null = null;
+  let inComportamento = false;
   let inPart2 = false;
   let itemSeq = 0;
+
+  const hasFurtherMonthsOrDatedBiAfter = (fromIdx: number): boolean => {
+    for (let k = fromIdx + 1; k < bodyLines.length; k++) {
+      const candidate = bodyLines[k];
+      if (candidate.tableRows && candidate.tableRows.length > 0) return true;
+      const t = cleanInlineWhitespace(candidate.text);
+      if (!t) continue;
+      if (isPart2Line(t)) return false;
+      if (normalizeMonthHeading(t)) return true;
+      if (/^[-–—]\s*(?:a\s+\d{1,2}|em\s+\d{1,2}|\d{1,2}[\/\.])/i.test(t)) return true;
+      if (/\b(?:BI|BOL|BOLETIM|ADIT|PORTARIA)\s*N[º°o]/i.test(t)) return true;
+    }
+    return false;
+  };
+
+  const shouldBreakBeforeLine = (
+    prevRaw: RawAlteracaoLine | null,
+    currRaw: RawAlteracaoLine,
+    prevText: string
+  ): boolean => {
+    if (currRaw.hardBreakBefore === true) return true;
+    if (prevRaw?.hardBreakAfter === true) return true;
+    if (prevRaw?.hardBreakAfter === false) return false;
+    // Cross-page PDF line wrap check after continuation headers were stripped
+    if (
+      prevRaw &&
+      typeof prevRaw.pdfXEnd === 'number' &&
+      typeof prevRaw.pdfRightMargin === 'number'
+    ) {
+      const remaining = prevRaw.pdfRightMargin - prevRaw.pdfXEnd;
+      const nextWordW = currRaw.pdfFirstWordWidth ?? 28;
+      return remaining > Math.max(24, nextWordW + 14);
+    }
+    return /[.;!?]$/.test(prevText) && !ABBREV_END_RE.test(prevText) && !/\d\.$/.test(prevText);
+  };
 
   const getActiveMonth = (): string => {
     if (currentMonthName) return currentMonthName;
@@ -2209,6 +2349,8 @@ export function formatAlteracaoLinesToBlocks(
 
     // Structured data table inside body (if already in 2ª PARTE, convert table rows back to part2 lines)
     if (raw.tableRows && raw.tableRows.length > 0) {
+      inComportamento = false;
+      lastRawLineForComportamento = null;
       if (inPart2) {
         for (const r of raw.tableRows) {
           const joined = r.map((c) => cleanInlineWhitespace(c)).filter(Boolean).join(' ');
@@ -2239,6 +2381,7 @@ export function formatAlteracaoLinesToBlocks(
         tableRows: rows,
       });
       currentEntryItem = null;
+      lastRawLineForEntry = null;
       continue;
     }
 
@@ -2259,8 +2402,42 @@ export function formatAlteracaoLinesToBlocks(
     }
 
     if (isPart2Line(text)) {
+      inComportamento = false;
+      lastRawLineForComportamento = null;
       inPart2 = true;
       part2Lines.push('2ª PARTE');
+      continue;
+    }
+
+    // Standalone Comportamento section at the end of 1ª Parte (right before 2ª Parte)
+    if (inComportamento) {
+      const prevComp = comportamentoLines[comportamentoLines.length - 1];
+      if (
+        prevComp &&
+        !isComportamentoHeadingLine(prevComp.text) &&
+        !isEntryStartLine(text) &&
+        !shouldBreakBeforeLine(lastRawLineForComportamento, raw, prevComp.text)
+      ) {
+        prevComp.text = `${prevComp.text} ${text}`;
+      } else {
+        comportamentoLines.push({
+          text: isEntryStartLine(text) ? normalizeEntryColon(text) : text,
+          isBold: Boolean(raw.isBold || isComportamentoHeadingLine(text)),
+        });
+      }
+      lastRawLineForComportamento = raw;
+      continue;
+    }
+
+    if (isAnyComportamentoLine(text) && !hasFurtherMonthsOrDatedBiAfter(i)) {
+      inComportamento = true;
+      currentEntryItem = null;
+      lastRawLineForEntry = null;
+      comportamentoLines.push({
+        text: isEntryStartLine(text) ? normalizeEntryColon(text) : text,
+        isBold: Boolean(raw.isBold || isComportamentoHeadingLine(text)),
+      });
+      lastRawLineForComportamento = raw;
       continue;
     }
 
@@ -2271,12 +2448,25 @@ export function formatAlteracaoLinesToBlocks(
       currentTitle = '';
       currentSubtitle = '';
       currentEntryItem = null;
+      lastRawLineForEntry = null;
       continue;
     }
 
     if (isSemAlteracaoLine(text)) {
       getActiveMonth();
       currentEntryItem = null;
+      lastRawLineForEntry = null;
+      continue;
+    }
+
+    // Mid-document COMPORTAMENTO heading: always isolate as its own standalone Title, never merged into previous BI
+    if (isComportamentoHeadingLine(text)) {
+      currentTitle = text.replace(/:$/, '').toUpperCase();
+      lastTitleInMonth = currentTitle;
+      lastKnownTitleOverall = currentTitle;
+      currentSubtitle = '';
+      currentEntryItem = null;
+      lastRawLineForEntry = null;
       continue;
     }
 
@@ -2298,6 +2488,7 @@ export function formatAlteracaoLinesToBlocks(
       lastTitleInMonth = parentTitle;
       lastKnownTitleOverall = parentTitle;
       currentEntryItem = null;
+      lastRawLineForEntry = null;
 
       if (
         nextLine &&
@@ -2333,6 +2524,7 @@ export function formatAlteracaoLinesToBlocks(
         currentSubtitle = splitDash.subtitle;
       }
       currentEntryItem = null;
+      lastRawLineForEntry = null;
       continue;
     }
 
@@ -2341,13 +2533,13 @@ export function formatAlteracaoLinesToBlocks(
       (raw.isBold || canStartHeading) && isUppercaseHeadingCandidate(text);
 
     if (isStandaloneUpper) {
-      // If we are right at the boundary of a previous entry or same title, check if nextLine is an entry/table while we ALREADY have a title
       const afterNextLine = i + 2 < bodyLines.length ? bodyLines[i + 2] : undefined;
       currentTitle = text.toUpperCase();
       lastTitleInMonth = currentTitle;
       lastKnownTitleOverall = currentTitle;
       currentSubtitle = '';
       currentEntryItem = null;
+      lastRawLineForEntry = null;
 
       if (
         nextLine &&
@@ -2356,6 +2548,7 @@ export function formatAlteracaoLinesToBlocks(
         !isSemAlteracaoLine(nextLine.text) &&
         !normalizeMonthHeading(nextLine.text) &&
         !isPart2Line(nextLine.text) &&
+        !isAnyComportamentoLine(nextLine.text) &&
         !/[.;!?]$/.test(nextLine.text) &&
         nextLine.text.length <= 140 &&
         (!isUppercaseHeadingCandidate(nextLine.text) ||
@@ -2389,14 +2582,29 @@ export function formatAlteracaoLinesToBlocks(
       lastTitleInMonth = parentTitle;
       currentSubtitle = text;
       currentEntryItem = null;
+      lastRawLineForEntry = null;
       continue;
     }
 
     // 4. Entry paragraph starting with "- ..."
     if (isEntryStartLine(text)) {
       const normalized = normalizeEntryColon(text);
+      const isNewDatedBiEntry =
+        /^[-–—]\s*(?:a\s+\d{1,2}|em\s+\d{1,2}|de\s+\d{1,2}|no\s+dia\s+\d{1,2}|\d{1,2}[\/\.])/i.test(
+          normalized
+        ) || /\b(?:BI|BOL|BOLETIM|ADIT|ADITAMENTO|PORTARIA)\s*N[º°o]/i.test(normalized);
+
+      // Keep undated sub-bullets (e.g. "- Corrida: ...", "- Pensionista: ...") inside their parent BI
+      // so the subtitle is not duplicated and each sub-line stays on its own line.
+      if (currentEntryItem && currentEntryItem.paragraphs.length > 0 && !isNewDatedBiEntry) {
+        currentEntryItem.paragraphs.push(normalized);
+        lastRawLineForEntry = raw;
+        continue;
+      }
+
       currentEntryItem = ensureCurrentEntryItem();
       currentEntryItem.paragraphs.push(normalized);
+      lastRawLineForEntry = raw;
       if (currentEntryItem.paragraphs.length === 1) {
         currentEntryItem.previewLabel =
           currentEntryItem.subtitle || normalized.slice(0, 70);
@@ -2411,22 +2619,27 @@ export function formatAlteracaoLinesToBlocks(
       continue;
     }
 
-    // 6. Continuation line right after "- a 14, BI Nº 31:" OR wrapped PDF sentence line
+    // 6. Continuation line inside an entry: distinguish soft wrap (ran out of space) vs intentional line break
     if (currentEntryItem && currentEntryItem.paragraphs.length > 0) {
       const idx = currentEntryItem.paragraphs.length - 1;
       const prev = currentEntryItem.paragraphs[idx];
       const cleanedCont = text.replace(/([0-9º°ª\)])\s+:(?=\s|$)/g, '$1:');
+      const isIntentionalBreak = shouldBreakBeforeLine(lastRawLineForEntry, raw, prev);
+
       if (/^:\s*/.test(cleanedCont)) {
         const afterColon = cleanedCont.replace(/^:\s*/, '');
         const trimmedPrev = prev.replace(/\s*:?\s*$/, ':');
         currentEntryItem.paragraphs[idx] = afterColon ? `${trimmedPrev} ${afterColon}` : trimmedPrev;
+      } else if (isIntentionalBreak) {
+        // Source document intentionally started a new line (e.g., ended well before right margin or explicit paragraph break)
+        currentEntryItem.paragraphs.push(normalizeEntryColon(cleanedCont));
       } else if (/:$/.test(prev)) {
         currentEntryItem.paragraphs[idx] = `${prev.replace(/\s+:$/, ':')} ${cleanedCont}`;
-      } else if (!/[.;!?]$/.test(prev) || ABBREV_END_RE.test(prev) || /\d\.$/.test(prev)) {
-        currentEntryItem.paragraphs[idx] = `${prev} ${cleanedCont}`;
       } else {
-        currentEntryItem.paragraphs.push(normalizeEntryColon(cleanedCont));
+        // Soft wrap (previous line filled to the right margin) -> join cleanly onto same paragraph
+        currentEntryItem.paragraphs[idx] = `${prev} ${cleanedCont}`;
       }
+      lastRawLineForEntry = raw;
       continue;
     }
 
@@ -2434,6 +2647,7 @@ export function formatAlteracaoLinesToBlocks(
     currentEntryItem = ensureCurrentEntryItem();
     const norm = normalizeEntryColon(text);
     currentEntryItem.paragraphs.push(norm);
+    lastRawLineForEntry = raw;
     currentEntryItem.previewLabel = currentEntryItem.subtitle || norm.slice(0, 70);
   }
 
@@ -2449,6 +2663,7 @@ export function formatAlteracaoLinesToBlocks(
   const structuredDoc: StructuredAlteracaoDoc = {
     items,
     monthOrder,
+    comportamentoLines: comportamentoLines.length > 0 ? comportamentoLines : undefined,
     part2Lines,
     part2BoldSubstrings:
       Object.keys(part2BoldSubstrings).length > 0 ? part2BoldSubstrings : undefined,

@@ -169,7 +169,8 @@ function sanitizeDomNode(node: Node, doc: Document): void {
         name === 'data-alt-item' ||
         name === 'data-alt-part2' ||
         name === 'data-alt-month' ||
-        name === 'data-alt-sem-alt'
+        name === 'data-alt-sem-alt' ||
+        name === 'data-alt-comportamento'
       ) {
         if (val.length > 200 || /[<>]/.test(val)) {
           el.removeAttribute(attr.name);
