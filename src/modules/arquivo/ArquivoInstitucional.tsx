@@ -2,7 +2,7 @@ import React from 'react';
 import { ExternalLink, Folder } from 'lucide-react';
 
 export const ARQUIVO_DRIVE_FOLDER_URL =
-  'https://drive.google.com/drive/folders/1eFGncFhMuOQBEU4Gv-NDFw8BVpHTub7v';
+  'https://drive.google.com/drive/folders/1eFGncFhMuOQBEU4Gv-NDFw8BVphTub7v?usp=drive_link';
 
 export function ArquivoInstitucional() {
   return (
