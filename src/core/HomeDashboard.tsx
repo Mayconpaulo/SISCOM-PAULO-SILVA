@@ -93,10 +93,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     }
   };
 
-  // Calculate remaining slots in 3-column desktop grid so the Regimento Sampaio motto card balances the bottom row
-  const trailingSlotsLg =
+  // Calculate remaining slots in the 2-column (sm/lg) vs 3-column (xl) main module grid
+  // With 7 modules in xl:grid-cols-3 -> 2 trailing slots; in sm/lg:grid-cols-2 -> 1 trailing slot
+  const trailingSlotsXl =
     !normalizedQuery && filteredCards.length > 0
       ? (3 - (filteredCards.length % 3)) % 3
+      : 0;
+  const trailingSlotsMd =
+    !normalizedQuery && filteredCards.length > 0
+      ? (2 - (filteredCards.length % 2)) % 2
       : 0;
 
   return (
@@ -133,7 +138,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: SISCOM_EASE }}
-        className="no-print relative z-20 w-full max-w-[1180px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-3 flex items-center justify-between gap-3"
+        className="no-print relative z-20 w-full max-w-[1260px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-3 flex items-center justify-between gap-3"
       >
         {/* Left: Arma de Comunicações + SISCOM | Brasão 1º BI Mec (Es) */}
         <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
@@ -245,7 +250,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       </motion.header>
 
       {/* Main Content Container */}
-      <main className="relative z-10 flex-1 w-full max-w-[1180px] mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-20 sm:pb-12 flex flex-col gap-5 sm:gap-6">
+      <main className="relative z-10 flex-1 w-full max-w-[1260px] mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-20 sm:pb-12 flex flex-col gap-5 sm:gap-6">
         {/* Greeting + Command Search Row */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <motion.div
@@ -315,155 +320,163 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           )}
         </AnimatePresence>
 
-        {/* Operational Preview Row: Agenda Preview + Demandas Widgets side-by-side */}
-        <div
-          className={`grid grid-cols-1 gap-3.5 ${
-            hasAgendaAccess ? 'lg:grid-cols-2' : ''
-          }`}
-        >
-          {hasAgendaAccess && (
-            <HomeAgendaPreview
-              onOpenAgenda={() => onNavigate('agenda')}
-              className="max-w-none"
-            />
-          )}
-          <HomeDemandasWidgets className="max-w-none" />
-        </div>
-
-        {/* Unified Module Cards Container (all cards together, no category divisions) */}
-        <motion.section
-          aria-label="Funções do SISCOM"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.24, delay: 0.08, ease: SISCOM_EASE }}
-          className="siscom-home-frame rounded-[16px] p-3.5 sm:p-4 backdrop-blur-sm"
-        >
-          {visibleCards.length === 0 ? (
-            <div className="py-8 text-center text-sm text-[#98A89F]">
-              Nenhuma função liberada para este login no momento.
-            </div>
-          ) : filteredCards.length === 0 && !matchesDemandasQuery ? (
-            <div className="py-8 text-center space-y-2">
-              <p className="text-sm text-[#C6D4CC]">
-                Nenhuma função encontrada para “{searchQuery}”.
-              </p>
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="text-xs font-medium text-[#DFBC75] hover:underline cursor-pointer"
-              >
-                Mostrar todas as funções
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
-              {filteredCards.map((card, idx) => (
-                <motion.button
-                  key={card.id}
-                  type="button"
-                  onClick={() => onNavigate(card.id)}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.2,
-                    delay: 0.03 + idx * 0.025,
-                    ease: SISCOM_EASE,
-                  }}
-                  className="relative siscom-home-card group rounded-[12px] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer"
-                >
-                  <motion.div
-                    layoutId={`module-surface-${card.id}`}
-                    transition={MODULE_EXPAND_TRANSITION}
-                    className="absolute inset-0 rounded-[12px] pointer-events-none"
-                  />
-
-                  <motion.div
-                    layoutId={`module-icon-${card.id}`}
-                    transition={MODULE_LOCKUP_TRANSITION}
-                    className="relative z-10 w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592] transition-colors duration-200"
-                  >
-                    {card.renderIcon('w-10 h-10 sm:w-11 sm:h-11')}
-                  </motion.div>
-
-                  <div className="relative z-10 min-w-0 flex-1">
-                    <motion.span
-                      layoutId={`module-title-${card.id}`}
-                      transition={MODULE_LOCKUP_TRANSITION}
-                      className="block font-display text-base sm:text-[17px] font-semibold tracking-tight text-[#F0F4F1] group-hover:text-[#F4E6C4] transition-colors duration-200 truncate"
-                    >
-                      {card.title}
-                    </motion.span>
-                    <span className="block text-xs sm:text-[13px] text-[#8F9F96] group-hover:text-[#B4C4BA] transition-colors duration-200 mt-0.5 truncate">
-                      {card.description}
-                    </span>
-                  </div>
-                </motion.button>
-              ))}
-
-              {/* Direct Demandas shortcut when searched */}
-              {matchesDemandasQuery && (
+        {/* Action-First Asymmetric Dashboard Grid:
+            Primary Stage (~72%): Unified Module Cards in full evidence
+            Secondary Corner Rail (~28%): Quiet Agenda Preview + Demandas companion panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_312px] xl:grid-cols-[minmax(0,1fr)_336px] gap-4 sm:gap-5 items-start">
+          {/* PRIMARY FOCUS: Unified Module Cards Container */}
+          <motion.section
+            aria-label="Funções do SISCOM"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24, delay: 0.05, ease: SISCOM_EASE }}
+            className="siscom-home-frame rounded-[16px] p-3.5 sm:p-4.5 backdrop-blur-sm"
+          >
+            {visibleCards.length === 0 ? (
+              <div className="py-10 text-center text-sm text-[#98A89F]">
+                Nenhuma função liberada para este login no momento.
+              </div>
+            ) : filteredCards.length === 0 && !matchesDemandasQuery ? (
+              <div className="py-10 text-center space-y-2">
+                <p className="text-sm text-[#C6D4CC]">
+                  Nenhuma função encontrada para “{searchQuery}”.
+                </p>
                 <button
                   type="button"
-                  onClick={() => setDemandasPanelOpen(true)}
-                  className="siscom-home-card group rounded-[12px] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer"
+                  onClick={() => setSearchQuery('')}
+                  className="text-xs font-medium text-[#DFBC75] hover:underline cursor-pointer"
                 >
-                  <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592]">
-                    <ListTodo className="w-8 h-8" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <span className="block font-display text-base sm:text-[17px] font-semibold text-[#F0F4F1] group-hover:text-[#F4E6C4]">
-                      Demandas
-                    </span>
-                    <span className="block text-xs sm:text-[13px] text-[#8F9F96] mt-0.5 truncate">
-                      Gerencie tarefas, prazos e avisos
-                    </span>
-                  </div>
+                  Mostrar todas as funções
                 </button>
-              )}
-
-              {/* Institutional Motto Card filling remaining symmetry slots in the grid */}
-              {trailingSlotsLg > 0 && (
-                <div
-                  className={`siscom-motto-card relative overflow-hidden rounded-[12px] px-5 py-4 flex items-center gap-4 ${
-                    trailingSlotsLg === 2
-                      ? 'sm:col-span-2 lg:col-span-2'
-                      : 'lg:col-span-1'
-                  }`}
-                >
-                  {/* Subtle decorative diagonal stripes */}
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute -right-6 -bottom-10 w-36 h-44 flex gap-3 rotate-[24deg] opacity-25"
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-3.5">
+                {filteredCards.map((card, idx) => (
+                  <motion.button
+                    key={card.id}
+                    type="button"
+                    onClick={() => onNavigate(card.id)}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.2,
+                      delay: 0.02 + idx * 0.022,
+                      ease: SISCOM_EASE,
+                    }}
+                    className="relative siscom-home-card group rounded-[12px] px-4 py-4.5 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[96px] sm:min-h-[106px]"
                   >
-                    <div className="w-4 h-full bg-gradient-to-b from-[#C29B56]/40 to-transparent" />
-                    <div className="w-7 h-full bg-gradient-to-b from-[#2D5A43]/65 to-transparent" />
-                  </div>
+                    <motion.div
+                      layoutId={`module-surface-${card.id}`}
+                      transition={MODULE_EXPAND_TRANSITION}
+                      className="absolute inset-0 rounded-[12px] pointer-events-none"
+                    />
 
-                  <img
-                    src="/assets/logo_arma_comunicacoes.png"
-                    alt=""
-                    aria-hidden="true"
-                    className="relative z-10 w-11 h-11 sm:w-12 sm:h-12 object-contain shrink-0 opacity-95 select-none"
-                  />
+                    <motion.div
+                      layoutId={`module-icon-${card.id}`}
+                      transition={MODULE_LOCKUP_TRANSITION}
+                      className="relative z-10 w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592] transition-colors duration-200"
+                    >
+                      {card.renderIcon('w-10 h-10 sm:w-11 sm:h-11')}
+                    </motion.div>
 
-                  <div className="relative z-10 min-w-0">
-                    <p className="font-display italic text-sm sm:text-base font-semibold text-[#F1F5F3] leading-snug">
-                      “Comunicação forte, união ainda maior.”
-                    </p>
-                    <p className="text-xs italic text-[#DFBC75] mt-1">
-                      Regimento Sampaio
-                    </p>
+                    <div className="relative z-10 min-w-0 flex-1">
+                      <motion.span
+                        layoutId={`module-title-${card.id}`}
+                        transition={MODULE_LOCKUP_TRANSITION}
+                        className="block font-display text-base sm:text-[17px] font-semibold tracking-tight text-[#F2F6F3] group-hover:text-[#F4E6C4] transition-colors duration-200 truncate"
+                      >
+                        {card.title}
+                      </motion.span>
+                      <span className="block text-xs sm:text-[13px] text-[#8F9F96] group-hover:text-[#B4C4BA] transition-colors duration-200 mt-0.5 leading-snug">
+                        {card.description}
+                      </span>
+                    </div>
+                  </motion.button>
+                ))}
+
+                {/* Direct Demandas shortcut when searched */}
+                {matchesDemandasQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setDemandasPanelOpen(true)}
+                    className="siscom-home-card group rounded-[12px] px-4 py-4.5 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[96px] sm:min-h-[106px]"
+                  >
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592]">
+                      <ListTodo className="w-8 h-8" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="block font-display text-base sm:text-[17px] font-semibold text-[#F2F6F3] group-hover:text-[#F4E6C4]">
+                        Demandas
+                      </span>
+                      <span className="block text-xs sm:text-[13px] text-[#8F9F96] mt-0.5 leading-snug">
+                        Gerencie tarefas, prazos e avisos
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Institutional Motto Card filling remaining symmetry slots cleanly */}
+                {(trailingSlotsXl > 0 || trailingSlotsMd > 0) && (
+                  <div
+                    className={`siscom-motto-card relative overflow-hidden rounded-[12px] px-5 py-4 flex items-center gap-4 min-h-[96px] sm:min-h-[106px] ${
+                      trailingSlotsMd === 0 ? 'sm:col-span-2' : 'sm:col-span-1'
+                    } ${
+                      trailingSlotsXl === 2
+                        ? 'xl:col-span-2'
+                        : trailingSlotsXl === 1
+                        ? 'xl:col-span-1'
+                        : 'xl:hidden'
+                    }`}
+                  >
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -right-6 -bottom-10 w-36 h-44 flex gap-3 rotate-[24deg] opacity-25"
+                    >
+                      <div className="w-4 h-full bg-gradient-to-b from-[#C29B56]/40 to-transparent" />
+                      <div className="w-7 h-full bg-gradient-to-b from-[#2D5A43]/65 to-transparent" />
+                    </div>
+
+                    <img
+                      src="/assets/logo_arma_comunicacoes.png"
+                      alt=""
+                      aria-hidden="true"
+                      className="relative z-10 w-11 h-11 sm:w-12 sm:h-12 object-contain shrink-0 opacity-95 select-none"
+                    />
+
+                    <div className="relative z-10 min-w-0">
+                      <p className="font-display italic text-sm sm:text-base font-semibold text-[#F1F5F3] leading-snug">
+                        “Comunicação forte, união ainda maior.”
+                      </p>
+                      <p className="text-xs italic text-[#DFBC75] mt-1">
+                        Regimento Sampaio
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </motion.section>
+                )}
+              </div>
+            )}
+          </motion.section>
+
+          {/* SECONDARY CORNER RAIL: Quiet Agenda Preview + Demandas Companion Column */}
+          <aside
+            aria-label="Resumo rápido de agenda e demandas"
+            className="flex flex-col gap-3 lg:pt-0.5"
+          >
+            {hasAgendaAccess && (
+              <HomeAgendaPreview
+                onOpenAgenda={() => onNavigate('agenda')}
+                className="max-w-none"
+                compact
+              />
+            )}
+            <HomeDemandasWidgets className="max-w-none" compact />
+          </aside>
+        </div>
       </main>
 
       {/* Minimalist Institutional Footer */}
       <footer className="no-print relative z-10 mt-auto border-t border-[#C29B56]/16 bg-[#060908]/92">
-        <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#98A89F]">
+        <div className="w-full max-w-[1260px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#98A89F]">
           <div className="flex items-center gap-2.5">
             <img
               src={BATTALION_CREST_SRC}

@@ -14,6 +14,7 @@ import {
 interface HomeAgendaPreviewProps {
   onOpenAgenda: () => void;
   className?: string;
+  compact?: boolean;
 }
 
 interface ParsedPreviewEvent {
@@ -50,6 +51,7 @@ function formatRelativeUpcomingDate(date: Date, now: Date): string {
 export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
   onOpenAgenda,
   className = 'max-w-[368px] md:max-w-[548px]',
+  compact = false,
 }) => {
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,16 +161,20 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
       aria-label="Prévia da agenda"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, delay: 0.06, ease: SISCOM_EASE }}
-      className={`w-full metal-surface rounded-[14px] border border-[#C29B56]/22 px-4 py-3.5 flex flex-col justify-between ${className}`}
+      transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
+      className={`w-full rounded-[14px] border transition-colors ${
+        compact
+          ? 'bg-[#0B100E]/78 border-white/[0.09] hover:border-[#C29B56]/26 px-3.5 py-3'
+          : 'metal-surface border-[#C29B56]/22 px-4 py-3.5'
+      } flex flex-col justify-between ${className}`}
     >
-      <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-white/[0.07]">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <h2 className="text-xs sm:text-[13px] font-semibold text-[#E8EEEB] tracking-wide whitespace-nowrap">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <h2 className="text-xs font-semibold text-[#D9E2DD] tracking-wide whitespace-nowrap">
             {headerTitle}
           </h2>
           {preview.mode === 'today' && (
-            <span className="text-xs text-[#8FA197] tabular-nums whitespace-nowrap">
+            <span className="text-[11px] text-[#8FA197] tabular-nums whitespace-nowrap">
               <span aria-hidden="true">· </span>
               {preview.todayLabel}
             </span>
@@ -178,25 +184,27 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         <button
           type="button"
           onClick={onOpenAgenda}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-xs font-medium text-[#F2DCAB] bg-[#C29B56]/12 hover:bg-[#C29B56]/22 border border-[#C29B56]/30 hover:border-[#D4B06A]/55 transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C29B56]/60"
+          className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#EBD4A2] bg-[#C29B56]/10 hover:bg-[#C29B56]/20 border border-[#C29B56]/26 hover:border-[#D4B06A]/50 transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C29B56]/60 ${
+            compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
+          }`}
         >
           <span>Acessar agenda</span>
-          <ArrowRight className="w-3.5 h-3.5 text-[#D8B46E]" aria-hidden="true" />
+          <ArrowRight className="w-3 h-3 text-[#D8B46E]" aria-hidden="true" />
         </button>
       </div>
 
-      <div className="pt-2.5">
+      <div className="pt-2">
         {loading ? (
           <div className="space-y-2 py-0.5" aria-busy="true" aria-label="Carregando prévia da agenda">
-            <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
-            <div className="h-3.5 w-1/2 rounded bg-white/[0.04]" />
+            <div className="h-3.5 w-3/4 rounded bg-white/[0.06]" />
+            <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
           </div>
         ) : hasError ? (
           <p className="text-xs text-[#98A89F]">
             Não foi possível carregar a prévia da agenda.
           </p>
         ) : preview.mode === 'empty' ? (
-          <p className="text-xs sm:text-[13px] text-[#98A89F]">
+          <p className="text-xs text-[#8E9F96]">
             Nenhuma atividade prevista nos próximos dias.
           </p>
         ) : (
@@ -219,6 +227,31 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
               }
               if (event.location?.trim()) {
                 detailParts.push(event.location.trim());
+              }
+
+              if (compact) {
+                return (
+                  <li key={event.id} className="py-1.5 first:pt-0.5 last:pb-0 space-y-1">
+                    <p className="text-[13px] font-medium text-[#E8EEEB] leading-snug line-clamp-2">
+                      {event.title}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]">
+                      <span className="font-mono tabular-nums text-[#DFBC75] whitespace-nowrap">
+                        {dateTimeLabel}
+                      </span>
+                      {detailParts.length > 0 && (
+                        <>
+                          <span aria-hidden="true" className="text-[#56665E]">
+                            ·
+                          </span>
+                          <span className="text-[#8FA197] truncate">
+                            {detailParts.join(' · ')}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
               }
 
               return (
@@ -247,7 +280,7 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         )}
 
         {!loading && !hasError && preview.extraCount > 0 && (
-          <p className="text-xs text-[#8FA197] tabular-nums pt-2 mt-1.5 border-t border-white/[0.06]">
+          <p className="text-[11px] text-[#8FA197] tabular-nums pt-1.5 mt-1.5 border-t border-white/[0.06]">
             +{preview.extraCount}{' '}
             {preview.extraCount === 1 ? 'atividade hoje' : 'atividades hoje'}
           </p>

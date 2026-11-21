@@ -36,10 +36,12 @@ function readInitialMode(): WidgetLayoutMode {
 
 interface HomeDemandasWidgetsProps {
   className?: string;
+  compact?: boolean;
 }
 
 export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
   className = 'max-w-[368px] md:max-w-[548px]',
+  compact = false,
 }) => {
   const {
     demandas,
@@ -145,17 +147,21 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
       aria-label="Widgets de demandas"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
-      className={`w-full metal-surface rounded-[14px] border border-[#C29B56]/22 px-4 py-3.5 flex flex-col justify-between gap-2.5 ${className}`}
+      transition={{ duration: 0.22, delay: 0.1, ease: SISCOM_EASE }}
+      className={`w-full rounded-[14px] border transition-colors ${
+        compact
+          ? 'bg-[#0B100E]/78 border-white/[0.09] hover:border-[#C29B56]/26 px-3.5 py-3'
+          : 'metal-surface border-[#C29B56]/22 px-4 py-3.5'
+      } flex flex-col justify-between gap-2.5 ${className}`}
     >
       <div>
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/[0.07]">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
-            <h2 className="text-xs sm:text-[13px] font-semibold text-[#E8EEEB] tracking-wide whitespace-nowrap">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <h2 className="text-xs font-semibold text-[#D9E2DD] tracking-wide whitespace-nowrap">
               Demandas
             </h2>
-            {!loading && summaryParts.length > 0 && (
+            {!loading && summaryParts.length > 0 && !compact && (
               <span className="text-xs tabular-nums flex items-center gap-1.5 flex-wrap">
                 {summaryParts.map((part) => (
                   <React.Fragment key={part.text}>
@@ -173,26 +179,47 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             <button
               type="button"
               onClick={() => setQuickAddOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[7px] text-xs font-medium text-[#D6EEE0] bg-[#2D5A43]/40 hover:bg-[#2D5A43]/65 border border-[#83B499]/35 transition-colors cursor-pointer"
+              title="Nova demanda rápida"
+              className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#D6EEE0] bg-[#2D5A43]/38 hover:bg-[#2D5A43]/62 border border-[#83B499]/30 transition-colors cursor-pointer ${
+                compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <Plus className="w-3 h-3" aria-hidden="true" />
               <span>Nova</span>
             </button>
 
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-xs font-medium text-[#F2DCAB] bg-[#C29B56]/12 hover:bg-[#C29B56]/22 border border-[#C29B56]/30 hover:border-[#D4B06A]/55 transition-colors cursor-pointer"
+              className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#EBD4A2] bg-[#C29B56]/10 hover:bg-[#C29B56]/20 border border-[#C29B56]/26 hover:border-[#D4B06A]/50 transition-colors cursor-pointer ${
+                compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
+              }`}
             >
               <span>Gerenciar</span>
-              <ArrowRight className="w-3.5 h-3.5 text-[#D8B46E]" aria-hidden="true" />
+              <ArrowRight className="w-3 h-3 text-[#D8B46E]" aria-hidden="true" />
             </button>
           </div>
         </div>
 
+        {/* Compact summary line when in rail mode */}
+        {compact && !loading && summaryParts.length > 0 && (
+          <div className="pt-2 text-[11px] tabular-nums flex items-center gap-1.5 flex-wrap">
+            {summaryParts.map((part, idx) => (
+              <React.Fragment key={part.text}>
+                {idx > 0 && (
+                  <span aria-hidden="true" className="text-[#56665E]">
+                    ·
+                  </span>
+                )}
+                <span className={part.toneClass}>{part.text}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
         {/* Mode Switcher + Notification Toggle */}
-        <div className="flex items-center justify-between gap-2 pt-2.5 pb-1.5 text-[11px]">
-          <div className="inline-flex items-center rounded-[7px] bg-[#090D0B] border border-white/[0.07] p-0.5">
+        <div className="flex items-center justify-between gap-2 pt-2 pb-1.5 text-[11px]">
+          <div className="inline-flex items-center rounded-[7px] bg-[#080C0A] border border-white/[0.07] p-0.5">
             {(
               [
                 { id: 'completo', label: 'Completo' },
@@ -221,18 +248,18 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
               onClick={() => void enableBrowserNotifications()}
               className="inline-flex items-center gap-1 text-[11px] font-medium text-[#E5C17B] hover:text-[#F4E6C4] transition-colors cursor-pointer"
             >
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-3 h-3" />
               <span>Ativar avisos</span>
             </button>
           ) : notificationPermission === 'granted' ? (
             <span className="inline-flex items-center gap-1 text-[11px] text-[#83B499]">
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-3 h-3" />
               <span>Avisos ativos</span>
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-[11px] text-[#7D8F85]">
-              <BellOff className="w-3.5 h-3.5" />
-              <span>Aviso no app</span>
+              <BellOff className="w-3 h-3" />
+              <span>No app</span>
             </span>
           )}
         </div>
@@ -242,14 +269,14 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
           <div className="pt-0.5">
             {loading ? (
               <div className="space-y-2 py-1" aria-busy="true">
-                <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
-                <div className="h-3.5 w-1/2 rounded bg-white/[0.04]" />
+                <div className="h-3.5 w-3/4 rounded bg-white/[0.06]" />
+                <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
               </div>
             ) : error ? (
               <p className="text-xs text-[#98A89F] py-1">{error}</p>
             ) : visibleItems.length === 0 ? (
-              <p className="text-xs sm:text-[13px] text-[#98A89F] py-1">
-                Nenhuma demanda pendente. Use o botão circular no canto para anotar rápido.
+              <p className="text-xs text-[#8E9F96] py-1">
+                Nenhuma demanda pendente. Use o botão circular para anotar rápido.
               </p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
@@ -265,13 +292,13 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                   return (
                     <li
                       key={item.id}
-                      className="py-1.5 first:pt-0.5 last:pb-0.5 flex items-center gap-2.5"
+                      className="py-1.5 first:pt-0.5 last:pb-0.5 flex items-center gap-2"
                     >
                       <button
                         type="button"
                         onClick={() => void toggleComplete(item)}
                         aria-label={`Concluir demanda ${item.title}`}
-                        className="w-4.5 h-4.5 rounded-full border border-[#C29B56]/45 hover:border-[#83B499] hover:bg-[#2D5A43]/35 flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+                        className="w-4 h-4 rounded-full border border-[#C29B56]/45 hover:border-[#83B499] hover:bg-[#2D5A43]/35 flex items-center justify-center shrink-0 transition-colors cursor-pointer"
                       >
                         <Check className="w-2.5 h-2.5 text-transparent hover:text-[#83B499]" />
                       </button>
@@ -284,7 +311,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                         }}
                         className="min-w-0 flex-1 text-left group cursor-pointer"
                       >
-                        <p className="text-xs sm:text-[13px] font-medium text-[#E9EFEA] group-hover:text-[#F4E6C4] truncate transition-colors">
+                        <p className="text-xs font-medium text-[#E9EFEA] group-hover:text-[#F4E6C4] truncate transition-colors">
                           {item.title}
                         </p>
                       </button>
@@ -314,11 +341,15 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
         )}
       </div>
 
-      {/* Compact Integrated Mini-Widgets Footer Strip (Nearest Deadline + Progress) */}
+      {/* Compact Integrated Mini-Widgets Footer (Nearest Deadline + Progress) */}
       {mode !== 'lista' && !loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/[0.07]">
+        <div
+          className={`pt-2 border-t border-white/[0.07] ${
+            compact ? 'space-y-2' : 'grid grid-cols-1 sm:grid-cols-2 gap-2'
+          }`}
+        >
           {/* Mini-Widget 1: Nearest Deadline */}
-          <div className="rounded-[9px] bg-[#0A0F0D]/90 border border-white/[0.06] px-3 py-2 flex flex-col justify-between gap-1.5">
+          <div className="rounded-[9px] bg-[#080C0A]/90 border border-white/[0.06] px-3 py-2 flex flex-col justify-between gap-1">
             <div className="flex items-center justify-between gap-2 text-[11px] text-[#8FA197]">
               <span className="inline-flex items-center gap-1 font-medium text-[#C6D4CC]">
                 <Clock className="w-3 h-3 text-[#DFBC75]" />
@@ -341,7 +372,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                     type="button"
                     onClick={() => void toggleComplete(nextCritical)}
                     title="Concluir demanda"
-                    className="text-[11px] font-medium text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer"
+                    className="text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
@@ -349,7 +380,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                     type="button"
                     onClick={() => void postponeOneDay(nextCritical)}
                     title="Adiar 1 dia"
-                    className="text-[11px] font-medium text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer"
+                    className="text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer"
                   >
                     <CalendarPlus className="w-3.5 h-3.5" />
                   </button>
@@ -361,7 +392,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
           </div>
 
           {/* Mini-Widget 2: Progress */}
-          <div className="rounded-[9px] bg-[#0A0F0D]/90 border border-white/[0.06] px-3 py-2 flex flex-col justify-between gap-1.5">
+          <div className="rounded-[9px] bg-[#080C0A]/90 border border-white/[0.06] px-3 py-2 flex flex-col justify-between gap-1.5">
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[11px] font-medium text-[#C6D4CC]">Andamento</span>
               <span className="text-xs font-mono font-semibold tabular-nums text-[#F4E6C4]">
