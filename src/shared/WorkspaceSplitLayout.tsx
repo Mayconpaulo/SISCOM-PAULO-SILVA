@@ -1,71 +1,65 @@
 import React from 'react';
 
 export interface WorkspaceSplitLayoutProps {
+  /** Left panel: model, template structure, data and export settings */
   sidebar: React.ReactNode;
+  /** Center full-height canvas (A4 sheet, preview, calendar, table) — no bars above or below */
   children: React.ReactNode;
-  bottomBar?: React.ReactNode;
-  /** Desktop fixed left sidebar width classes (default: lg:w-[390px] xl:w-[420px]) */
+  /** Optional right panel: text formatting, Word-style controls, typography, page zoom */
+  rightSidebar?: React.ReactNode;
+  /** Desktop fixed left sidebar width classes */
   sidebarWidthClass?: string;
-  /** Extra classes applied to the scrollable right workspace canvas */
+  /** Desktop fixed right sidebar width classes */
+  rightSidebarWidthClass?: string;
+  /** Extra classes applied to the scrollable center workspace canvas */
   contentClassName?: string;
-  /** Extra classes applied to the fixed bottom bar container */
-  bottomBarClassName?: string;
-  /**
-   * Controls where the bottomBar appears on mobile (< lg) while keeping it
-   * anchored at the bottom on desktop (lg+) to form the L-shaped fixed frame.
-   */
-  mobileBottomBarPosition?: 'top' | 'bottom';
-  /** Optional ref forwarded to the right scrollable workspace pane */
+  /** Optional ref forwarded to the center scrollable workspace pane */
   contentRef?: React.Ref<HTMLDivElement>;
 }
 
 /**
- * Unified desktop L-shaped workspace frame:
- * - On desktop (lg+): fixed left sidebar (independent vertical scroll) +
- *   independent scrollable main document pane + optional fixed bottom bar
- *   forming a continuous L-shape around the page without overlapping content.
- * - On mobile (< lg): natural single-column stacked flow for comfortable touch scrolling.
+ * Unified 3-column desktop studio workspace:
+ * - Left fixed sidebar: model/structure/data settings (independent scroll)
+ * - Center main canvas: 100% viewport height with nothing above or below the sheet
+ * - Right fixed sidebar (optional): text/typography/Word/page controls (independent scroll, padded at bottom for FAB clearance)
+ * - Mobile (< lg): single-column stacked flow (left settings -> right text tools -> canvas preview)
  */
 export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
   sidebar,
   children,
-  bottomBar,
-  sidebarWidthClass = 'lg:w-[390px] xl:w-[420px]',
+  rightSidebar,
+  sidebarWidthClass = 'lg:w-[300px] xl:w-[332px]',
+  rightSidebarWidthClass = 'lg:w-[264px] xl:w-[292px]',
   contentClassName = '',
-  bottomBarClassName = '',
-  mobileBottomBarPosition = 'bottom',
   contentRef,
 }) => {
   return (
     <main className="workspace-split-container flex-1 w-full flex flex-col lg:flex-row lg:h-full lg:min-h-0 lg:overflow-hidden print-wrapper">
-      {/* Left Fixed Sidebar (vertical leg of the L on desktop) */}
+      {/* Left Fixed Sidebar (Model & Structure Settings) */}
       <aside
-        className={`no-print w-full ${sidebarWidthClass} shrink-0 p-3.5 sm:p-5 lg:p-4 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-white/[0.11] siscom-liquid-sidebar`}
+        className={`no-print w-full ${sidebarWidthClass} shrink-0 p-3.5 sm:p-5 lg:p-4 lg:pb-8 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-white/[0.11] siscom-liquid-sidebar`}
       >
         {sidebar}
       </aside>
 
-      {/* Right Main Column: Independent Scrollable Page + Optional Fixed Bottom Bar (foot of the L) */}
-      <section className="workspace-split-container flex-1 min-w-0 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden print-wrapper">
+      {/* Center Full-Height Document / Preview Canvas (Nothing Above, Nothing Below) */}
+      <section className="workspace-split-container flex-1 min-w-0 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden print-wrapper order-3 lg:order-2">
         <div
           ref={contentRef}
-          className={`workspace-scroll-pane flex-1 min-h-0 lg:overflow-y-auto lg:overscroll-contain px-3.5 sm:px-6 py-4 sm:py-6 print-wrapper ${contentClassName}`}
+          className={`workspace-scroll-pane flex-1 min-h-0 lg:overflow-y-auto lg:overscroll-contain px-3.5 sm:px-5 py-4 sm:py-5 pb-24 lg:pb-8 print-wrapper ${contentClassName}`}
         >
           {children}
         </div>
-
-        {bottomBar && (
-          <div
-            className={`no-print siscom-liquid-bar shrink-0 px-3.5 sm:px-5 py-2.5 ${
-              mobileBottomBarPosition === 'top'
-                ? 'order-first lg:order-last border-b border-white/[0.12] lg:border-b-0 lg:border-t lg:border-white/[0.12]'
-                : 'border-t border-white/[0.12]'
-            } lg:shadow-[0_-12px_28px_-16px_rgba(0,0,0,0.8)] ${bottomBarClassName}`}
-          >
-            {bottomBar}
-          </div>
-        )}
       </section>
+
+      {/* Right Fixed Sidebar (Text Formatting, Word Tools, Typography & Page Settings) */}
+      {rightSidebar && (
+        <aside
+          className={`no-print w-full ${rightSidebarWidthClass} shrink-0 px-3.5 sm:px-5 pb-3.5 sm:pb-5 lg:p-4 lg:pb-24 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:border-l lg:border-white/[0.11] siscom-liquid-sidebar-right order-2 lg:order-3`}
+        >
+          {rightSidebar}
+        </aside>
+      )}
     </main>
   );
 };

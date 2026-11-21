@@ -702,7 +702,8 @@ export const RelatorioGenerator: React.FC = () => {
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[420px] xl:w-[450px]"
+      sidebarWidthClass="lg:w-[325px] xl:w-[350px]"
+      rightSidebarWidthClass="lg:w-[295px] xl:w-[320px]"
       sidebar={
         <div className="space-y-4">
         {/* Saved Reports Switcher + Primary Actions */}
@@ -1385,8 +1386,12 @@ export const RelatorioGenerator: React.FC = () => {
           )}
         </AnimatePresence>
 
+        </div>
+      }
+      rightSidebar={
+        <div className="space-y-4">
         {/* Added Events in 5. Diversos */}
-        <section className="metal-surface rounded-xl p-4 sm:p-5 space-y-3">
+        <section className="metal-surface rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-2.5">
             <h3 className="font-display text-xs font-semibold uppercase tracking-wider text-[#E5C17B]">
               5. Diversos ({activeDoc.diversosEventos.length})
@@ -1398,14 +1403,14 @@ export const RelatorioGenerator: React.FC = () => {
                 className="text-xs text-[#83B499] hover:text-[#B4D8C5] inline-flex items-center gap-1 font-medium transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Incluir evento</span>
+                <span>Incluir</span>
               </button>
             )}
           </div>
 
           {activeDoc.diversosEventos.length === 0 ? (
             <p className="text-xs text-[#98A89F] leading-relaxed">
-              Nenhum evento adicionado ainda. Responda às etapas acima para preencher o item 5. Diversos.
+              Nenhum evento adicionado ainda. Responda às etapas à esquerda para preencher o item 5. Diversos.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -1421,14 +1426,14 @@ export const RelatorioGenerator: React.FC = () => {
                     <span className="text-[10px] font-mono text-[#98A89F] truncate">
                       {ev.providencias.join(' · ') || 'Sem marcação'}
                     </span>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-0.5 shrink-0">
                       <button
                         type="button"
                         disabled={idx === 0}
                         onClick={() => handleMoveEvent(idx, -1)}
                         title="Mover para cima"
                         aria-label="Mover para cima"
-                        className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-white hover:bg-white/6 disabled:opacity-30 transition-colors"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-white hover:bg-white/6 disabled:opacity-30 transition-colors"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
                       </button>
@@ -1438,7 +1443,7 @@ export const RelatorioGenerator: React.FC = () => {
                         onClick={() => handleMoveEvent(idx, 1)}
                         title="Mover para baixo"
                         aria-label="Mover para baixo"
-                        className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-white hover:bg-white/6 disabled:opacity-30 transition-colors"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-white hover:bg-white/6 disabled:opacity-30 transition-colors"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
                       </button>
@@ -1447,7 +1452,7 @@ export const RelatorioGenerator: React.FC = () => {
                         onClick={() => handleEditEvent(ev)}
                         title="Editar evento"
                         aria-label="Editar evento"
-                        className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#E5C17B] hover:bg-white/8 transition-colors"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#E5C17B] hover:bg-white/8 transition-colors"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
@@ -1456,7 +1461,7 @@ export const RelatorioGenerator: React.FC = () => {
                         onClick={() => handleRemoveEvent(ev.id)}
                         title="Remover evento"
                         aria-label="Remover evento"
-                        className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-red-950/40 transition-colors"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-red-950/40 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1473,13 +1478,13 @@ export const RelatorioGenerator: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowAdvancedModel((v) => !v)}
-            className="w-full min-h-[44px] px-4 py-3 flex items-center justify-between gap-2 text-xs font-medium text-[#C6D4CC] hover:text-white transition-colors"
+            className="w-full min-h-[44px] px-4 py-3 flex items-center justify-between gap-2 text-xs font-medium text-[#C6D4CC] hover:text-white transition-colors text-left"
           >
-            <span>Ajustar período / campos do modelo (opcional)</span>
+            <span>Textos fixos do modelo (opcional)</span>
             {showAdvancedModel ? (
-              <ChevronUp className="w-4 h-4 text-[#98A89F]" />
+              <ChevronUp className="w-4 h-4 text-[#98A89F] shrink-0" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-[#98A89F]" />
+              <ChevronDown className="w-4 h-4 text-[#98A89F] shrink-0" />
             )}
           </button>
 
@@ -1495,7 +1500,7 @@ export const RelatorioGenerator: React.FC = () => {
               >
                 <div className="space-y-1.5">
                   <label htmlFor="adv-periodo" className="siscom-field-label !text-[11px]">
-                    Período no cabeçalho (Relatório Semanal do 1º BIMec (Es) – ...)
+                    Período no cabeçalho
                   </label>
                   <input
                     id="adv-periodo"
@@ -1513,7 +1518,7 @@ export const RelatorioGenerator: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 gap-2.5">
                   <div className="space-y-1">
                     <label htmlFor="adv-1" className="siscom-field-label !text-[11px]">
                       1. Preparo e Emprego
@@ -1525,7 +1530,7 @@ export const RelatorioGenerator: React.FC = () => {
                       onChange={(e) =>
                         updateActiveReport((doc) => ({ ...doc, preparoEmprego: e.target.value }))
                       }
-                      className="siscom-input !min-h-[38px] text-xs"
+                      className="siscom-input !min-h-[36px] text-xs"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1539,7 +1544,7 @@ export const RelatorioGenerator: React.FC = () => {
                       onChange={(e) =>
                         updateActiveReport((doc) => ({ ...doc, estadoSanitario: e.target.value }))
                       }
-                      className="siscom-input !min-h-[38px] text-xs"
+                      className="siscom-input !min-h-[36px] text-xs"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1556,7 +1561,7 @@ export const RelatorioGenerator: React.FC = () => {
                           problemasDisciplinares: e.target.value,
                         }))
                       }
-                      className="siscom-input !min-h-[38px] text-xs"
+                      className="siscom-input !min-h-[36px] text-xs"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1573,7 +1578,7 @@ export const RelatorioGenerator: React.FC = () => {
                           generosAlimenticios: e.target.value,
                         }))
                       }
-                      className="siscom-input !min-h-[38px] text-xs"
+                      className="siscom-input !min-h-[36px] text-xs"
                     />
                   </div>
                 </div>
@@ -1588,7 +1593,7 @@ export const RelatorioGenerator: React.FC = () => {
                     updateActiveReport(() => fresh);
                     setNotice('Campos do modelo restaurados.');
                   }}
-                  className="siscom-btn siscom-btn-secondary !min-h-[38px] text-xs"
+                  className="siscom-btn siscom-btn-secondary w-full !min-h-[38px] text-xs"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Restaurar padrão do modelo</span>
@@ -1597,12 +1602,11 @@ export const RelatorioGenerator: React.FC = () => {
             )}
           </AnimatePresence>
         </section>
+
+        <div className="px-1 flex items-center justify-between text-[11px] text-[#98A89F]">
+          <span>A4 Vertical</span>
+          <span className="font-mono text-[#E5C17B]">210 × 297 mm</span>
         </div>
-      }
-      bottomBar={
-        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>Pré-visualização do Relatório</span>
-          <span className="font-mono text-[#E5C17B]">A4 Vertical · 210 × 297 mm</span>
         </div>
       }
     >

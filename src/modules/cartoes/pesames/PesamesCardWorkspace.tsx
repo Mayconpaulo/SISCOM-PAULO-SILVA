@@ -377,7 +377,8 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[400px] xl:w-[425px]"
+      sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
+      rightSidebarWidthClass="lg:w-[275px] xl:w-[295px]"
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Card Model Switcher */}
@@ -408,39 +409,6 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Editable Recipient (ONLY text editable section: AO/À + Nome completo) */}
-        <section className="space-y-3 border-t border-white/8 pt-4">
-          <span className="siscom-field-label">Destinatário</span>
-
-          <div className="grid grid-cols-[108px_1fr] gap-2.5 items-end">
-            <div className="space-y-1.5">
-              <span className="siscom-field-label !text-[11px]">Tratamento</span>
-              <SiscomSegmentedTabs
-                layoutId="pesames-prefix-tabs"
-                size="sm"
-                ariaLabel="Tratamento"
-                value={prefix}
-                onChange={setPrefix}
-                options={[
-                  { value: 'À', label: 'À' },
-                  { value: 'AO', label: 'AO' },
-                ]}
-              />
-            </div>
-
-            <label className="block space-y-1.5 min-w-0">
-              <span className="siscom-field-label !text-[11px]">Nome completo</span>
-              <input
-                type="text"
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                placeholder="(REMETENTE)"
-                className="siscom-input !min-h-[42px] text-xs sm:text-sm uppercase"
-              />
-            </label>
-          </div>
-        </section>
 
         {/* Photo Option: Sem foto / Com foto + Upload + Circular Resizing */}
         <section className="space-y-3.5 border-t border-white/8 pt-4">
@@ -674,12 +642,52 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
         </section>
         </div>
       }
-      bottomBar={
-        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>Pêsames · {photoMode === 'com_foto' ? 'Com foto' : 'Sem foto'}</span>
-          <span className="font-mono text-[#E5C17B]">
-            {PESAMES_W_PX} × {PESAMES_H_PX} PNG
+      rightSidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E5C17B]">
+            Texto do Cartão
           </span>
+          <span className="font-mono text-[10px] text-[#98A89F]">
+            {PESAMES_W_PX}×{PESAMES_H_PX} PNG
+          </span>
+        </div>
+
+        {/* Editable Recipient (ONLY text editable section: AO/À + Nome completo) */}
+        <section className="space-y-3.5">
+          <span className="siscom-field-label">Destinatário</span>
+
+          <div className="space-y-1.5">
+            <span className="siscom-field-label !text-[11px]">Tratamento</span>
+            <SiscomSegmentedTabs
+              layoutId="pesames-prefix-tabs"
+              size="sm"
+              ariaLabel="Tratamento"
+              value={prefix}
+              onChange={setPrefix}
+              options={[
+                { value: 'À', label: 'À' },
+                { value: 'AO', label: 'AO' },
+              ]}
+            />
+          </div>
+
+          <label className="block space-y-1.5 min-w-0">
+            <span className="siscom-field-label !text-[11px]">Nome completo</span>
+            <input
+              type="text"
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+              placeholder="(REMETENTE)"
+              className="siscom-input !min-h-[42px] text-xs sm:text-sm uppercase"
+            />
+          </label>
+        </section>
+
+        <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between text-[11px] text-[#98A89F]">
+          <span>Pêsames · {photoMode === 'com_foto' ? 'Com foto' : 'Sem foto'}</span>
+          <span className="font-mono text-[#E5C17B]">PNG</span>
+        </div>
         </div>
       }
     >

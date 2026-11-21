@@ -1838,17 +1838,6 @@ export function AgendaComsoc() {
             )}
           </div>
         }
-        bottomBar={
-          <div className="w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
-            <span>
-              {calendarScope === 'comsoc' ? 'Calendário COMSOC' : 'Calendário Geral'} ·{' '}
-              {formatFullDayTitle(selectedDay)}
-            </span>
-            <span className="font-mono text-[#E5C17B]">
-              {visibleEvents.length} atividade{visibleEvents.length === 1 ? '' : 's'}
-            </span>
-          </div>
-        }
       >
         <div className="space-y-4">
           {/* Feedback Alerts */}

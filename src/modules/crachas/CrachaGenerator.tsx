@@ -1170,7 +1170,8 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[400px] xl:w-[430px]"
+      sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
+      rightSidebarWidthClass="lg:w-[295px] xl:w-[320px]"
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Top Primary Document Upload & Field Mapping */}
@@ -1720,13 +1721,76 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           />
         </div>
 
+        {/* Export / Print Actions */}
+        <div className="pt-4 border-t border-white/[0.07] grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button
+            type="button"
+            disabled={exporting !== null}
+            onClick={handleDownloadPdf}
+            className="siscom-btn siscom-btn-primary min-h-[42px] px-2.5 text-xs whitespace-nowrap"
+          >
+            {exporting === 'pdf' ? (
+              <SiscomSpinner tone="light" className="w-3.5 h-3.5" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            <span>{exporting === 'pdf' ? 'Gerando...' : 'PDF'}</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={exporting !== null}
+            onClick={handleDownloadPng}
+            className="siscom-btn siscom-btn-secondary min-h-[42px] px-2.5 text-xs whitespace-nowrap"
+          >
+            {exporting === 'png' ? (
+              <SiscomSpinner tone="olive" className="w-3.5 h-3.5" />
+            ) : (
+              <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
+            )}
+            <span>{exporting === 'png' ? 'Gerando...' : 'PNG'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="siscom-btn siscom-btn-secondary min-h-[42px] px-2.5 text-xs whitespace-nowrap"
+          >
+            <Printer className="w-3.5 h-3.5 text-[#83B499]" />
+            <span>Imprimir</span>
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {notice && (
+            <SiscomAlert
+              tone={notice.toLowerCase().includes('erro') ? 'error' : 'success'}
+              onDismiss={() => setNotice(null)}
+            >
+              {notice}
+            </SiscomAlert>
+          )}
+        </AnimatePresence>
+        </div>
+      }
+      rightSidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E5C17B]">
+            Texto e Cores
+          </span>
+          <span className="font-mono text-[10px] text-[#98A89F]">
+            {config.widthMm}×{config.heightMm} mm · {layout.pages.length} A4
+          </span>
+        </div>
+
         {/* Faixas */}
-        <div className="space-y-3 pt-4 border-t border-white/[0.07]">
+        <div className="space-y-3">
           <span className="siscom-field-label block">
             Faixas
           </span>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-2.5">
             {activeMode === 'identificacao' ? (
               <div className="space-y-1">
                 <label htmlFor="cracha-top-text" className="block text-[11px] text-[#98A89F]">
@@ -1740,7 +1804,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     updateCurrentConfig((prev) => ({ ...prev, topText: e.target.value }))
                   }
                   placeholder="OBRA"
-                  className="siscom-input w-full min-h-[40px] px-3 text-sm"
+                  className="siscom-input w-full min-h-[38px] px-3 text-sm"
                 />
               </div>
             ) : (
@@ -1756,7 +1820,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     updateCurrentConfig((prev) => ({ ...prev, rpHeaderText: e.target.value }))
                   }
                   placeholder="1º BI MEC (ES)"
-                  className="siscom-input w-full min-h-[40px] px-3 text-sm"
+                  className="siscom-input w-full min-h-[38px] px-3 text-sm"
                 />
               </div>
             )}
@@ -1775,14 +1839,14 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 placeholder={
                   activeMode === 'identificacao' ? 'PERMISSIONÁRIO' : 'MILITAR ATIVA'
                 }
-                className="siscom-input w-full min-h-[40px] px-3 text-sm"
+                className="siscom-input w-full min-h-[38px] px-3 text-sm"
               />
             </div>
           </div>
 
           <label
             htmlFor="cracha-uppercase"
-            className="siscom-liquid-subcard flex items-center justify-between gap-3 min-h-[42px] px-3 rounded-lg cursor-pointer select-none hover:border-white/[0.2] transition-colors"
+            className="siscom-liquid-subcard flex items-center justify-between gap-3 min-h-[40px] px-3 rounded-lg cursor-pointer select-none hover:border-white/[0.2] transition-colors"
           >
             <span className="text-xs text-[#C6D4CC]">Sempre maiúsculas</span>
             <input
@@ -1801,24 +1865,24 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
         <div className="space-y-3 pt-4 border-t border-white/[0.07]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="siscom-field-label">
-              Crachás ({config.perPage})
+              Textos ({config.perPage})
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               {activeMode === 'rp' && config.perPage > 1 && (
                 <button
                   type="button"
                   onClick={handleSequenceRpNumbers}
-                  className="min-h-[30px] px-2 rounded inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D8BE] hover:bg-white/[0.04] transition-colors"
+                  className="min-h-[28px] px-1.5 rounded inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D8BE] hover:bg-white/[0.04] transition-colors"
                 >
                   <ListOrdered className="w-3.5 h-3.5" />
-                  <span>Sequenciar</span>
+                  <span>Seq.</span>
                 </button>
               )}
               {config.perPage > 1 && (
                 <button
                   type="button"
                   onClick={handleCopyFirstToAll}
-                  className="min-h-[30px] px-2 rounded inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D8BE] hover:bg-white/[0.04] transition-colors"
+                  className="min-h-[28px] px-1.5 rounded inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D8BE] hover:bg-white/[0.04] transition-colors"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>Copiar 1º</span>
@@ -1830,7 +1894,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     type="button"
                     aria-label="Rolar crachás para a esquerda"
                     onClick={() =>
-                      crachasStripRef.current?.scrollBy({ left: -292, behavior: 'smooth' })
+                      crachasStripRef.current?.scrollBy({ left: -260, behavior: 'smooth' })
                     }
                     className="h-7 w-7 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-[#E8EEEA] hover:bg-white/[0.06] transition-colors"
                   >
@@ -1840,7 +1904,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     type="button"
                     aria-label="Rolar crachás para a direita"
                     onClick={() =>
-                      crachasStripRef.current?.scrollBy({ left: 292, behavior: 'smooth' })
+                      crachasStripRef.current?.scrollBy({ left: 260, behavior: 'smooth' })
                     }
                     className="h-7 w-7 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-[#E8EEEA] hover:bg-white/[0.06] transition-colors"
                   >
@@ -1853,7 +1917,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
           <div
             ref={crachasStripRef}
-            className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth"
+            className="flex gap-2.5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth"
           >
             {activeEntries.map((entry, idx) => {
               void fontsTick;
@@ -1861,7 +1925,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
               return (
               <div
                 key={`entry-${idx}`}
-                className="siscom-liquid-subcard w-[268px] sm:w-[290px] shrink-0 snap-start rounded-lg p-3 space-y-2.5"
+                className="siscom-liquid-subcard w-[246px] xl:w-[266px] shrink-0 snap-start rounded-lg p-3 space-y-2.5"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -1890,14 +1954,14 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 </div>
 
                 {activeMode === 'identificacao' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <input
                       type="text"
                       aria-label={`Texto principal do crachá ${idx + 1}`}
                       value={entry.nomeCompleto}
                       onChange={(e) => handleEntryChange(idx, 'nomeCompleto', e.target.value)}
                       placeholder="Nome / Principal"
-                      className="siscom-input w-full min-h-[38px] px-3 text-xs"
+                      className="siscom-input w-full min-h-[36px] px-3 text-xs"
                     />
                     <input
                       type="text"
@@ -1905,7 +1969,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                       value={entry.cpf}
                       onChange={(e) => handleEntryChange(idx, 'cpf', e.target.value)}
                       placeholder="Identidade / CPF"
-                      className="siscom-input w-full min-h-[38px] px-3 font-mono text-xs"
+                      className="siscom-input w-full min-h-[36px] px-3 font-mono text-xs"
                     />
                   </div>
                 ) : (
@@ -1996,68 +2060,6 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             />
           </div>
         </div>
-
-        {/* Export / Print Actions */}
-        <div className="pt-4 border-t border-white/[0.07] grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          <button
-            type="button"
-            disabled={exporting !== null}
-            onClick={handleDownloadPdf}
-            className="siscom-btn siscom-btn-primary min-h-[42px] px-3 text-xs whitespace-nowrap"
-          >
-            {exporting === 'pdf' ? (
-              <SiscomSpinner tone="light" className="w-3.5 h-3.5" />
-            ) : (
-              <Download className="w-3.5 h-3.5" />
-            )}
-            <span>{exporting === 'pdf' ? 'Gerando...' : 'PDF'}</span>
-          </button>
-
-          <button
-            type="button"
-            disabled={exporting !== null}
-            onClick={handleDownloadPng}
-            className="siscom-btn siscom-btn-secondary min-h-[42px] px-3 text-xs whitespace-nowrap"
-          >
-            {exporting === 'png' ? (
-              <SiscomSpinner tone="olive" className="w-3.5 h-3.5" />
-            ) : (
-              <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
-            )}
-            <span>{exporting === 'png' ? 'Gerando...' : 'PNG'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="siscom-btn siscom-btn-secondary min-h-[42px] px-3 text-xs whitespace-nowrap"
-          >
-            <Printer className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Imprimir</span>
-          </button>
-        </div>
-
-        <AnimatePresence>
-          {notice && (
-            <SiscomAlert
-              tone={notice.toLowerCase().includes('erro') ? 'error' : 'success'}
-              onDismiss={() => setNotice(null)}
-            >
-              {notice}
-            </SiscomAlert>
-          )}
-        </AnimatePresence>
-        </div>
-      }
-      bottomBar={
-        <div className="w-full flex flex-wrap items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>
-            A4 · {activeMode === 'identificacao' ? 'Identificação' : 'RP'} ·{' '}
-            {config.sidedness === 'frente_verso' ? 'Frente e verso' : 'Frente'}
-          </span>
-          <span className="font-mono text-[#E5C17B]">
-            {config.widthMm} × {config.heightMm} mm · {layout.pages.length} pág.
-          </span>
         </div>
       }
     >

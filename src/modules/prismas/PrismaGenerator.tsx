@@ -338,12 +338,16 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[380px] xl:w-[410px]"
+      sidebarWidthClass="lg:w-[285px] xl:w-[310px]"
+      rightSidebarWidthClass="lg:w-[285px] xl:w-[315px]"
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* 1 or 2 Prismas per Page */}
         <div className="space-y-2">
-          <span className="siscom-field-label">Quantidade</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="siscom-field-label">Modelo / Quantidade</span>
+            <span className="font-mono text-[10px] text-[#E5C17B]">A4 210×297mm</span>
+          </div>
           <SiscomSegmentedTabs
             layoutId="prisma-count-tabs"
             ariaLabel="Quantidade de prismas por folha"
@@ -356,152 +360,47 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
           />
         </div>
 
-        {/* Prisma 1 Inputs */}
-        <div className="space-y-3.5 pt-3 border-t border-white/8">
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="font-display font-semibold text-[#F4E6C4]">
-              {count === 1 ? 'Prisma' : 'Prisma 1'}
-            </span>
-            <span className="font-mono text-[11px] text-[#83B499]">
-              {sizeDiagnostics[0].adjusted
-                ? `${sizeDiagnostics[0].nomePt} / ${sizeDiagnostics[0].funcaoPt} pt`
-                : `${STANDARD_FONT_PT} pt`}
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="p1-nome" className="siscom-field-label">
-              Nome
-            </label>
-            <input
-              id="p1-nome"
-              type="text"
-              value={prismas[0].nome}
-              onChange={(e) => updatePrisma(0, 'nome', e.target.value)}
-              placeholder="TEN NETO"
-              className="siscom-input"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="p1-funcao" className="siscom-field-label">
-              Função
-            </label>
-            <input
-              id="p1-funcao"
-              type="text"
-              value={prismas[0].funcao}
-              onChange={(e) => updatePrisma(0, 'funcao', e.target.value)}
-              placeholder="CHEFE COMSOC"
-              className="siscom-input"
-            />
-          </div>
-        </div>
-
-        {/* Prisma 2 Inputs */}
-        <AnimatePresence initial={false}>
-          {count === 2 && (
-            <motion.div
-              key="prisma-2-fields"
-              variants={fadeSlideVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="space-y-3.5 pt-4 border-t border-white/8"
-            >
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-display font-semibold text-[#F4E6C4]">Prisma 2</span>
-                <span className="font-mono text-[11px] text-[#83B499]">
-                  {sizeDiagnostics[1]?.adjusted
-                    ? `${sizeDiagnostics[1].nomePt} / ${sizeDiagnostics[1].funcaoPt} pt`
-                    : `${STANDARD_FONT_PT} pt`}
-                </span>
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="p2-nome" className="siscom-field-label">
-                  Nome
-                </label>
-                <input
-                  id="p2-nome"
-                  type="text"
-                  value={prismas[1].nome}
-                  onChange={(e) => updatePrisma(1, 'nome', e.target.value)}
-                  placeholder="CEL SANSEVERINO"
-                  className="siscom-input"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="p2-funcao" className="siscom-field-label">
-                  Função
-                </label>
-                <input
-                  id="p2-funcao"
-                  type="text"
-                  value={prismas[1].funcao}
-                  onChange={(e) => updatePrisma(1, 'funcao', e.target.value)}
-                  placeholder="ANTIGO COMANDANTE"
-                  className="siscom-input"
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Uppercase option */}
-        <label
-          htmlFor="uppercase-toggle"
-          className="pt-3 border-t border-white/8 min-h-[44px] flex items-center justify-between gap-3 cursor-pointer select-none"
-        >
-          <span className="text-xs font-medium text-[#C6D4CC]">Sempre maiúsculas</span>
-          <input
-            id="uppercase-toggle"
-            type="checkbox"
-            checked={uppercase}
-            onChange={(e) => setUppercase(e.target.checked)}
-            className="h-4 w-4 accent-[#2D5A43] rounded cursor-pointer"
-          />
-        </label>
-
         {/* Export / Print Actions */}
-        <div className="pt-3 border-t border-white/8 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className="pt-4 border-t border-white/8 space-y-2.5">
+          <span className="siscom-field-label">Exportar</span>
           <button
             type="button"
             disabled={exporting !== null}
             onClick={handleDownloadPdf}
-            className="siscom-btn siscom-btn-primary text-xs"
+            className="siscom-btn siscom-btn-primary w-full text-xs"
           >
             {exporting === 'pdf' ? (
               <SiscomSpinner className="w-3.5 h-3.5" />
             ) : (
               <Download className="w-3.5 h-3.5" />
             )}
-            <span>{exporting === 'pdf' ? 'Gerando...' : 'PDF'}</span>
+            <span>{exporting === 'pdf' ? 'Gerando...' : 'Baixar PDF'}</span>
           </button>
 
-          <button
-            type="button"
-            disabled={exporting !== null}
-            onClick={handleDownloadPng}
-            className="siscom-btn siscom-btn-secondary text-xs"
-          >
-            {exporting === 'png' ? (
-              <SiscomSpinner className="w-3.5 h-3.5" tone="olive" />
-            ) : (
-              <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
-            )}
-            <span>{exporting === 'png' ? 'Gerando...' : 'PNG'}</span>
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={exporting !== null}
+              onClick={handleDownloadPng}
+              className="siscom-btn siscom-btn-secondary text-xs"
+            >
+              {exporting === 'png' ? (
+                <SiscomSpinner className="w-3.5 h-3.5" tone="olive" />
+              ) : (
+                <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
+              )}
+              <span>{exporting === 'png' ? 'Gerando...' : 'PNG'}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="siscom-btn siscom-btn-secondary text-xs"
-          >
-            <Printer className="w-3.5 h-3.5 text-[#83B499]" />
-            <span>Imprimir</span>
-          </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="siscom-btn siscom-btn-secondary text-xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-[#83B499]" />
+              <span>Imprimir</span>
+            </button>
+          </div>
         </div>
 
         <AnimatePresence>
@@ -516,10 +415,118 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
         </AnimatePresence>
         </div>
       }
-      bottomBar={
-        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>A4 · {count === 1 ? '1 prisma' : '2 prismas'}</span>
-          <span className="font-mono text-[#E5C17B]">210 × 297 mm</span>
+      rightSidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
+          {/* Uppercase option */}
+          <div className="space-y-2">
+            <span className="siscom-field-label">Texto e Estilo</span>
+            <label
+              htmlFor="uppercase-toggle"
+              className="siscom-liquid-subcard rounded-lg px-3 min-h-[42px] flex items-center justify-between gap-3 cursor-pointer select-none"
+            >
+              <span className="text-xs font-medium text-[#E4EAE6]">Sempre maiúsculas</span>
+              <input
+                id="uppercase-toggle"
+                type="checkbox"
+                checked={uppercase}
+                onChange={(e) => setUppercase(e.target.checked)}
+                className="h-4 w-4 accent-[#2D5A43] rounded cursor-pointer"
+              />
+            </label>
+          </div>
+
+          {/* Prisma 1 Inputs */}
+          <div className="space-y-3 pt-4 border-t border-white/8">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-display font-semibold text-[#F4E6C4]">
+                {count === 1 ? 'Prisma' : 'Prisma 1'}
+              </span>
+              <span className="font-mono text-[11px] text-[#83B499]">
+                {sizeDiagnostics[0].adjusted
+                  ? `${sizeDiagnostics[0].nomePt} / ${sizeDiagnostics[0].funcaoPt} pt`
+                  : `${STANDARD_FONT_PT} pt`}
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="p1-nome" className="siscom-field-label">
+                Nome
+              </label>
+              <input
+                id="p1-nome"
+                type="text"
+                value={prismas[0].nome}
+                onChange={(e) => updatePrisma(0, 'nome', e.target.value)}
+                placeholder="TEN NETO"
+                className="siscom-input"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="p1-funcao" className="siscom-field-label">
+                Função
+              </label>
+              <input
+                id="p1-funcao"
+                type="text"
+                value={prismas[0].funcao}
+                onChange={(e) => updatePrisma(0, 'funcao', e.target.value)}
+                placeholder="CHEFE COMSOC"
+                className="siscom-input"
+              />
+            </div>
+          </div>
+
+          {/* Prisma 2 Inputs */}
+          <AnimatePresence initial={false}>
+            {count === 2 && (
+              <motion.div
+                key="prisma-2-fields"
+                variants={fadeSlideVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="space-y-3 pt-4 border-t border-white/8"
+              >
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-display font-semibold text-[#F4E6C4]">Prisma 2</span>
+                  <span className="font-mono text-[11px] text-[#83B499]">
+                    {sizeDiagnostics[1]?.adjusted
+                      ? `${sizeDiagnostics[1].nomePt} / ${sizeDiagnostics[1].funcaoPt} pt`
+                      : `${STANDARD_FONT_PT} pt`}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="p2-nome" className="siscom-field-label">
+                    Nome
+                  </label>
+                  <input
+                    id="p2-nome"
+                    type="text"
+                    value={prismas[1].nome}
+                    onChange={(e) => updatePrisma(1, 'nome', e.target.value)}
+                    placeholder="CEL SANSEVERINO"
+                    className="siscom-input"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="p2-funcao" className="siscom-field-label">
+                    Função
+                  </label>
+                  <input
+                    id="p2-funcao"
+                    type="text"
+                    value={prismas[1].funcao}
+                    onChange={(e) => updatePrisma(1, 'funcao', e.target.value)}
+                    placeholder="ANTIGO COMANDANTE"
+                    className="siscom-input"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       }
     >

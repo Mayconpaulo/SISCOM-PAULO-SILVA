@@ -571,8 +571,8 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       <style>{`@media print { @page { size: A4 landscape; margin: 0; } }`}</style>
 
       <WorkspaceSplitLayout
-        sidebarWidthClass="lg:w-[370px] xl:w-[400px]"
-        mobileBottomBarPosition="top"
+        sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
+        rightSidebarWidthClass="lg:w-[268px] xl:w-[292px]"
         sidebar={
           <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] pb-3.5">
@@ -646,88 +646,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
           </AnimatePresence>
         </div>
 
-        {/* 2. Textos */}
-        <div className="space-y-2.5 pt-4 border-t border-white/[0.07]">
-          <span className="siscom-field-label block">
-            Textos
-          </span>
-
-          <div className="space-y-1">
-            <label htmlFor="doc-title" className="block text-[11px] text-[#98A89F]">
-              Título
-            </label>
-            <input
-              id="doc-title"
-              type="text"
-              value={activeDoc.title}
-              onChange={(e) => updateActiveDoc((d) => ({ ...d, title: e.target.value }))}
-              className="siscom-input w-full min-h-[40px] px-3 text-xs"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label htmlFor="doc-subtitle" className="block text-[11px] text-[#98A89F]">
-              Subtítulo
-            </label>
-            <input
-              id="doc-subtitle"
-              type="text"
-              value={activeDoc.subtitle}
-              onChange={(e) => updateActiveDoc((d) => ({ ...d, subtitle: e.target.value }))}
-              placeholder="Opcional"
-              className="siscom-input w-full min-h-[38px] px-3 text-xs"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label htmlFor="doc-date" className="block text-[11px] text-[#98A89F]">
-              Data
-            </label>
-            <input
-              id="doc-date"
-              type="text"
-              value={activeDoc.dateText}
-              onChange={(e) => updateActiveDoc((d) => ({ ...d, dateText: e.target.value }))}
-              className="siscom-input w-full min-h-[38px] px-3 text-xs"
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2 space-y-1">
-              <label htmlFor="doc-sig" className="block text-[11px] text-[#98A89F]">
-                Assinatura
-              </label>
-              <input
-                id="doc-sig"
-                type="text"
-                value={activeDoc.signatureText}
-                onChange={(e) => updateActiveDoc((d) => ({ ...d, signatureText: e.target.value }))}
-                className="siscom-input w-full min-h-[38px] px-3 text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="doc-sig-lines" className="block text-[11px] text-[#98A89F]">
-                Linhas
-              </label>
-              <input
-                id="doc-sig-lines"
-                type="number"
-                min={1}
-                max={4}
-                value={activeDoc.signatureLines}
-                onChange={(e) =>
-                  updateActiveDoc((d) => ({
-                    ...d,
-                    signatureLines: Math.max(1, Math.min(4, Number(e.target.value) || 1)),
-                  }))
-                }
-                className="siscom-input w-full min-h-[38px] px-2.5 font-mono text-xs"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Colunas */}
+        {/* 2. Colunas */}
         <div className="space-y-2.5 pt-4 border-t border-white/[0.07]">
           <div className="flex items-center justify-between gap-2">
             <span className="siscom-field-label">
@@ -899,62 +818,149 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
         </AnimatePresence>
           </div>
         }
-        bottomBar={
-          <div className="w-full flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Fonte do documento"
-                value={activeDoc.fontFamily}
-                onChange={(e) =>
-                  updateActiveDoc((d) => ({
-                    ...d,
-                    fontFamily: e.target.value as StoredTableDocument['fontFamily'],
-                  }))
-                }
-                className="siscom-input min-h-[36px] px-2.5 text-xs"
-              >
-                <option value="Arial">Arial</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Open Sans">Open Sans</option>
-              </select>
+        rightSidebar={
+          <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-4">
+            {/* Tipografia & Página */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="siscom-field-label">Texto e Fonte</span>
+                <span className="font-mono text-[10px] text-[#E5C17B]">
+                  A4 {LANDSCAPE_A4_W_MM}×{LANDSCAPE_A4_H_MM}mm
+                </span>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => updateActiveDoc((d) => ({ ...d, headerBold: !d.headerBold }))}
-                className={`siscom-btn min-h-[36px] px-3 text-xs ${
-                  activeDoc.headerBold
-                    ? 'siscom-btn-primary'
-                    : 'siscom-btn-secondary text-[#98A89F]'
-                }`}
-              >
-                Negrito
-              </button>
+              <div className="space-y-1">
+                <label className="block text-[11px] text-[#B8B3A6]">Fonte da folha</label>
+                <select
+                  aria-label="Fonte do documento"
+                  value={activeDoc.fontFamily}
+                  onChange={(e) =>
+                    updateActiveDoc((d) => ({
+                      ...d,
+                      fontFamily: e.target.value as StoredTableDocument['fontFamily'],
+                    }))
+                  }
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs"
+                >
+                  <option value="Arial">Arial</option>
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Open Sans">Open Sans</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateActiveDoc((d) => ({ ...d, headerBold: !d.headerBold }))}
+                  className={`siscom-btn !min-h-[38px] !px-2.5 text-xs ${
+                    activeDoc.headerBold
+                      ? 'siscom-btn-primary'
+                      : 'siscom-btn-secondary text-[#B8B3A6]'
+                  }`}
+                >
+                  Negrito
+                </button>
+
+                <select
+                  aria-label="Zoom da folha A4"
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  className="siscom-input !min-h-[38px] !px-2 font-mono text-xs"
+                >
+                  <option value={65}>Zoom 65%</option>
+                  <option value={85}>Zoom 85%</option>
+                  <option value={100}>Zoom 100%</option>
+                </select>
+              </div>
 
               {Object.keys(activeDoc.cellValues).length > 0 && (
                 <button
                   type="button"
                   onClick={() => updateActiveDoc((d) => ({ ...d, cellValues: {} }))}
-                  className="siscom-btn siscom-btn-secondary min-h-[36px] px-3 text-xs text-[#98A89F]"
+                  className="siscom-btn siscom-btn-secondary w-full !min-h-[36px] text-xs text-[#B8B3A6]"
                 >
-                  Limpar células
+                  Limpar células preenchidas
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-3 text-xs text-[#98A89F]">
-              <span className="hidden sm:inline font-mono text-[11px] text-[#E5C17B]">
-                A4 Horizontal · {LANDSCAPE_A4_W_MM} × {LANDSCAPE_A4_H_MM} mm
-              </span>
-              <select
-                aria-label="Zoom da folha A4"
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="siscom-input min-h-[36px] px-2.5 font-mono text-xs"
-              >
-                <option value={65}>65%</option>
-                <option value={85}>85%</option>
-                <option value={100}>100%</option>
-              </select>
+            {/* Textos da Folha */}
+            <div className="space-y-2.5 pt-3.5 border-t border-white/[0.08]">
+              <span className="siscom-field-label block">Textos da Página</span>
+
+              <div className="space-y-1">
+                <label htmlFor="doc-title" className="block text-[11px] text-[#B8B3A6]">
+                  Título
+                </label>
+                <input
+                  id="doc-title"
+                  type="text"
+                  value={activeDoc.title}
+                  onChange={(e) => updateActiveDoc((d) => ({ ...d, title: e.target.value }))}
+                  className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="doc-subtitle" className="block text-[11px] text-[#B8B3A6]">
+                  Subtítulo
+                </label>
+                <input
+                  id="doc-subtitle"
+                  type="text"
+                  value={activeDoc.subtitle}
+                  onChange={(e) => updateActiveDoc((d) => ({ ...d, subtitle: e.target.value }))}
+                  placeholder="Opcional"
+                  className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="doc-date" className="block text-[11px] text-[#B8B3A6]">
+                  Data
+                </label>
+                <input
+                  id="doc-date"
+                  type="text"
+                  value={activeDoc.dateText}
+                  onChange={(e) => updateActiveDoc((d) => ({ ...d, dateText: e.target.value }))}
+                  className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2 space-y-1">
+                  <label htmlFor="doc-sig" className="block text-[11px] text-[#B8B3A6]">
+                    Assinatura
+                  </label>
+                  <input
+                    id="doc-sig"
+                    type="text"
+                    value={activeDoc.signatureText}
+                    onChange={(e) => updateActiveDoc((d) => ({ ...d, signatureText: e.target.value }))}
+                    className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="doc-sig-lines" className="block text-[11px] text-[#B8B3A6]">
+                    Linhas
+                  </label>
+                  <input
+                    id="doc-sig-lines"
+                    type="number"
+                    min={1}
+                    max={4}
+                    value={activeDoc.signatureLines}
+                    onChange={(e) =>
+                      updateActiveDoc((d) => ({
+                        ...d,
+                        signatureLines: Math.max(1, Math.min(4, Number(e.target.value) || 1)),
+                      }))
+                    }
+                    className="siscom-input w-full !min-h-[38px] px-2 font-mono text-xs"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         }

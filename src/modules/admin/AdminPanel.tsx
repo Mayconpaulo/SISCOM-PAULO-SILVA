@@ -373,14 +373,6 @@ export function AdminPanel() {
         </section>
         </div>
       }
-      bottomBar={
-        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>Administração · Gestão de Acessos</span>
-          <span className="font-mono text-[#E5C17B]">
-            {managedUsers.length} conta{managedUsers.length === 1 ? '' : 's'}
-          </span>
-        </div>
-      }
     >
       <div className="space-y-5">
         <AnimatePresence>

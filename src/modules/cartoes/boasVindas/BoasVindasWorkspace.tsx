@@ -463,7 +463,8 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[390px] xl:w-[415px]"
+      sidebarWidthClass="lg:w-[295px] xl:w-[315px]"
+      rightSidebarWidthClass="lg:w-[278px] xl:w-[300px]"
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         <div className="space-y-2">
@@ -613,69 +614,6 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
           </AnimatePresence>
         </section>
 
-        {/* Editable Date */}
-        <section className="space-y-2.5 border-t border-white/8 pt-4">
-          <div className="flex items-center justify-between gap-2">
-            <label
-              htmlFor="cartao-data-input"
-              className="siscom-field-label flex items-center gap-1.5"
-            >
-              <Calendar className="w-3.5 h-3.5 text-[#83B499]" />
-              Data
-            </label>
-            <button
-              type="button"
-              onClick={() =>
-                setConfig((prev) => ({ ...prev, dateText: formatTodayQuartelDate() }))
-              }
-              className="text-[11px] text-[#E5C17B] hover:text-[#F4E6C4] transition-colors"
-            >
-              Hoje
-            </button>
-          </div>
-
-          <input
-            id="cartao-data-input"
-            type="text"
-            value={config.dateText}
-            onChange={(e) => setConfig((prev) => ({ ...prev, dateText: e.target.value }))}
-            placeholder={DEFAULT_BOAS_VINDAS_DATE}
-            className="siscom-input text-sm"
-          />
-        </section>
-
-        {/* Editable Welcome Text */}
-        <section className="space-y-2.5 border-t border-white/8 pt-4">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="cartao-texto-input" className="siscom-field-label">
-              Texto
-            </label>
-            <button
-              type="button"
-              onClick={() =>
-                setConfig((prev) => ({ ...prev, bodyText: DEFAULT_BOAS_VINDAS_TEXT }))
-              }
-              className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC] transition-colors"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Padrão
-            </button>
-          </div>
-
-          <textarea
-            id="cartao-texto-input"
-            rows={4}
-            value={config.bodyText}
-            onChange={(e) => setConfig((prev) => ({ ...prev, bodyText: e.target.value }))}
-            className="siscom-input !min-h-[100px] py-2.5 text-xs sm:text-sm leading-relaxed resize-y"
-          />
-          {bodyFitInfo.shrunk && (
-            <p className="text-[11px] text-[#83B499]">
-              Ajustado ({bodyFitInfo.lineCount} linhas)
-            </p>
-          )}
-        </section>
-
         {/* Export Buttons */}
         <section className="space-y-2.5 border-t border-white/8 pt-4">
           <button
@@ -726,12 +664,84 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
         </section>
         </div>
       }
-      bottomBar={
-        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>
-            A4 · {layout.effectiveCount}× ({layout.cardW} × {layout.cardH} mm)
+      rightSidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E5C17B]">
+            Texto do Cartão
           </span>
+          <span className="font-mono text-[10px] text-[#98A89F]">
+            {layout.effectiveCount}× · A4
+          </span>
+        </div>
+
+        {/* Editable Date */}
+        <section className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <label
+              htmlFor="cartao-data-input"
+              className="siscom-field-label flex items-center gap-1.5"
+            >
+              <Calendar className="w-3.5 h-3.5 text-[#83B499]" />
+              Data
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setConfig((prev) => ({ ...prev, dateText: formatTodayQuartelDate() }))
+              }
+              className="text-[11px] text-[#E5C17B] hover:text-[#F4E6C4] transition-colors"
+            >
+              Hoje
+            </button>
+          </div>
+
+          <input
+            id="cartao-data-input"
+            type="text"
+            value={config.dateText}
+            onChange={(e) => setConfig((prev) => ({ ...prev, dateText: e.target.value }))}
+            placeholder={DEFAULT_BOAS_VINDAS_DATE}
+            className="siscom-input text-sm"
+          />
+        </section>
+
+        {/* Editable Welcome Text */}
+        <section className="space-y-2.5 border-t border-white/8 pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="cartao-texto-input" className="siscom-field-label">
+              Mensagem
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setConfig((prev) => ({ ...prev, bodyText: DEFAULT_BOAS_VINDAS_TEXT }))
+              }
+              className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC] transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Padrão
+            </button>
+          </div>
+
+          <textarea
+            id="cartao-texto-input"
+            rows={6}
+            value={config.bodyText}
+            onChange={(e) => setConfig((prev) => ({ ...prev, bodyText: e.target.value }))}
+            className="siscom-input !min-h-[140px] py-2.5 text-xs sm:text-sm leading-relaxed resize-y"
+          />
+          {bodyFitInfo.shrunk && (
+            <p className="text-[11px] text-[#83B499]">
+              Ajustado ({bodyFitInfo.lineCount} linhas)
+            </p>
+          )}
+        </section>
+
+        <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between text-[11px] text-[#98A89F]">
+          <span>{layout.cardW} × {layout.cardH} mm</span>
           <span className="font-mono text-[#E5C17B]">210 × 297 mm</span>
+        </div>
         </div>
       }
     >

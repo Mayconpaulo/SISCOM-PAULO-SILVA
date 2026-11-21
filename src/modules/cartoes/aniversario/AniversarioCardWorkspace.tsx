@@ -449,7 +449,8 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[405px] xl:w-[435px]"
+      sidebarWidthClass="lg:w-[305px] xl:w-[330px]"
+      rightSidebarWidthClass="lg:w-[285px] xl:w-[310px]"
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Card Model Switcher */}
@@ -630,7 +631,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                       Envie o PDF mensal da relação.
                     </p>
                   ) : (
-                    <div className="siscom-liquid-subcard max-h-56 overflow-y-auto rounded-lg divide-y divide-white/8">
+                    <div className="siscom-liquid-subcard max-h-60 overflow-y-auto rounded-lg divide-y divide-white/8">
                       {entries.map((entry, idx) => {
                         const isSel = entry.id === selectedEntry?.id;
                         const formatted = formatAniversarianteRecipientLine(
@@ -662,273 +663,20 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                     </div>
                   )}
                 </div>
-
-                {/* Selected Row Quick Editor */}
-                {selectedEntry && (
-                  <div className="siscom-liquid-subcard rounded-lg p-3 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-[#83B499]">Selecionado</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEntry(selectedEntry.id)}
-                        className="inline-flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Remover
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-[84px_1fr_64px] gap-2">
-                      <label className="space-y-1">
-                        <span className="block text-[10px] text-[#98A89F]">Sigla</span>
-                        <input
-                          type="text"
-                          value={selectedEntry.sigla}
-                          onChange={(e) => handleUpdateSelectedEntry({ sigla: e.target.value })}
-                          className="siscom-input !min-h-[34px] !px-2 text-xs"
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="block text-[10px] text-[#98A89F]">Qualificação</span>
-                        <input
-                          type="text"
-                          value={selectedEntry.qualificacao}
-                          onChange={(e) =>
-                            handleUpdateSelectedEntry({ qualificacao: e.target.value })
-                          }
-                          placeholder="Vazio p/ RS"
-                          className="siscom-input !min-h-[34px] !px-2 text-xs"
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="block text-[10px] text-[#98A89F]">Dia</span>
-                        <input
-                          type="text"
-                          value={selectedEntry.dia}
-                          onChange={(e) => handleUpdateSelectedEntry({ dia: e.target.value })}
-                          className="siscom-input !min-h-[34px] !px-2 text-xs font-mono"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-[72px_1fr] gap-2">
-                      <label className="block space-y-1">
-                        <span className="block text-[10px] text-[#98A89F]">Prefixo</span>
-                        <input
-                          type="text"
-                          value={selectedEntry.prefix ?? ''}
-                          onChange={(e) => handleUpdateSelectedEntry({ prefix: e.target.value })}
-                          placeholder={inferPortugueseRecipientPrefix(selectedEntry.nome)}
-                          className="siscom-input !min-h-[34px] !px-2 text-xs uppercase"
-                        />
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="block text-[10px] text-[#98A89F]">Nome</span>
-                        <input
-                          type="text"
-                          value={selectedEntry.nome}
-                          onChange={(e) => handleUpdateSelectedEntry({ nome: e.target.value })}
-                          className="siscom-input !min-h-[34px] !px-2 text-xs"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                )}
               </motion.div>
             ) : (
-              /* Individual Mode Inputs */
               <motion.div
-                key="aniv-individual"
+                key="aniv-individual-hint"
                 variants={stepSlideVariants}
                 initial="initial"
                 animate="animate"
                 exit="exit"
-                className="space-y-3"
+                className="siscom-liquid-subcard rounded-lg p-3 text-xs text-[#B8B3A6] leading-relaxed"
               >
-                <div className="grid grid-cols-[84px_1fr_1fr] gap-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <label htmlFor="aniv-indiv-prefix" className="siscom-field-label !text-[11px]">
-                        Prefixo
-                      </label>
-                      {individual.prefixAuto === false && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setIndividual((prev) => ({
-                              ...prev,
-                              prefixAuto: true,
-                              prefix: inferPortugueseRecipientPrefix(prev.nome),
-                            }))
-                          }
-                          className="text-[10px] text-[#83B499] hover:text-[#A8D6BC]"
-                        >
-                          Auto
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      id="aniv-indiv-prefix"
-                      type="text"
-                      value={individual.prefix}
-                      onChange={(e) =>
-                        setIndividual((prev) => ({
-                          ...prev,
-                          prefixAuto: false,
-                          prefix: e.target.value,
-                        }))
-                      }
-                      placeholder="AO / A"
-                      className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
-                    />
-                  </div>
-                  <label className="space-y-1">
-                    <span className="siscom-field-label !text-[11px]">Sigla</span>
-                    <input
-                      type="text"
-                      value={individual.sigla}
-                      onChange={(e) =>
-                        setIndividual((prev) => ({ ...prev, sigla: e.target.value }))
-                      }
-                      placeholder="SD, CB, SGT"
-                      className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="siscom-field-label !text-[11px]">Qualificação</span>
-                    <input
-                      type="text"
-                      value={individual.qualificacao}
-                      onChange={(e) =>
-                        setIndividual((prev) => ({ ...prev, qualificacao: e.target.value }))
-                      }
-                      placeholder="INF, INT, SAU"
-                      className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
-                    />
-                  </label>
-                </div>
-
-                <label className="block space-y-1">
-                  <span className="siscom-field-label !text-[11px]">Nome</span>
-                  <input
-                    type="text"
-                    value={individual.nome}
-                    onChange={(e) => {
-                      const nextNome = e.target.value;
-                      setIndividual((prev) => ({
-                        ...prev,
-                        nome: nextNome,
-                        prefix:
-                          prev.prefixAuto !== false
-                            ? inferPortugueseRecipientPrefix(nextNome)
-                            : prev.prefix,
-                      }));
-                    }}
-                    placeholder="JOSUE GAIBA COELHO"
-                    className="siscom-input !min-h-[38px] text-xs uppercase"
-                  />
-                </label>
-
-                <div className="grid grid-cols-[70px_1fr_82px] gap-2">
-                  <label className="space-y-1">
-                    <span className="siscom-field-label !text-[11px]">Dia</span>
-                    <input
-                      type="text"
-                      value={individual.dia}
-                      onChange={(e) =>
-                        setIndividual((prev) => ({
-                          ...prev,
-                          dia: e.target.value,
-                          customDateOverride: '',
-                        }))
-                      }
-                      className="siscom-input !min-h-[38px] !px-2.5 text-xs font-mono"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="siscom-field-label !text-[11px]">Mês</span>
-                    <select
-                      value={individual.mes}
-                      onChange={(e) =>
-                        setIndividual((prev) => ({
-                          ...prev,
-                          mes: e.target.value,
-                          customDateOverride: '',
-                        }))
-                      }
-                      className="siscom-input !min-h-[38px] !px-2 text-xs"
-                    >
-                      {MONTHS_PT.map((mName) => (
-                        <option key={mName} value={mName}>
-                          {mName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1">
-                    <span className="siscom-field-label !text-[11px]">Ano</span>
-                    <input
-                      type="number"
-                      min={2000}
-                      max={2100}
-                      value={individual.ano}
-                      onChange={(e) =>
-                        setIndividual((prev) => ({
-                          ...prev,
-                          ano: Math.max(2000, parseInt(e.target.value, 10) || 2026),
-                          customDateOverride: '',
-                        }))
-                      }
-                      className="siscom-input !min-h-[38px] !px-2 text-xs font-mono"
-                    />
-                  </label>
-                </div>
-
-                <label className="block space-y-1">
-                  <span className="flex items-center gap-1 text-[11px] font-medium text-[#98A89F]">
-                    <Calendar className="w-3 h-3 text-[#83B499]" />
-                    Data livre (opcional)
-                  </span>
-                  <input
-                    type="text"
-                    value={individual.customDateOverride}
-                    onChange={(e) =>
-                      setIndividual((prev) => ({ ...prev, customDateOverride: e.target.value }))
-                    }
-                    placeholder={formatBirthdayCardDate(individual.dia, individual.mes, individual.ano)}
-                    className="siscom-input !min-h-[38px] text-xs"
-                  />
-                </label>
+                Preencha o destinatário, a data e o texto no painel de <span className="text-[#E5C17B] font-medium">Texto do Cartão</span> à direita.
               </motion.div>
             )}
           </AnimatePresence>
-        </section>
-
-        {/* Editable Body Paragraph */}
-        <section className="space-y-2.5 border-t border-white/8 pt-4">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="aniv-texto-input" className="siscom-field-label">
-              Texto
-            </label>
-            {customBodyText !== null && (
-              <button
-                type="button"
-                onClick={() => setCustomBodyText(null)}
-                className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC] transition-colors"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Padrão
-              </button>
-            )}
-          </div>
-
-          <textarea
-            id="aniv-texto-input"
-            rows={4}
-            value={activeBodyText}
-            onChange={(e) => setCustomBodyText(e.target.value)}
-            className="siscom-input !min-h-[100px] py-2.5 text-xs sm:text-sm leading-relaxed resize-y"
-          />
         </section>
 
         {/* Digital PNG / ZIP Export Actions */}
@@ -977,12 +725,283 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
         </section>
         </div>
       }
-      bottomBar={
-        <div className="w-full flex items-center justify-between gap-2 text-xs text-[#98A89F]">
-          <span>
-            {audience === 'eterno_comandante' ? 'Eterno Comandante' : 'Militares'}
+      rightSidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#E5C17B]">
+            Texto do Cartão
           </span>
-          <span className="font-mono text-[#E5C17B]">{ANIV_W_PX} × {ANIV_H_PX} PNG</span>
+          <span className="font-mono text-[10px] text-[#98A89F]">
+            {ANIV_W_PX}×{ANIV_H_PX} PNG
+          </span>
+        </div>
+
+        {/* Recipient / Date Text Editor */}
+        {inputMode === 'relacao' ? (
+          selectedEntry ? (
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="siscom-field-label">Militar selecionado</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveEntry(selectedEntry.id)}
+                  className="inline-flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Remover
+                </button>
+              </div>
+
+              <div className="grid grid-cols-[72px_1fr_56px] gap-2">
+                <label className="space-y-1">
+                  <span className="block text-[10px] text-[#98A89F]">Sigla</span>
+                  <input
+                    type="text"
+                    value={selectedEntry.sigla}
+                    onChange={(e) => handleUpdateSelectedEntry({ sigla: e.target.value })}
+                    className="siscom-input !min-h-[34px] !px-2 text-xs"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="block text-[10px] text-[#98A89F]">Qualif.</span>
+                  <input
+                    type="text"
+                    value={selectedEntry.qualificacao}
+                    onChange={(e) =>
+                      handleUpdateSelectedEntry({ qualificacao: e.target.value })
+                    }
+                    placeholder="Vazio p/ RS"
+                    className="siscom-input !min-h-[34px] !px-2 text-xs"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="block text-[10px] text-[#98A89F]">Dia</span>
+                  <input
+                    type="text"
+                    value={selectedEntry.dia}
+                    onChange={(e) => handleUpdateSelectedEntry({ dia: e.target.value })}
+                    className="siscom-input !min-h-[34px] !px-2 text-xs font-mono"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-[64px_1fr] gap-2">
+                <label className="block space-y-1">
+                  <span className="block text-[10px] text-[#98A89F]">Prefixo</span>
+                  <input
+                    type="text"
+                    value={selectedEntry.prefix ?? ''}
+                    onChange={(e) => handleUpdateSelectedEntry({ prefix: e.target.value })}
+                    placeholder={inferPortugueseRecipientPrefix(selectedEntry.nome)}
+                    className="siscom-input !min-h-[34px] !px-2 text-xs uppercase"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="block text-[10px] text-[#98A89F]">Nome</span>
+                  <input
+                    type="text"
+                    value={selectedEntry.nome}
+                    onChange={(e) => handleUpdateSelectedEntry({ nome: e.target.value })}
+                    className="siscom-input !min-h-[34px] !px-2 text-xs"
+                  />
+                </label>
+              </div>
+            </section>
+          ) : (
+            <p className="siscom-liquid-subcard rounded-lg p-3 text-xs text-[#98A89F]">
+              Selecione um militar na lista à esquerda para editar o nome e o dia.
+            </p>
+          )
+        ) : (
+          <section className="space-y-3">
+            <div className="grid grid-cols-[72px_1fr_1fr] gap-2">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-1">
+                  <label htmlFor="aniv-indiv-prefix" className="siscom-field-label !text-[10px]">
+                    Prefixo
+                  </label>
+                  {individual.prefixAuto === false && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIndividual((prev) => ({
+                          ...prev,
+                          prefixAuto: true,
+                          prefix: inferPortugueseRecipientPrefix(prev.nome),
+                        }))
+                      }
+                      className="text-[10px] text-[#83B499] hover:text-[#A8D6BC]"
+                    >
+                      Auto
+                    </button>
+                  )}
+                </div>
+                <input
+                  id="aniv-indiv-prefix"
+                  type="text"
+                  value={individual.prefix}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      prefixAuto: false,
+                      prefix: e.target.value,
+                    }))
+                  }
+                  placeholder="AO / A"
+                  className="siscom-input !min-h-[36px] !px-2 text-xs uppercase"
+                />
+              </div>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Sigla</span>
+                <input
+                  type="text"
+                  value={individual.sigla}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({ ...prev, sigla: e.target.value }))
+                  }
+                  placeholder="SD, CB, SGT"
+                  className="siscom-input !min-h-[36px] !px-2 text-xs uppercase"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Qualif.</span>
+                <input
+                  type="text"
+                  value={individual.qualificacao}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({ ...prev, qualificacao: e.target.value }))
+                  }
+                  placeholder="INF, INT"
+                  className="siscom-input !min-h-[36px] !px-2 text-xs uppercase"
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="siscom-field-label !text-[11px]">Nome</span>
+              <input
+                type="text"
+                value={individual.nome}
+                onChange={(e) => {
+                  const nextNome = e.target.value;
+                  setIndividual((prev) => ({
+                    ...prev,
+                    nome: nextNome,
+                    prefix:
+                      prev.prefixAuto !== false
+                        ? inferPortugueseRecipientPrefix(nextNome)
+                        : prev.prefix,
+                  }));
+                }}
+                placeholder="JOSUE GAIBA COELHO"
+                className="siscom-input !min-h-[36px] text-xs uppercase"
+              />
+            </label>
+
+            <div className="grid grid-cols-[58px_1fr_72px] gap-2">
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Dia</span>
+                <input
+                  type="text"
+                  value={individual.dia}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      dia: e.target.value,
+                      customDateOverride: '',
+                    }))
+                  }
+                  className="siscom-input !min-h-[36px] !px-2 text-xs font-mono"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Mês</span>
+                <select
+                  value={individual.mes}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      mes: e.target.value,
+                      customDateOverride: '',
+                    }))
+                  }
+                  className="siscom-input !min-h-[36px] !px-2 text-xs"
+                >
+                  {MONTHS_PT.map((mName) => (
+                    <option key={mName} value={mName}>
+                      {mName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Ano</span>
+                <input
+                  type="number"
+                  min={2000}
+                  max={2100}
+                  value={individual.ano}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      ano: Math.max(2000, parseInt(e.target.value, 10) || 2026),
+                      customDateOverride: '',
+                    }))
+                  }
+                  className="siscom-input !min-h-[36px] !px-2 text-xs font-mono"
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="flex items-center gap-1 text-[11px] font-medium text-[#98A89F]">
+                <Calendar className="w-3 h-3 text-[#83B499]" />
+                Data livre (opcional)
+              </span>
+              <input
+                type="text"
+                value={individual.customDateOverride}
+                onChange={(e) =>
+                  setIndividual((prev) => ({ ...prev, customDateOverride: e.target.value }))
+                }
+                placeholder={formatBirthdayCardDate(individual.dia, individual.mes, individual.ano)}
+                className="siscom-input !min-h-[36px] text-xs"
+              />
+            </label>
+          </section>
+        )}
+
+        {/* Editable Body Paragraph */}
+        <section className="space-y-2.5 border-t border-white/8 pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="aniv-texto-input" className="siscom-field-label">
+              Mensagem
+            </label>
+            {customBodyText !== null && (
+              <button
+                type="button"
+                onClick={() => setCustomBodyText(null)}
+                className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC] transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Padrão
+              </button>
+            )}
+          </div>
+
+          <textarea
+            id="aniv-texto-input"
+            rows={5}
+            value={activeBodyText}
+            onChange={(e) => setCustomBodyText(e.target.value)}
+            className="siscom-input !min-h-[120px] py-2.5 text-xs sm:text-sm leading-relaxed resize-y"
+          />
+        </section>
+
+        <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between text-[11px] text-[#98A89F]">
+          <span>{audience === 'eterno_comandante' ? 'Eterno Comandante' : 'Militares'}</span>
+          <span className="font-mono text-[#E5C17B]">{ANIV_W_PX} × {ANIV_H_PX}</span>
+        </div>
         </div>
       }
     >

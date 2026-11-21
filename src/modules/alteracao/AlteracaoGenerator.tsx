@@ -1566,8 +1566,8 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
 
   return (
     <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[370px] xl:w-[400px]"
-      mobileBottomBarPosition="top"
+      sidebarWidthClass="lg:w-[305px] xl:w-[335px]"
+      rightSidebarWidthClass="lg:w-[268px] xl:w-[292px]"
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Top Primary PDF Upload Dropzone */}
@@ -1998,84 +1998,100 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
         </div>
         </div>
       }
-      bottomBar={
-        <div className="w-full space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Undo / Redo */}
-            <div className="flex items-center gap-0.5 pr-2 border-r border-white/[0.08]">
-              <button
-                type="button"
-                title="Desfazer (Ctrl+Z)"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  runFormatCommand('undo');
-                }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
-              >
-                <Undo2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                title="Refazer (Ctrl+Y)"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  runFormatCommand('redo');
-                }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
-              >
-                <Redo2 className="w-4 h-4" />
-              </button>
+      rightSidebar={
+        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-4">
+          {/* Header + Undo/Redo */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="siscom-field-label">Texto e Estilo</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="Desfazer (Ctrl+Z)"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    runFormatCommand('undo');
+                  }}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/10 bg-[#0A110E]/45 hover:bg-white/[0.1] active:scale-[0.94] text-[#C6D4CC] transition-all cursor-pointer"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  title="Refazer (Ctrl+Y)"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    runFormatCommand('redo');
+                  }}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/10 bg-[#0A110E]/45 hover:bg-white/[0.1] active:scale-[0.94] text-[#C6D4CC] transition-all cursor-pointer"
+                >
+                  <Redo2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            {/* Font Family & Size */}
-            <div className="flex items-center gap-1.5 pr-2 border-r border-white/[0.08]">
+            {/* Font Family */}
+            <div className="space-y-1">
+              <label className="block text-[11px] text-[#B8B3A6]">Fonte</label>
               <select
                 aria-label="Fonte do texto"
                 value={fontFamily}
                 onChange={(e) => applySelectionFontFamily(e.target.value)}
-                className="siscom-input h-9 sm:h-8 px-2 text-xs"
+                className="siscom-input !min-h-[38px] !px-2.5 text-xs"
               >
                 <option value="Times New Roman">Times New Roman</option>
                 <option value="Georgia">Georgia</option>
                 <option value="Arial">Arial</option>
                 <option value="Open Sans">Open Sans</option>
               </select>
-
-              <select
-                aria-label="Tamanho da fonte"
-                value={fontSizePt}
-                onChange={(e) => applySelectionFontSize(e.target.value)}
-                className="siscom-input h-9 sm:h-8 px-2 font-mono text-xs"
-              >
-                <option value="9pt">9 pt</option>
-                <option value="10pt">10 pt</option>
-                <option value="10.5pt">10.5 pt</option>
-                <option value="11pt">11 pt</option>
-                <option value="12pt">12 pt</option>
-                <option value="14pt">14 pt</option>
-                <option value="16pt">16 pt</option>
-              </select>
-
-              <select
-                aria-label="Espaçamento entre linhas"
-                value={lineHeight}
-                onChange={(e) => {
-                  const nextLh = sanitizeCssLineHeight(e.target.value, '1.22');
-                  setLineHeight(nextLh);
-                  scheduleLiveReflow(activePageIndex, true, { lineHeight: nextLh });
-                }}
-                title="Espaçamento entre linhas"
-                className="siscom-input h-9 sm:h-8 px-2 font-mono text-xs"
-              >
-                <option value="1.05">1.0</option>
-                <option value="1.22">1.15</option>
-                <option value="1.35">1.3</option>
-                <option value="1.5">1.5</option>
-              </select>
             </div>
 
-            {/* Bold / Italic / Underline / Strike / Clear */}
-            <div className="flex items-center gap-0.5 pr-2 border-r border-white/[0.08]">
+            {/* Size & Line Height */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="block text-[11px] text-[#B8B3A6]">Tamanho</label>
+                <select
+                  aria-label="Tamanho da fonte"
+                  value={fontSizePt}
+                  onChange={(e) => applySelectionFontSize(e.target.value)}
+                  className="siscom-input !min-h-[38px] !px-2 font-mono text-xs"
+                >
+                  <option value="9pt">9 pt</option>
+                  <option value="10pt">10 pt</option>
+                  <option value="10.5pt">10.5 pt</option>
+                  <option value="11pt">11 pt</option>
+                  <option value="12pt">12 pt</option>
+                  <option value="14pt">14 pt</option>
+                  <option value="16pt">16 pt</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] text-[#B8B3A6]">Entrelinhas</label>
+                <select
+                  aria-label="Espaçamento entre linhas"
+                  value={lineHeight}
+                  onChange={(e) => {
+                    const nextLh = sanitizeCssLineHeight(e.target.value, '1.22');
+                    setLineHeight(nextLh);
+                    scheduleLiveReflow(activePageIndex, true, { lineHeight: nextLh });
+                  }}
+                  title="Espaçamento entre linhas"
+                  className="siscom-input !min-h-[38px] !px-2 font-mono text-xs"
+                >
+                  <option value="1.05">1.0</option>
+                  <option value="1.22">1.15</option>
+                  <option value="1.35">1.3</option>
+                  <option value="1.5">1.5</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Bold / Italic / Underline / Strike / Clear */}
+          <div className="space-y-2 pt-3 border-t border-white/[0.08]">
+            <span className="siscom-field-label">Formatação</span>
+            <div className="grid grid-cols-5 gap-1.5">
               <button
                 type="button"
                 title="Negrito (Ctrl+B)"
@@ -2083,7 +2099,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('bold');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#E8EEEA] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] hover:border-[#C9A961]/45 active:scale-[0.95] text-[#E8EEEA] transition-all cursor-pointer"
               >
                 <Bold className="w-4 h-4" />
               </button>
@@ -2094,7 +2110,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('italic');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#E8EEEA] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] hover:border-[#C9A961]/45 active:scale-[0.95] text-[#E8EEEA] transition-all cursor-pointer"
               >
                 <Italic className="w-4 h-4" />
               </button>
@@ -2105,7 +2121,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('underline');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#E8EEEA] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] hover:border-[#C9A961]/45 active:scale-[0.95] text-[#E8EEEA] transition-all cursor-pointer"
               >
                 <Underline className="w-4 h-4" />
               </button>
@@ -2116,7 +2132,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('strikeThrough');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#E8EEEA] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] hover:border-[#C9A961]/45 active:scale-[0.95] text-[#E8EEEA] transition-all cursor-pointer"
               >
                 <Strikethrough className="w-4 h-4" />
               </button>
@@ -2127,20 +2143,23 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('removeFormat');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#98A89F] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] hover:border-white/25 active:scale-[0.95] text-[#B8B3A6] transition-all cursor-pointer"
               >
                 <Eraser className="w-4 h-4" />
               </button>
             </div>
 
             {/* Colors */}
-            <div className="flex items-center gap-1 pr-2 border-r border-white/[0.08]">
+            <div className="grid grid-cols-2 gap-1.5">
               <label
                 title="Cor do texto"
-                className="h-9 sm:h-8 px-2 inline-flex items-center gap-1 rounded-md hover:bg-white/[0.09] cursor-pointer transition-colors"
+                className="siscom-liquid-subcard h-9 px-2.5 inline-flex items-center justify-between gap-1.5 rounded-lg hover:border-white/25 cursor-pointer transition-colors"
               >
-                <span className="text-xs font-bold text-[#E8EEEA] border-b-2" style={{ borderColor: textColor }}>
-                  A
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[#E8EEEA]">
+                  <span className="font-bold border-b-2 leading-none" style={{ borderColor: textColor }}>
+                    A
+                  </span>
+                  <span>Cor</span>
                 </span>
                 <input
                   type="color"
@@ -2150,15 +2169,18 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                     setTextColor(e.target.value);
                     runFormatCommand('foreColor', e.target.value);
                   }}
-                  className="w-4 h-4 bg-transparent border-0 cursor-pointer p-0"
+                  className="w-5 h-5 bg-transparent border-0 cursor-pointer p-0"
                 />
               </label>
 
               <label
                 title="Realce / Marca-texto"
-                className="h-9 sm:h-8 px-2 inline-flex items-center gap-1 rounded-md hover:bg-white/[0.09] cursor-pointer transition-colors"
+                className="siscom-liquid-subcard h-9 px-2.5 inline-flex items-center justify-between gap-1.5 rounded-lg hover:border-white/25 cursor-pointer transition-colors"
               >
-                <Highlighter className="w-3.5 h-3.5 text-[#E8EEEA]" />
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[#E8EEEA]">
+                  <Highlighter className="w-3.5 h-3.5 text-[#E5C17B]" />
+                  <span>Realce</span>
+                </span>
                 <input
                   type="color"
                   aria-label="Cor de realce"
@@ -2167,13 +2189,16 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                     setHighlightColor(e.target.value);
                     runFormatCommand('hiliteColor', e.target.value);
                   }}
-                  className="w-4 h-4 bg-transparent border-0 cursor-pointer p-0"
+                  className="w-5 h-5 bg-transparent border-0 cursor-pointer p-0"
                 />
               </label>
             </div>
+          </div>
 
-            {/* Alignment */}
-            <div className="flex items-center gap-0.5 pr-2 border-r border-white/[0.08]">
+          {/* Alignment & Lists */}
+          <div className="space-y-2 pt-3 border-t border-white/[0.08]">
+            <span className="siscom-field-label">Parágrafo e Listas</span>
+            <div className="grid grid-cols-4 gap-1.5">
               <button
                 type="button"
                 title="Alinhar à esquerda"
@@ -2181,7 +2206,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('justifyLeft');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <AlignLeft className="w-4 h-4" />
               </button>
@@ -2192,7 +2217,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('justifyCenter');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <AlignCenter className="w-4 h-4" />
               </button>
@@ -2203,7 +2228,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('justifyRight');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <AlignRight className="w-4 h-4" />
               </button>
@@ -2214,14 +2239,13 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('justifyFull');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <AlignJustify className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Lists & Indent */}
-            <div className="flex items-center gap-0.5 pr-2 border-r border-white/[0.08]">
+            <div className="grid grid-cols-4 gap-1.5">
               <button
                 type="button"
                 title="Lista com marcadores"
@@ -2229,7 +2253,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('insertUnorderedList');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <List className="w-4 h-4" />
               </button>
@@ -2240,7 +2264,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('insertOrderedList');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <ListOrdered className="w-4 h-4" />
               </button>
@@ -2251,7 +2275,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('outdent');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <Outdent className="w-4 h-4" />
               </button>
@@ -2262,32 +2286,20 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                   e.preventDefault();
                   runFormatCommand('indent');
                 }}
-                className="h-9 w-9 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md hover:bg-white/[0.09] active:scale-[0.94] text-[#C6D4CC] transition-all"
+                className="h-9 inline-flex items-center justify-center rounded-lg border border-white/12 bg-[#0A110E]/48 hover:bg-white/[0.1] active:scale-[0.95] text-[#C6D4CC] transition-all cursor-pointer"
               >
                 <Indent className="w-4 h-4" />
               </button>
             </div>
+          </div>
 
-            {/* Subir PDF + Find & Replace + Zoom */}
-            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
-              <button
-                type="button"
-                disabled={isImporting}
-                onClick={() => fileInputRef.current?.click()}
-                className="siscom-btn siscom-btn-gold h-9 sm:h-8 px-2.5 text-xs"
-              >
-                {isImporting ? (
-                  <SiscomSpinner tone="gold" className="w-3.5 h-3.5" />
-                ) : (
-                  <Upload className="w-3.5 h-3.5 text-[#E5C17B]" />
-                )}
-                <span>{isImporting ? 'Lendo...' : 'Subir PDF'}</span>
-              </button>
-
+          {/* Localizar & Zoom */}
+          <div className="space-y-2.5 pt-3 border-t border-white/[0.08]">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setShowFindReplace((v) => !v)}
-                className={`siscom-btn h-9 sm:h-8 px-2.5 text-xs ${
+                className={`siscom-btn !min-h-[38px] !px-2.5 text-xs ${
                   showFindReplace
                     ? 'siscom-btn-primary'
                     : 'siscom-btn-secondary text-[#C6D4CC]'
@@ -2301,155 +2313,146 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                 aria-label="Zoom da folha"
                 value={zoom}
                 onChange={(e) => setZoom(Number(e.target.value))}
-                className="siscom-input h-9 sm:h-8 px-2 font-mono text-xs"
+                className="siscom-input !min-h-[38px] !px-2.5 font-mono text-xs"
               >
-                <option value={75}>75%</option>
-                <option value={90}>90%</option>
-                <option value={100}>100%</option>
+                <option value={75}>Zoom 75%</option>
+                <option value={90}>Zoom 90%</option>
+                <option value={100}>Zoom 100%</option>
               </select>
             </div>
+
+            <AnimatePresence>
+              {showFindReplace && (
+                <motion.div
+                  key="alt-find-replace"
+                  variants={fadeSlideVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={UI_TRANSITION}
+                  className="siscom-liquid-subcard rounded-lg p-2.5 space-y-2"
+                >
+                  <input
+                    type="text"
+                    value={findQuery}
+                    onChange={(e) => setFindQuery(e.target.value)}
+                    placeholder="Localizar texto..."
+                    className="siscom-input !min-h-[36px] !px-2.5 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={replaceQuery}
+                    onChange={(e) => setReplaceQuery(e.target.value)}
+                    placeholder="Substituir por..."
+                    className="siscom-input !min-h-[36px] !px-2.5 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleReplaceAll}
+                    className="siscom-btn siscom-btn-primary w-full !min-h-[36px] text-xs"
+                  >
+                    <Replace className="w-3.5 h-3.5" />
+                    <span>Substituir tudo</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {pinchZoom > 1.02 && (
+                <motion.div
+                  key="alt-pinch-zoom"
+                  variants={fadeSlideVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={UI_TRANSITION}
+                  className="siscom-liquid-subcard rounded-lg p-2.5 flex items-center justify-between gap-2 text-xs"
+                >
+                  <span className="font-mono font-semibold text-[#E5C17B]">
+                    {Math.round(pinchZoom * 100)}%
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPinchZoom((prev) => {
+                          const next = Math.max(1, prev - 0.35);
+                          return next < 1.05 ? 1 : next;
+                        })
+                      }
+                      aria-label="Diminuir zoom da folha"
+                      className="siscom-btn siscom-btn-secondary !min-h-[30px] !w-[30px] !px-0"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPinchZoom((prev) => Math.min(3.5, prev + 0.35))}
+                      aria-label="Aumentar zoom da folha"
+                      className="siscom-btn siscom-btn-secondary !min-h-[30px] !w-[30px] !px-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPinchZoom(1)}
+                      className="siscom-btn siscom-btn-gold !min-h-[30px] !px-2 text-[11px]"
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                      <span>100%</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <AnimatePresence>
-            {showFindReplace && (
-              <motion.div
-                key="alt-find-replace"
-                variants={fadeSlideVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                transition={UI_TRANSITION}
-                className="pt-2.5 border-t border-white/[0.07] flex flex-wrap items-center gap-2"
-              >
-                <input
-                  type="text"
-                  value={findQuery}
-                  onChange={(e) => setFindQuery(e.target.value)}
-                  placeholder="Localizar texto..."
-                  className="siscom-input flex-1 min-w-[140px] min-h-[36px] px-2.5 text-xs"
-                />
-                <input
-                  type="text"
-                  value={replaceQuery}
-                  onChange={(e) => setReplaceQuery(e.target.value)}
-                  placeholder="Substituir por..."
-                  className="siscom-input flex-1 min-w-[140px] min-h-[36px] px-2.5 text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleReplaceAll}
-                  className="siscom-btn siscom-btn-primary min-h-[36px] px-3 text-xs"
-                >
-                  <Replace className="w-3.5 h-3.5" />
-                  <span>Substituir tudo</span>
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Calculadora de Tempo de Serviço (sempre visível na parte de edição) */}
-          <div className="pt-2.5 border-t border-white/[0.07] flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
+          {/* Calculadora de Tempo de Serviço */}
+          <div className="space-y-2.5 pt-3 border-t border-white/[0.08]">
+            <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#E5C17B]">
                 <Calculator className="w-3.5 h-3.5" />
                 <span>Tempo de Serviço</span>
               </span>
+              <span className="font-mono text-[11px] font-semibold text-[#E5C17B]">
+                {serviceTime ? serviceTime.formatted : '00 a 00 m 00 d'}
+              </span>
+            </div>
 
-              <label
-                htmlFor="alt-data-praca"
-                className="inline-flex items-center gap-1.5 text-[11px] text-[#C6D4CC]"
-              >
-                <span>Data de praça</span>
+            <div className="space-y-2">
+              <label htmlFor="alt-data-praca" className="block space-y-1">
+                <span className="block text-[11px] text-[#B8B3A6]">Data de praça</span>
                 <input
                   id="alt-data-praca"
                   type="date"
                   value={dataPraca}
                   onChange={(e) => handleDateCalculatorChange('praca', e.target.value)}
-                  className="siscom-input min-h-[34px] px-2 text-xs"
+                  className="siscom-input !min-h-[36px] !px-2.5 text-xs"
                 />
               </label>
 
-              <label
-                htmlFor="alt-data-final"
-                className="inline-flex items-center gap-1.5 text-[11px] text-[#C6D4CC]"
-              >
-                <span>Data final</span>
+              <label htmlFor="alt-data-final" className="block space-y-1">
+                <span className="block text-[11px] text-[#B8B3A6]">Data final</span>
                 <input
                   id="alt-data-final"
                   type="date"
                   value={dataFinal}
                   onChange={(e) => handleDateCalculatorChange('final', e.target.value)}
-                  className="siscom-input min-h-[34px] px-2 text-xs"
+                  className="siscom-input !min-h-[36px] !px-2.5 text-xs"
                 />
               </label>
             </div>
 
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="font-mono text-xs font-semibold text-[#E5C17B]">
-                {serviceTime ? serviceTime.formatted : '00 a 00 m 00 d'}
-              </span>
-              <button
-                type="button"
-                disabled={!serviceTime}
-                onClick={() => applyServiceTimeToDocument(dataPraca, dataFinal, true)}
-                className="siscom-btn siscom-btn-gold min-h-[34px] px-3 text-xs"
-              >
-                Aplicar na 2ª Parte
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={!serviceTime}
+              onClick={() => applyServiceTimeToDocument(dataPraca, dataFinal, true)}
+              className="siscom-btn siscom-btn-gold w-full !min-h-[38px] text-xs"
+            >
+              Aplicar na 2ª Parte
+            </button>
           </div>
-
-          <AnimatePresence>
-            {pinchZoom > 1.02 && (
-              <motion.div
-                key="alt-pinch-zoom"
-                variants={fadeSlideVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                transition={UI_TRANSITION}
-                className="pt-2.5 border-t border-white/[0.07] flex items-center justify-between gap-2 text-xs"
-              >
-                <span className="text-[#98A89F]">
-                  Zoom da folha:{' '}
-                  <span className="font-mono font-semibold text-[#E5C17B]">
-                    {Math.round(pinchZoom * 100)}%
-                  </span>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPinchZoom((prev) => {
-                        const next = Math.max(1, prev - 0.35);
-                        return next < 1.05 ? 1 : next;
-                      })
-                    }
-                    aria-label="Diminuir zoom da folha"
-                    className="siscom-btn siscom-btn-secondary min-h-[32px] min-w-[32px] px-0"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPinchZoom((prev) => Math.min(3.5, prev + 0.35))}
-                    aria-label="Aumentar zoom da folha"
-                    className="siscom-btn siscom-btn-secondary min-h-[32px] min-w-[32px] px-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPinchZoom(1)}
-                    className="siscom-btn siscom-btn-gold min-h-[32px] px-2.5 text-[11px]"
-                  >
-                    <Maximize2 className="w-3 h-3" />
-                    <span>Folha inteira</span>
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       }
     >
