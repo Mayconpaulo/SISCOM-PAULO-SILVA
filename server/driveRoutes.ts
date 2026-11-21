@@ -25,7 +25,13 @@ export function escapeDriveQueryLiteral(raw: string): string {
   return raw.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-export function extractBearerToken(req: Request): string {
+export function extractDriveAccessToken(req: Request): string {
+  // Primary header: X-Google-Drive-Token avoids Google Cloud Run / IAP proxy intercepting Authorization: Bearer
+  const customHeader = req.headers['x-google-drive-token'];
+  if (typeof customHeader === 'string' && customHeader.trim().length >= 20 && customHeader.trim().length <= 4096) {
+    return customHeader.trim();
+  }
+
   const header = req.headers.authorization;
   if (!header || typeof header !== 'string') {
     throw new DriveRouteError(
@@ -99,7 +105,18 @@ export async function googleDriveFetchJson<T>(
   if (!response.ok) {
     const errPayload = parsed as GoogleDriveErrorPayload | null;
     const reason = errPayload?.error?.errors?.[0]?.reason || '';
+    const apiMessage = errPayload?.error?.message || '';
 
+    if (
+      response.status === 403 &&
+      (reason === 'accessNotConfigured' || apiMessage.toLowerCase().includes('drive api has not been used'))
+    ) {
+      throw new DriveRouteError(
+        403,
+        'DRIVE_API_DISABLED',
+        'A Google Drive API ainda precisa ser ativada no projeto Google Cloud (gen-lang-client-0187607531). Clique no link ao lado para ativá-la em 1 clique.'
+      );
+    }
     if (response.status === 403 && reason === 'storageQuotaExceeded') {
       throw new DriveRouteError(
         507,
@@ -132,7 +149,7 @@ export async function googleDriveFetchJson<T>(
     throw new DriveRouteError(
       response.status >= 400 && response.status < 600 ? response.status : 502,
       'DRIVE_API_ERROR',
-      errPayload?.error?.message || 'Erro ao comunicar com o Google Drive.'
+      apiMessage || `Erro HTTP ${response.status} ao comunicar com o Google Drive.`
     );
   }
 
@@ -295,7 +312,7 @@ export function createDriveRouter(): Router {
    */
   router.get('/account', async (req: Request, res: Response) => {
     try {
-      const accessToken = extractBearerToken(req);
+      const accessToken = extractDriveAccessToken(req);
       const fields = encodeURIComponent(
         'user(displayName,emailAddress),storageQuota(limit,usage,usageInDrive)'
       );
@@ -325,15 +342,15 @@ export function createDriveRouter(): Router {
   });
 
   /**
-   * GET /api/drive/root-candidates?q=fotos+2026
-   * Searches ONLY for non-trashed folders matching the given name (defaults to "fotos 2026")
-   * so the Admin can bind the exact institutional root folder ID. Returns strictly administrative
-   * metadata (zero thumbnails, zero media content).
+   * GET /api/drive/root-candidates?q=...
+   * Lists non-trashed folders in the connected account (when q is empty, lists top-level folders
+   * in Meu Drive so folders like "FOTOS - 2026" appear immediately regardless of hyphens/case).
+   * Returns strictly administrative metadata (zero thumbnails, zero media content).
    */
   router.get('/root-candidates', async (req: Request, res: Response) => {
     try {
-      const accessToken = extractBearerToken(req);
-      const rawQuery = typeof req.query.q === 'string' ? req.query.q.trim() : 'fotos 2026';
+      const accessToken = extractDriveAccessToken(req);
+      const rawQuery = typeof req.query.q === 'string' ? req.query.q.trim() : '';
       const sanitizedQuery = rawQuery.slice(0, 80);
 
       const queryParts = [
@@ -342,12 +359,14 @@ export function createDriveRouter(): Router {
       ];
       if (sanitizedQuery.length > 0) {
         queryParts.push(`name contains '${escapeDriveQueryLiteral(sanitizedQuery)}'`);
+      } else {
+        queryParts.push(`'root' in parents`);
       }
 
       const params = new URLSearchParams({
         q: queryParts.join(' and '),
         spaces: 'drive',
-        pageSize: '25',
+        pageSize: '30',
         orderBy: 'folder,name_natural',
         fields:
           'files(id,name,modifiedTime,ownedByMe,owners(displayName,emailAddress),webViewLink,capabilities(canAddChildren,canListChildren))',
@@ -370,12 +389,13 @@ export function createDriveRouter(): Router {
         canListChildren: Boolean(f.capabilities?.canListChildren),
       }));
 
-      // Prioritize exact match "fotos 2026" (case-insensitive) at the top
-      const normalizedTarget = sanitizedQuery.toLowerCase();
+      // Prioritize folders containing "fotos" and "2026" (e.g., "FOTOS - 2026", "fotos 2026") at the top
       folders.sort((a, b) => {
-        const aExact = a.name.trim().toLowerCase() === normalizedTarget ? 0 : 1;
-        const bExact = b.name.trim().toLowerCase() === normalizedTarget ? 0 : 1;
-        if (aExact !== bExact) return aExact - bExact;
+        const aNorm = a.name.trim().toLowerCase();
+        const bNorm = b.name.trim().toLowerCase();
+        const aScore = aNorm.includes('fotos') && aNorm.includes('2026') ? 0 : aNorm.includes('fotos') ? 1 : 2;
+        const bScore = bNorm.includes('fotos') && bNorm.includes('2026') ? 0 : bNorm.includes('fotos') ? 1 : 2;
+        if (aScore !== bScore) return aScore - bScore;
         return a.name.localeCompare(b.name, 'pt-BR');
       });
 
@@ -392,7 +412,7 @@ export function createDriveRouter(): Router {
    */
   router.post('/verify-root', async (req: Request, res: Response) => {
     try {
-      const accessToken = extractBearerToken(req);
+      const accessToken = extractDriveAccessToken(req);
       const rawFolderId =
         req.body && typeof req.body === 'object' ? (req.body as { folderId?: unknown }).folderId : '';
 

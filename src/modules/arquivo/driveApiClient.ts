@@ -27,7 +27,8 @@ async function driveApiRequest<T>(path: string, init: RequestInit = {}): Promise
   }
 
   const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${token}`);
+  // Use custom header so Google Cloud Run / AI Studio edge proxy does not intercept Authorization: Bearer
+  headers.set('X-Google-Drive-Token', token);
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -46,10 +47,10 @@ async function driveApiRequest<T>(path: string, init: RequestInit = {}): Promise
     );
   }
 
-  const data = (await res.json().catch(() => ({}))) as {
-    error?: string;
-    code?: string;
-  };
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? ((await res.json().catch(() => ({}))) as { error?: string; code?: string })
+    : {};
 
   if (res.status === 401 || data.code === 'TOKEN_EXPIRED' || data.code === 'TOKEN_INVALID') {
     markGoogleDriveTokenExpired();
@@ -64,7 +65,7 @@ async function driveApiRequest<T>(path: string, init: RequestInit = {}): Promise
     throw new DriveApiError(
       res.status,
       data.code || 'DRIVE_API_ERROR',
-      data.error || 'Não foi possível concluir a operação no Google Drive.'
+      data.error || `Erro HTTP ${res.status} ao comunicar com o servidor do Google Drive.`
     );
   }
 
@@ -75,13 +76,14 @@ export async function fetchDriveAccountInfo(): Promise<DriveAccountInfo> {
   return driveApiRequest<DriveAccountInfo>('/account');
 }
 
-export async function searchDriveRootCandidates(queryText = 'fotos 2026'): Promise<DriveFolderCandidate[]> {
+export async function searchDriveRootCandidates(queryText = ''): Promise<DriveFolderCandidate[]> {
   const params = new URLSearchParams();
   if (queryText.trim()) {
     params.set('q', queryText.trim());
   }
+  const qs = params.toString();
   const res = await driveApiRequest<{ folders: DriveFolderCandidate[] }>(
-    `/root-candidates?${params.toString()}`
+    `/root-candidates${qs ? `?${qs}` : ''}`
   );
   return res.folders || [];
 }

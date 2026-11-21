@@ -98,8 +98,10 @@ function getDriveAuth(): Auth {
         wasPreviouslyConnected = false;
         notifyListeners();
       } else if (!cachedAccessToken && !isSigningIn) {
-        cachedUserEmail = user.email;
-        cachedUserName = user.displayName;
+        cachedUserEmail =
+          user.email || user.providerData?.find((p) => Boolean(p?.email))?.email || null;
+        cachedUserName =
+          user.displayName || user.providerData?.find((p) => Boolean(p?.displayName))?.displayName || null;
         // User has a remembered Google account on this browser, but in-memory OAuth token is absent/expired
         wasPreviouslyConnected = true;
         notifyListeners();
@@ -214,8 +216,14 @@ export async function connectGoogleDriveAccount(
     const expiresAt = Date.now() + ACCESS_TOKEN_TTL_MS;
     cachedAccessToken = credential.accessToken;
     cachedTokenExpiresAt = expiresAt;
-    cachedUserEmail = result.user.email || null;
-    cachedUserName = result.user.displayName || null;
+    cachedUserEmail =
+      result.user.email ||
+      result.user.providerData?.find((p) => Boolean(p?.email))?.email ||
+      null;
+    cachedUserName =
+      result.user.displayName ||
+      result.user.providerData?.find((p) => Boolean(p?.displayName))?.displayName ||
+      null;
     wasPreviouslyConnected = true;
     scheduleExpiryCheck(expiresAt);
     notifyListeners();

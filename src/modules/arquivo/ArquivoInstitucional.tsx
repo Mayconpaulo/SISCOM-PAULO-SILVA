@@ -112,7 +112,7 @@ export function ArquivoInstitucional() {
     DEFAULT_INSTITUTIONAL_DRIVE_EMAIL
   );
   const [isSelectingRoot, setIsSelectingRoot] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('fotos 2026');
+  const [searchQuery, setSearchQuery] = useState('');
   const [candidates, setCandidates] = useState<DriveFolderCandidate[]>([]);
   const [searchingCandidates, setSearchingCandidates] = useState(false);
   const [manualFolderInput, setManualFolderInput] = useState('');
@@ -129,7 +129,7 @@ export function ArquivoInstitucional() {
   // Feedback banners
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [unauthorizedDomainUrl, setUnauthorizedDomainUrl] = useState<string | null>(null);
+  const [actionLink, setActionLink] = useState<{ label: string; url: string } | null>(null);
 
   // Subscribe to isolated Google Drive OAuth session
   useEffect(() => {
@@ -208,17 +208,24 @@ export function ArquivoInstitucional() {
     void refreshAccountAndRootVerification();
   }, [refreshAccountAndRootVerification]);
 
-  // Search for "fotos 2026" candidates automatically when Admin opens root selection while connected
+  // Search for folders in Meu Drive automatically when Admin opens root selection while connected
   const runCandidateSearch = useCallback(
     async (queryToRun: string) => {
       if (!driveSession.connected) return;
       setSearchingCandidates(true);
       setErrorMsg(null);
+      setActionLink(null);
       try {
         const list = await searchDriveRootCandidates(queryToRun);
         setCandidates(list);
       } catch (err) {
         setCandidates([]);
+        if (err instanceof DriveApiError && err.code === 'DRIVE_API_DISABLED') {
+          setActionLink({
+            label: 'Ativar Google Drive API',
+            url: 'https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=209099306810',
+          });
+        }
         setErrorMsg(
           err instanceof Error ? err.message : 'Erro ao buscar pastas no Google Drive.'
         );
@@ -263,7 +270,7 @@ export function ArquivoInstitucional() {
     setConnecting(true);
     setErrorMsg(null);
     setNotice(null);
-    setUnauthorizedDomainUrl(null);
+    setActionLink(null);
     try {
       const hint = institutionalEmailInput.trim() || DEFAULT_INSTITUTIONAL_DRIVE_EMAIL;
       const session = await connectGoogleDriveAccount(hint);
@@ -279,7 +286,10 @@ export function ArquivoInstitucional() {
       });
     } catch (err) {
       if (err instanceof DriveUnauthorizedDomainError) {
-        setUnauthorizedDomainUrl(err.consoleUrl);
+        setActionLink({
+          label: 'Abrir Domínios Autorizados',
+          url: err.consoleUrl,
+        });
       }
       setErrorMsg(
         err instanceof Error
@@ -727,19 +737,19 @@ export function ArquivoInstitucional() {
               onDismiss={() => {
                 setNotice(null);
                 setErrorMsg(null);
-                setUnauthorizedDomainUrl(null);
+                setActionLink(null);
               }}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>{errorMsg || notice}</span>
-                {unauthorizedDomainUrl && (
+                {actionLink && (
                   <a
-                    href={unauthorizedDomainUrl}
+                    href={actionLink.url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 text-[#E5C17B] underline font-medium"
                   >
-                    <span>Abrir Domínios Autorizados</span>
+                    <span>{actionLink.label}</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
@@ -849,7 +859,7 @@ export function ArquivoInstitucional() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar pasta pelo nome (ex: fotos 2026)"
+                  placeholder="Filtrar pasta pelo nome (ou deixe vazio para ver pastas de Meu Drive)"
                   className="siscom-input !pl-9 !min-h-[40px] text-xs"
                 />
               </div>
@@ -863,7 +873,7 @@ export function ArquivoInstitucional() {
                 ) : (
                   <Search className="w-3.5 h-3.5" />
                 )}
-                <span>Buscar pastas</span>
+                <span>{searchQuery.trim() ? 'Buscar pastas' : 'Listar Meu Drive'}</span>
               </button>
             </form>
 
@@ -877,8 +887,13 @@ export function ArquivoInstitucional() {
               ) : candidates.length === 0 ? (
                 <div className="rounded-lg border border-white/8 bg-[#0A110D]/60 p-5 text-center space-y-1.5">
                   <p className="text-xs text-[#E4EAE6]">
-                    Nenhuma pasta encontrada para “{searchQuery || 'todos'}” na conta{' '}
-                    <span className="font-mono text-[#E5C17B]">{activeConnectedEmail}</span>.
+                    Nenhuma pasta encontrada{searchQuery.trim() ? ` para “${searchQuery.trim()}”` : ' em Meu Drive'}
+                    {activeConnectedEmail ? (
+                      <>
+                        {' '}na conta <span className="font-mono text-[#E5C17B]">{activeConnectedEmail}</span>
+                      </>
+                    ) : null}
+                    .
                   </p>
                   <p className="text-[11px] text-[#98A89F]">
                     Verifique se você conectou a conta institucional correta ou informe o link/ID da
@@ -888,8 +903,9 @@ export function ArquivoInstitucional() {
               ) : (
                 <div className="divide-y divide-white/8 rounded-xl border border-white/10 bg-[#0A110D]/55 overflow-hidden">
                   {candidates.map((folder) => {
+                    const lowerName = folder.name.trim().toLowerCase();
                     const isExactTarget =
-                      folder.name.trim().toLowerCase() === 'fotos 2026';
+                      lowerName.includes('fotos') && lowerName.includes('2026');
                     const isCurrentRoot = rootConfig?.rootFolderId === folder.id;
                     const isBusy = savingRootId === folder.id;
                     return (
