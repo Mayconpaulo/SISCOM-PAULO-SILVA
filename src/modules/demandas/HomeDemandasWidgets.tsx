@@ -34,7 +34,13 @@ function readInitialMode(): WidgetLayoutMode {
   return 'completo';
 }
 
-export const HomeDemandasWidgets: React.FC = () => {
+interface HomeDemandasWidgetsProps {
+  className?: string;
+}
+
+export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
+  className = 'max-w-[368px] md:max-w-[548px]',
+}) => {
   const {
     demandas,
     pendingDemandas,
@@ -65,7 +71,7 @@ export const HomeDemandasWidgets: React.FC = () => {
   };
 
   const nextCritical = pendingDemandas[0] || null;
-  const visibleItems = pendingDemandas.slice(0, 4);
+  const visibleItems = pendingDemandas.slice(0, 3);
   const extraPending = Math.max(0, pendingDemandas.length - visibleItems.length);
 
   const completionRatio = useMemo(() => {
@@ -139,11 +145,11 @@ export const HomeDemandasWidgets: React.FC = () => {
       aria-label="Widgets de demandas"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, delay: 0.09, ease: SISCOM_EASE }}
-      className="w-full max-w-[368px] md:max-w-[548px] space-y-2.5"
+      transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
+      className={`w-full metal-surface rounded-[14px] border border-[#C29B56]/22 px-4 py-3.5 flex flex-col justify-between gap-2.5 ${className}`}
     >
-      {/* Primary Interactive Demandas Widget */}
-      <div className="metal-surface rounded-[12px] border border-[#C29B56]/20 px-4 py-3.5">
+      <div>
+        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/[0.07]">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
             <h2 className="text-xs sm:text-[13px] font-semibold text-[#E8EEEB] tracking-wide whitespace-nowrap">
@@ -151,10 +157,10 @@ export const HomeDemandasWidgets: React.FC = () => {
             </h2>
             {!loading && summaryParts.length > 0 && (
               <span className="text-xs tabular-nums flex items-center gap-1.5 flex-wrap">
-                {summaryParts.map((part, idx) => (
+                {summaryParts.map((part) => (
                   <React.Fragment key={part.text}>
                     <span aria-hidden="true" className="text-[#56665E]">
-                      {idx === 0 ? '·' : '·'}
+                      ·
                     </span>
                     <span className={part.toneClass}>{part.text}</span>
                   </React.Fragment>
@@ -184,9 +190,9 @@ export const HomeDemandasWidgets: React.FC = () => {
           </div>
         </div>
 
-        {/* Widget Mode Selector + Notification Opt-in Strip */}
-        <div className="flex items-center justify-between gap-2 pt-2.5 pb-2 text-[11px]">
-          <div className="inline-flex items-center rounded-[7px] bg-[#0B100E] border border-white/[0.07] p-0.5">
+        {/* Mode Switcher + Notification Toggle */}
+        <div className="flex items-center justify-between gap-2 pt-2.5 pb-1.5 text-[11px]">
+          <div className="inline-flex items-center rounded-[7px] bg-[#090D0B] border border-white/[0.07] p-0.5">
             {(
               [
                 { id: 'completo', label: 'Completo' },
@@ -198,9 +204,9 @@ export const HomeDemandasWidgets: React.FC = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => handleModeChange(tab.id)}
-                className={`px-2 py-1 rounded-[5px] text-[11px] font-medium transition-colors cursor-pointer ${
+                className={`px-2 py-0.5 rounded-[5px] text-[11px] font-medium transition-colors cursor-pointer ${
                   mode === tab.id
-                    ? 'bg-[#1D2B24] text-[#F4E6C4]'
+                    ? 'bg-[#1B2922] text-[#F4E6C4]'
                     : 'text-[#8FA197] hover:text-[#D5DFD9]'
                 }`}
               >
@@ -213,7 +219,7 @@ export const HomeDemandasWidgets: React.FC = () => {
             <button
               type="button"
               onClick={() => void enableBrowserNotifications()}
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#E5C17B] hover:text-[#F4E6C4] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#E5C17B] hover:text-[#F4E6C4] transition-colors cursor-pointer"
             >
               <Bell className="w-3.5 h-3.5" />
               <span>Ativar avisos</span>
@@ -231,9 +237,9 @@ export const HomeDemandasWidgets: React.FC = () => {
           )}
         </div>
 
-        {/* Checklist Content (shown in 'completo' and 'lista') */}
+        {/* Checklist Content */}
         {mode !== 'foco' && (
-          <div className="pt-1">
+          <div className="pt-0.5">
             {loading ? (
               <div className="space-y-2 py-1" aria-busy="true">
                 <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
@@ -242,11 +248,9 @@ export const HomeDemandasWidgets: React.FC = () => {
             ) : error ? (
               <p className="text-xs text-[#98A89F] py-1">{error}</p>
             ) : visibleItems.length === 0 ? (
-              <div className="py-2 flex items-center justify-between gap-3">
-                <p className="text-xs sm:text-[13px] text-[#98A89F]">
-                  Nenhuma demanda pendente. Use o botão circular no canto para anotar rápido.
-                </p>
-              </div>
+              <p className="text-xs sm:text-[13px] text-[#98A89F] py-1">
+                Nenhuma demanda pendente. Use o botão circular no canto para anotar rápido.
+              </p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
                 {visibleItems.map((item) => {
@@ -261,15 +265,15 @@ export const HomeDemandasWidgets: React.FC = () => {
                   return (
                     <li
                       key={item.id}
-                      className="py-2 first:pt-1 last:pb-0.5 flex items-center gap-2.5"
+                      className="py-1.5 first:pt-0.5 last:pb-0.5 flex items-center gap-2.5"
                     >
                       <button
                         type="button"
                         onClick={() => void toggleComplete(item)}
                         aria-label={`Concluir demanda ${item.title}`}
-                        className="w-5 h-5 rounded-full border border-[#C29B56]/45 hover:border-[#83B499] hover:bg-[#2D5A43]/35 flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+                        className="w-4.5 h-4.5 rounded-full border border-[#C29B56]/45 hover:border-[#83B499] hover:bg-[#2D5A43]/35 flex items-center justify-center shrink-0 transition-colors cursor-pointer"
                       >
-                        <Check className="w-3 h-3 text-transparent hover:text-[#83B499]" />
+                        <Check className="w-2.5 h-2.5 text-transparent hover:text-[#83B499]" />
                       </button>
 
                       <button
@@ -280,17 +284,13 @@ export const HomeDemandasWidgets: React.FC = () => {
                         }}
                         className="min-w-0 flex-1 text-left group cursor-pointer"
                       >
-                        <p className="text-sm font-medium text-[#E9EFEA] group-hover:text-[#F4E6C4] truncate transition-colors">
+                        <p className="text-xs sm:text-[13px] font-medium text-[#E9EFEA] group-hover:text-[#F4E6C4] truncate transition-colors">
                           {item.title}
-                        </p>
-                        <p className="text-[11px] text-[#8FA197] truncate tabular-nums">
-                          {item.priority === 'alta' ? 'Alta · ' : ''}
-                          Aviso {item.remindBeforeDays === 0 ? 'no dia' : `${item.remindBeforeDays}d antes`}
                         </p>
                       </button>
 
                       <span
-                        className={`text-xs font-mono tabular-nums whitespace-nowrap shrink-0 ${countdownTone}`}
+                        className={`text-[11px] font-mono tabular-nums whitespace-nowrap shrink-0 ${countdownTone}`}
                       >
                         {formatDemandaCountdown(item)}
                       </span>
@@ -304,7 +304,7 @@ export const HomeDemandasWidgets: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPanelOpen(true)}
-                className="w-full text-left text-xs text-[#DFBC75] hover:text-[#F4E6C4] tabular-nums pt-2 mt-1.5 border-t border-white/[0.06] cursor-pointer"
+                className="w-full text-left text-[11px] text-[#DFBC75] hover:text-[#F4E6C4] tabular-nums pt-1.5 mt-1 border-t border-white/[0.06] cursor-pointer"
               >
                 +{extraPending}{' '}
                 {extraPending === 1 ? 'demanda pendente' : 'demandas pendentes'}
@@ -314,14 +314,14 @@ export const HomeDemandasWidgets: React.FC = () => {
         )}
       </div>
 
-      {/* Mini-Widgets Strip: Next Deadline Countdown + Progress Widget (shown in 'completo' and 'foco') */}
+      {/* Compact Integrated Mini-Widgets Footer Strip (Nearest Deadline + Progress) */}
       {mode !== 'lista' && !loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {/* Mini-Widget 1: Nearest Deadline Countdown */}
-          <div className="metal-surface rounded-[12px] border border-[#C29B56]/18 px-3.5 py-3 flex flex-col justify-between gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/[0.07]">
+          {/* Mini-Widget 1: Nearest Deadline */}
+          <div className="rounded-[9px] bg-[#0A0F0D]/90 border border-white/[0.06] px-3 py-2 flex flex-col justify-between gap-1.5">
             <div className="flex items-center justify-between gap-2 text-[11px] text-[#8FA197]">
-              <span className="inline-flex items-center gap-1.5 font-medium text-[#C6D4CC]">
-                <Clock className="w-3.5 h-3.5 text-[#DFBC75]" />
+              <span className="inline-flex items-center gap-1 font-medium text-[#C6D4CC]">
+                <Clock className="w-3 h-3 text-[#DFBC75]" />
                 Prazo mais próximo
               </span>
               {focusHeadline && (
@@ -332,53 +332,44 @@ export const HomeDemandasWidgets: React.FC = () => {
             </div>
 
             {nextCritical && focusHeadline ? (
-              <>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#F4E6C4] truncate">
-                    {nextCritical.title}
-                  </p>
-                  <p className="text-[11px] text-[#8FA197] tabular-nums mt-0.5">
-                    {focusHeadline.sub}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1 border-t border-white/[0.06]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-[#F4E6C4] truncate flex-1">
+                  {nextCritical.title}
+                </p>
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => void toggleComplete(nextCritical)}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer"
+                    title="Concluir demanda"
+                    className="text-[11px] font-medium text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>Concluir</span>
                   </button>
-                  <span aria-hidden="true" className="text-[#4B5A52]">
-                    ·
-                  </span>
                   <button
                     type="button"
                     onClick={() => void postponeOneDay(nextCritical)}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#C6D4CC] hover:text-[#F4E6C4] cursor-pointer"
+                    title="Adiar 1 dia"
+                    className="text-[11px] font-medium text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer"
                   >
-                    <CalendarPlus className="w-3.5 h-3.5 text-[#DFBC75]" />
-                    <span>+1 dia</span>
+                    <CalendarPlus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              </>
+              </div>
             ) : (
-              <p className="text-xs text-[#8FA197]">Tudo em dia por enquanto.</p>
+              <p className="text-[11px] text-[#8FA197]">Tudo em dia por enquanto.</p>
             )}
           </div>
 
-          {/* Mini-Widget 2: Completion Progress */}
-          <div className="metal-surface rounded-[12px] border border-[#C29B56]/18 px-3.5 py-3 flex flex-col justify-between gap-2.5">
+          {/* Mini-Widget 2: Progress */}
+          <div className="rounded-[9px] bg-[#0A0F0D]/90 border border-white/[0.06] px-3 py-2 flex flex-col justify-between gap-1.5">
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[11px] font-medium text-[#C6D4CC]">Andamento</span>
-              <span className="text-sm font-mono font-semibold tabular-nums text-[#F4E6C4]">
+              <span className="text-xs font-mono font-semibold tabular-nums text-[#F4E6C4]">
                 {completionRatio}%
               </span>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="h-1.5 w-full rounded-full bg-white/[0.07] overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[#2D5A43] to-[#C29B56] transition-all duration-300"
@@ -386,7 +377,7 @@ export const HomeDemandasWidgets: React.FC = () => {
                 />
               </div>
               <p className="text-[11px] text-[#8FA197] tabular-nums">
-                {completedDemandas.length} de {demandas.length}{' '}
+                {completedDemandas.length}/{demandas.length}{' '}
                 {demandas.length === 1 ? 'concluída' : 'concluídas'} · {pendingDemandas.length}{' '}
                 {pendingDemandas.length === 1 ? 'aberta' : 'abertas'}
               </p>

@@ -141,6 +141,8 @@ function AgendaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
 export interface FeatureModuleDefinition {
   id: ModuleKey;
   title: string;
+  description: string;
+  keywords: readonly string[];
   renderIcon: (className: string) => React.ReactNode;
   Component: React.ComponentType;
 }
@@ -149,42 +151,56 @@ export const FEATURE_MODULES: readonly FeatureModuleDefinition[] = [
   {
     id: 'prismas',
     title: 'Prismas',
+    description: 'Gere e gerencie prismas',
+    keywords: ['prisma', 'mesa', 'autoridade', 'nome', 'placa', 'identificacao'],
     renderIcon: (className) => <PrismaSymbol className={className} />,
     Component: PrismaGenerator,
   },
   {
     id: 'crachas',
     title: 'Crachás',
+    description: 'Cadastre e imprima crachás',
+    keywords: ['cracha', 'credencial', 'visitante', 'acesso', 'evento', 'impressao'],
     renderIcon: (className) => <CrachaSymbol className={className} />,
     Component: CrachaGenerator,
   },
   {
+    id: 'cartoes',
+    title: 'Cartões',
+    description: 'Produza cartões diversos',
+    keywords: ['cartao', 'convite', 'aniversario', 'homenagem', 'comemorativo'],
+    renderIcon: (className) => <CartoesSymbol className={className} />,
+    Component: CartoesGenerator,
+  },
+  {
     id: 'alteracao',
     title: 'Alterações',
+    description: 'Edite e formate alterações',
+    keywords: ['alteracao', 'alteracoes', 'bi', 'boletim', 'ficha', 'word', 'pdf'],
     renderIcon: (className) => <AlteracaoSymbol className={className} />,
     Component: AlteracaoGenerator,
   },
   {
     id: 'documentos',
     title: 'Documentos',
+    description: 'Acesse documentos da seção',
+    keywords: ['documento', 'oficio', 'modelo', 'arquivo', 'secao'],
     renderIcon: (className) => <DocumentosSymbol className={className} />,
     Component: DocumentosVault,
   },
   {
-    id: 'cartoes',
-    title: 'Cartões',
-    renderIcon: (className) => <CartoesSymbol className={className} />,
-    Component: CartoesGenerator,
-  },
-  {
     id: 'relatorio',
     title: 'Relatório',
+    description: 'Gere relatórios e registros',
+    keywords: ['relatorio', 'relatorios', 'resumo', 'atividade', 'estatistica'],
     renderIcon: (className) => <RelatorioSymbol className={className} />,
     Component: RelatorioGenerator,
   },
   {
     id: 'agenda',
     title: 'Agenda',
+    description: 'Consulte e gerencie compromissos',
+    keywords: ['agenda', 'calendario', 'evento', 'horario', 'google', 'reuniao', 'triagem'],
     renderIcon: (className) => <AgendaSymbol className={className} />,
     Component: AgendaComsoc,
   },

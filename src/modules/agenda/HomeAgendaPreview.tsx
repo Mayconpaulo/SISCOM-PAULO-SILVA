@@ -13,6 +13,7 @@ import {
 
 interface HomeAgendaPreviewProps {
   onOpenAgenda: () => void;
+  className?: string;
 }
 
 interface ParsedPreviewEvent {
@@ -46,7 +47,10 @@ function formatRelativeUpcomingDate(date: Date, now: Date): string {
   return `${capitalizedWeekday}, ${formatShortDayMonth(date)}`;
 }
 
-export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({ onOpenAgenda }) => {
+export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
+  onOpenAgenda,
+  className = 'max-w-[368px] md:max-w-[548px]',
+}) => {
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -156,7 +160,7 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({ onOpenAgen
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.06, ease: SISCOM_EASE }}
-      className="w-full max-w-[368px] md:max-w-[548px] metal-surface rounded-[12px] border border-[#C29B56]/20 px-4 py-3.5"
+      className={`w-full metal-surface rounded-[14px] border border-[#C29B56]/22 px-4 py-3.5 flex flex-col justify-between ${className}`}
     >
       <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-white/[0.07]">
         <div className="flex items-baseline gap-2 min-w-0">
