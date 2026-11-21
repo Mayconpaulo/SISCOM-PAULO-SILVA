@@ -3,7 +3,6 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
-import { createDriveRouter } from './server/driveRoutes';
 
 const PORT = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -220,7 +219,6 @@ async function startServer() {
 
   app.use(securityHeadersMiddleware);
   app.use('/api', apiRateLimitMiddleware);
-  app.use('/api/drive', createDriveRouter());
 
   app.get('/api/health', (_req, res) => {
     setNoStoreHeaders(res);

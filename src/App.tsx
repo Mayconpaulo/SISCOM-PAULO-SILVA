@@ -25,8 +25,6 @@ import { DemandasProvider } from './modules/demandas/DemandasContext';
 import { DemandasFloatingQuickAdd } from './modules/demandas/DemandasFloatingQuickAdd';
 import { DemandasNotificationToasts } from './modules/demandas/DemandasNotificationToasts';
 import { DemandasPanelModal } from './modules/demandas/DemandasPanelModal';
-import { ArquivoUploadProvider } from './modules/arquivo/ArquivoUploadContext';
-import { ArquivoBackgroundUploadBar } from './modules/arquivo/ArquivoBackgroundUploadBar';
 import {
   CREST_LAYOUT_TRANSITION,
   MODULE_EXPAND_TRANSITION,
@@ -370,7 +368,6 @@ function WorkspaceShell() {
 
   return (
     <DemandasProvider userId={account.uid}>
-    <ArquivoUploadProvider actorUid={account.uid} actorName={account.displayName}>
     <div
       className={`workspace-shell-root min-h-screen bg-[#080B09] text-[#E4EAE6] flex flex-col relative selection:bg-[#2D5A43]/55 selection:text-[#F4E6C4] ${
         activeScreen !== 'home' ? 'lg:h-screen lg:overflow-hidden' : ''
@@ -472,10 +469,6 @@ function WorkspaceShell() {
 
       {!shieldLocked && (
         <>
-          <ArquivoBackgroundUploadBar
-            activeScreen={activeScreen}
-            onOpenArquivo={() => navigateToScreen('arquivo')}
-          />
           <DemandasNotificationToasts />
           <DemandasFloatingQuickAdd
             activeScreen={activeScreen}
@@ -497,7 +490,6 @@ function WorkspaceShell() {
         />
       )}
     </div>
-    </ArquivoUploadProvider>
     </DemandasProvider>
   );
 }

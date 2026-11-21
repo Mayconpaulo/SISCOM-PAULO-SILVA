@@ -11,9 +11,24 @@ let swRegistrationRef: ServiceWorkerRegistration | null = null;
 let versionSyncStarted = false;
 let eventSourceRef: EventSource | null = null;
 let broadcastChannelRef: BroadcastChannel | null = null;
+let deferMandatoryUpdates = false;
+let pendingDeferredVersion: string | null = null;
 
 export function setActiveSwRegistration(reg: ServiceWorkerRegistration | null): void {
   swRegistrationRef = reg;
+}
+
+/**
+ * Temporarily defers forced PWA version reloads (e.g. while large Google Drive uploads are running)
+ * and automatically resumes the pending update as soon as transfers finish.
+ */
+export function setDeferMandatoryUpdates(busy: boolean): void {
+  deferMandatoryUpdates = busy;
+  if (!busy && pendingDeferredVersion && !reloadInProgress) {
+    const versionToApply = pendingDeferredVersion;
+    pendingDeferredVersion = null;
+    void forceDeviceUpdate(versionToApply);
+  }
 }
 
 /**
@@ -251,6 +266,10 @@ function clearUpdateAttemptTracker(): void {
 
 export async function forceDeviceUpdate(targetVersion: string, fromBroadcast = false): Promise<void> {
   if (typeof window === 'undefined') return;
+  if (deferMandatoryUpdates) {
+    pendingDeferredVersion = targetVersion;
+    return;
+  }
   if (!recordUpdateAttempt(targetVersion)) return;
 
   reloadInProgress = true;

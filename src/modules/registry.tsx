@@ -4,7 +4,10 @@ import type { ModuleKey } from '../core/auth/authService';
 import { AdminPanel } from './admin/AdminPanel';
 import { AgendaComsoc } from './agenda/AgendaComsoc';
 import { AlteracaoGenerator } from './alteracao/AlteracaoGenerator';
-import { ArquivoInstitucional } from './arquivo/ArquivoInstitucional';
+import {
+  ARQUIVO_DRIVE_FOLDER_URL,
+  ArquivoInstitucional,
+} from './arquivo/ArquivoInstitucional';
 import { CartoesGenerator } from './cartoes/CartoesGenerator';
 import { CrachaGenerator } from './crachas/CrachaGenerator';
 import { DocumentosVault } from './documentos/DocumentosVault';
@@ -171,6 +174,7 @@ export interface FeatureModuleDefinition {
   title: string;
   description: string;
   keywords: readonly string[];
+  externalUrl?: string;
   renderIcon: (className: string) => React.ReactNode;
   Component: React.ComponentType;
 }
@@ -235,8 +239,9 @@ export const FEATURE_MODULES: readonly FeatureModuleDefinition[] = [
   {
     id: 'arquivo',
     title: 'Arquivo',
-    description: 'Gerencie pastas e envie arquivos ao Drive',
-    keywords: ['arquivo', 'institucional', 'drive', 'google', 'fotos', '2026', 'pasta', 'upload', 'envio', 'midia'],
+    description: 'Abrir pasta FOTOS - 2026 no Google Drive',
+    keywords: ['arquivo', 'institucional', 'drive', 'google', 'fotos', '2026', 'pasta'],
+    externalUrl: ARQUIVO_DRIVE_FOLDER_URL,
     renderIcon: (className) => <ArquivoSymbol className={className} />,
     Component: ArquivoInstitucional,
   },

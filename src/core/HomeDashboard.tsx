@@ -102,7 +102,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     e.preventDefault();
     if (!normalizedQuery) return;
     if (filteredCards.length > 0) {
-      onNavigate(filteredCards[0].id);
+      const firstCard = filteredCards[0];
+      if (firstCard.externalUrl) {
+        const link = document.createElement('a');
+        link.href = firstCard.externalUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.click();
+        return;
+      }
+      onNavigate(firstCard.id);
       return;
     }
     if (matchesDemandasQuery) {
@@ -374,55 +383,78 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-4 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4">
-                {filteredCards.map((card, idx) => (
-                  <motion.button
-                    key={card.id}
-                    type="button"
-                    onClick={() => onNavigate(card.id)}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    whileHover={
-                      prefersReducedMotion
-                        ? undefined
-                        : { scale: 1.024, transition: { duration: 0.18, ease: SISCOM_EASE } }
-                    }
-                    whileTap={
-                      prefersReducedMotion
-                        ? undefined
-                        : { scale: 0.968, transition: { duration: 0.1 } }
-                    }
-                    transition={{
+                {filteredCards.map((card, idx) => {
+                  const cardMotionProps = {
+                    initial: { opacity: 0, y: 6 },
+                    animate: { opacity: 1, y: 0 },
+                    whileHover: prefersReducedMotion
+                      ? undefined
+                      : { scale: 1.024, transition: { duration: 0.18, ease: SISCOM_EASE } },
+                    whileTap: prefersReducedMotion
+                      ? undefined
+                      : { scale: 0.968, transition: { duration: 0.1 } },
+                    transition: {
                       duration: 0.2,
                       delay: 0.02 + idx * 0.022,
                       ease: SISCOM_EASE,
-                    }}
-                    className="siscom-home-card group rounded-[12px] md:rounded-[14px] px-1.5 py-3 md:px-6 md:py-6 flex flex-col md:flex-row items-center justify-center md:justify-start gap-1.5 md:gap-4 text-center md:text-left cursor-pointer min-h-[78px] md:min-h-[112px] xl:min-h-[122px] will-change-transform"
-                  >
-                    <motion.div
-                      layoutId={`module-surface-${card.id}`}
-                      transition={MODULE_EXPAND_TRANSITION}
-                      className="absolute inset-0 rounded-[12px] md:rounded-[14px] pointer-events-none"
-                    />
+                    },
+                    className:
+                      'siscom-home-card group rounded-[12px] md:rounded-[14px] px-1.5 py-3 md:px-6 md:py-6 flex flex-col md:flex-row items-center justify-center md:justify-start gap-1.5 md:gap-4 text-center md:text-left cursor-pointer min-h-[78px] md:min-h-[112px] xl:min-h-[122px] will-change-transform no-underline',
+                  };
 
-                    <motion.div
-                      layoutId={`module-icon-${card.id}`}
-                      transition={MODULE_LOCKUP_TRANSITION}
-                      className="relative z-10 w-8 h-8 md:w-13 md:h-13 shrink-0 flex items-center justify-center text-[#C9A961] md:text-[#E0BE74] group-hover:text-[#F4DBA0] transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]"
-                    >
-                      {card.renderIcon('w-7 h-7 md:w-12 md:h-12')}
-                    </motion.div>
+                  const cardInner = (
+                    <>
+                      <motion.div
+                        layoutId={`module-surface-${card.id}`}
+                        transition={MODULE_EXPAND_TRANSITION}
+                        className="absolute inset-0 rounded-[12px] md:rounded-[14px] pointer-events-none"
+                      />
 
-                    <div className="relative z-10 w-full md:w-auto min-w-0 md:flex-1">
-                      <motion.span
-                        layoutId={`module-title-${card.id}`}
+                      <motion.div
+                        layoutId={`module-icon-${card.id}`}
                         transition={MODULE_LOCKUP_TRANSITION}
-                        className="block font-display text-[11px] leading-[1.15] md:text-[20px] md:leading-normal font-medium md:font-semibold tracking-tight text-[#E8E4D8] md:text-[#F5F8F6] group-hover:text-[#F7E9C8] transition-colors duration-200 truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
+                        className="relative z-10 w-8 h-8 md:w-13 md:h-13 shrink-0 flex items-center justify-center text-[#C9A961] md:text-[#E0BE74] group-hover:text-[#F4DBA0] transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]"
                       >
-                        {card.title}
-                      </motion.span>
-                    </div>
-                  </motion.button>
-                ))}
+                        {card.renderIcon('w-7 h-7 md:w-12 md:h-12')}
+                      </motion.div>
+
+                      <div className="relative z-10 w-full md:w-auto min-w-0 md:flex-1">
+                        <motion.span
+                          layoutId={`module-title-${card.id}`}
+                          transition={MODULE_LOCKUP_TRANSITION}
+                          className="block font-display text-[11px] leading-[1.15] md:text-[20px] md:leading-normal font-medium md:font-semibold tracking-tight text-[#E8E4D8] md:text-[#F5F8F6] group-hover:text-[#F7E9C8] transition-colors duration-200 truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
+                        >
+                          {card.title}
+                        </motion.span>
+                      </div>
+                    </>
+                  );
+
+                  if (card.externalUrl) {
+                    return (
+                      <motion.a
+                        key={card.id}
+                        href={card.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        {...cardMotionProps}
+                      >
+                        {cardInner}
+                      </motion.a>
+                    );
+                  }
+
+                  return (
+                    <motion.button
+                      key={card.id}
+                      type="button"
+                      onClick={() => onNavigate(card.id)}
+                      {...cardMotionProps}
+                    >
+                      {cardInner}
+                    </motion.button>
+                  );
+                })}
 
                 {/* Direct Demandas shortcut when searched */}
                 {matchesDemandasQuery && (

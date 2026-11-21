@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!account || !account.active) return false;
     const field = MODULE_PERM_FIELD[moduleKey];
     if (account[field] === undefined) {
-      return moduleKey === 'relatorio' || account.role === 'admin';
+      return moduleKey === 'relatorio' || moduleKey === 'arquivo' || account.role === 'admin';
     }
     return Boolean(account[field]);
   };

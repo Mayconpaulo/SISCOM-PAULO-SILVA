@@ -38,7 +38,6 @@ import {
 } from './recoveryCrypto';
 import { purgeAllSensitiveLocalData } from '../privacy/privacyVault';
 import { disconnectGoogleCalendarSession } from '../../modules/agenda/googleCalendarService';
-import { disconnectGoogleDriveSession } from '../../modules/arquivo/googleDriveAuthService';
 
 export type ModuleKey =
   | 'prismas'
@@ -242,7 +241,6 @@ export async function signInWithGoogleAdmin(): Promise<User> {
 export async function signOutCurrentUser(): Promise<void> {
   purgeAllSensitiveLocalData();
   await disconnectGoogleCalendarSession();
-  await disconnectGoogleDriveSession();
   await signOut(auth);
 }
 
