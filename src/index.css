@@ -139,20 +139,20 @@
 }
 
 .siscom-home-frame {
-  background: linear-gradient(180deg, rgba(13, 19, 16, 0.84) 0%, rgba(9, 13, 11, 0.9) 100%);
-  border: 1px solid rgba(194, 155, 86, 0.22);
+  background: linear-gradient(180deg, rgba(11, 16, 13, 0.72) 0%, rgba(8, 12, 10, 0.8) 100%);
+  border: 1px solid rgba(194, 155, 86, 0.24);
   box-shadow:
-    inset 0 1px 0 rgba(244, 230, 196, 0.06),
-    0 20px 48px -24px rgba(0, 0, 0, 0.88);
+    inset 0 1px 0 rgba(244, 230, 196, 0.07),
+    0 20px 48px -24px rgba(0, 0, 0, 0.85);
 }
 
 .siscom-home-card {
-  background: linear-gradient(160deg, rgba(20, 30, 24, 0.88) 0%, rgba(12, 18, 15, 0.94) 65%, rgba(10, 15, 12, 0.97) 100%);
-  border: 1px solid rgba(194, 155, 86, 0.18);
+  background: linear-gradient(160deg, rgba(18, 27, 22, 0.82) 0%, rgba(11, 16, 13, 0.88) 65%, rgba(9, 13, 11, 0.92) 100%);
+  border: 1px solid rgba(194, 155, 86, 0.2);
   box-shadow:
-    inset 0 1px 0 rgba(212, 176, 106, 0.1),
+    inset 0 1px 0 rgba(212, 176, 106, 0.11),
     inset 0 -1px 0 rgba(0, 0, 0, 0.42),
-    0 12px 24px -14px rgba(0, 0, 0, 0.76);
+    0 12px 24px -14px rgba(0, 0, 0, 0.72);
   transition:
     transform var(--dur-micro) var(--ease-siscom),
     border-color var(--dur-micro) var(--ease-siscom),
@@ -162,12 +162,12 @@
 
 @media (hover: hover) {
   .siscom-home-card:hover {
-    background: linear-gradient(160deg, rgba(26, 41, 32, 0.94) 0%, rgba(15, 23, 19, 0.96) 65%, rgba(12, 18, 15, 0.98) 100%);
-    border-color: rgba(214, 178, 108, 0.56);
+    background: linear-gradient(160deg, rgba(25, 39, 31, 0.9) 0%, rgba(14, 22, 18, 0.93) 65%, rgba(11, 17, 14, 0.96) 100%);
+    border-color: rgba(214, 178, 108, 0.58);
     transform: translateY(-1px);
     box-shadow:
       inset 0 1px 0 rgba(244, 230, 196, 0.22),
-      0 18px 34px -16px rgba(18, 14, 6, 0.72);
+      0 18px 34px -16px rgba(18, 14, 6, 0.7);
   }
 }
 
@@ -179,11 +179,11 @@
 .siscom-motto-card {
   background:
     radial-gradient(280px 160px at 18% 50%, rgba(45, 90, 67, 0.24) 0%, rgba(12, 18, 15, 0) 75%),
-    linear-gradient(135deg, rgba(18, 28, 22, 0.92) 0%, rgba(11, 16, 13, 0.96) 100%);
-  border: 1px solid rgba(194, 155, 86, 0.22);
+    linear-gradient(135deg, rgba(16, 25, 20, 0.84) 0%, rgba(10, 15, 12, 0.9) 100%);
+  border: 1px solid rgba(194, 155, 86, 0.24);
   box-shadow:
     inset 0 1px 0 rgba(244, 230, 196, 0.1),
-    0 12px 24px -14px rgba(0, 0, 0, 0.75);
+    0 12px 24px -14px rgba(0, 0, 0, 0.72);
 }
 
 /* ── Standardized Interactive Controls ──────────────────────────────────── */

@@ -9,7 +9,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import heroBackdropImg from '../assets/images/siscom_hero_backdrop_1795289686034.jpg';
+import heroBackdropImg from '../assets/images/siscom_operational_montage_1795291140833.jpg';
 import type { UserAccount } from './auth/authService';
 import { signOutCurrentUser } from './auth/authService';
 import { PWAInstallButton } from './pwa/PWAComponents';
@@ -106,29 +106,28 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   return (
     <div className="relative z-10 flex-1 flex flex-col min-h-screen">
-      {/* Darker, minimalist institutional atmospheric backdrop */}
+      {/* Operational military montage backdrop with balanced dark minimalist veil */}
       <div
         aria-hidden="true"
-        className="no-print pointer-events-none absolute inset-x-0 top-0 h-[360px] sm:h-[430px] overflow-hidden z-0"
+        className="no-print pointer-events-none fixed inset-0 overflow-hidden z-0"
       >
         <img
           src={heroBackdropImg}
           alt=""
-          className="w-full h-full object-cover object-center opacity-[0.62] scale-[1.01] select-none"
+          className="w-full h-full object-cover object-center opacity-[0.42] sm:opacity-[0.46] select-none"
         />
-        {/* Deep dark veil to keep it darker & more minimalist than the mockup */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(180deg, rgba(6, 9, 8, 0.42) 0%, rgba(7, 10, 9, 0.66) 52%, rgba(8, 11, 9, 0.96) 86%, #080B09 100%)',
+              'linear-gradient(180deg, rgba(6, 9, 8, 0.44) 0%, rgba(7, 10, 9, 0.56) 42%, rgba(8, 11, 9, 0.78) 78%, rgba(8, 11, 9, 0.9) 100%)',
           }}
         />
         <div
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(65% 85% at 50% 25%, rgba(8, 11, 9, 0.16) 0%, rgba(6, 9, 8, 0.62) 100%)',
+              'radial-gradient(85% 75% at 50% 30%, rgba(8, 11, 9, 0.08) 0%, rgba(6, 9, 8, 0.56) 100%)',
           }}
         />
       </div>
@@ -259,13 +258,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             transition={{ duration: 0.24, delay: 0.04, ease: SISCOM_EASE }}
             className="min-w-0"
           >
-            <h2 className="font-display text-2xl sm:text-[32px] font-bold tracking-tight leading-tight text-[#F4F7F5]">
+            <h2 className="font-display text-2xl sm:text-[32px] font-bold tracking-tight leading-tight text-[#F4F7F5] drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
               {greeting},{' '}
               <span className="text-[#E2BE74]">{account.displayName}!</span>
             </h2>
-            <p className="text-xs sm:text-sm text-[#A5B4AB] mt-1">
-              Selecione uma função para começar.
-            </p>
           </motion.div>
 
           <motion.form
@@ -363,7 +359,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       delay: 0.02 + idx * 0.022,
                       ease: SISCOM_EASE,
                     }}
-                    className="relative siscom-home-card group rounded-[12px] px-4 py-4.5 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[96px] sm:min-h-[106px]"
+                    className="relative siscom-home-card group rounded-[12px] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[84px] sm:min-h-[92px]"
                   >
                     <motion.div
                       layoutId={`module-surface-${card.id}`}
@@ -383,13 +379,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       <motion.span
                         layoutId={`module-title-${card.id}`}
                         transition={MODULE_LOCKUP_TRANSITION}
-                        className="block font-display text-base sm:text-[17px] font-semibold tracking-tight text-[#F2F6F3] group-hover:text-[#F4E6C4] transition-colors duration-200 truncate"
+                        className="block font-display text-base sm:text-[18px] font-semibold tracking-tight text-[#F2F6F3] group-hover:text-[#F4E6C4] transition-colors duration-200 truncate"
                       >
                         {card.title}
                       </motion.span>
-                      <span className="block text-xs sm:text-[13px] text-[#8F9F96] group-hover:text-[#B4C4BA] transition-colors duration-200 mt-0.5 leading-snug">
-                        {card.description}
-                      </span>
                     </div>
                   </motion.button>
                 ))}
@@ -399,17 +392,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setDemandasPanelOpen(true)}
-                    className="siscom-home-card group rounded-[12px] px-4 py-4.5 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[96px] sm:min-h-[106px]"
+                    className="siscom-home-card group rounded-[12px] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[84px] sm:min-h-[92px]"
                   >
                     <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592]">
                       <ListTodo className="w-8 h-8" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <span className="block font-display text-base sm:text-[17px] font-semibold text-[#F2F6F3] group-hover:text-[#F4E6C4]">
+                      <span className="block font-display text-base sm:text-[18px] font-semibold text-[#F2F6F3] group-hover:text-[#F4E6C4]">
                         Demandas
-                      </span>
-                      <span className="block text-xs sm:text-[13px] text-[#8F9F96] mt-0.5 leading-snug">
-                        Gerencie tarefas, prazos e avisos
                       </span>
                     </div>
                   </button>
@@ -418,7 +408,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 {/* Institutional Motto Card filling remaining symmetry slots cleanly */}
                 {(trailingSlotsXl > 0 || trailingSlotsMd > 0) && (
                   <div
-                    className={`siscom-motto-card relative overflow-hidden rounded-[12px] px-5 py-4 flex items-center gap-4 min-h-[96px] sm:min-h-[106px] ${
+                    className={`siscom-motto-card relative overflow-hidden rounded-[12px] px-5 py-4 flex items-center gap-4 min-h-[84px] sm:min-h-[92px] ${
                       trailingSlotsMd === 0 ? 'sm:col-span-2' : 'sm:col-span-1'
                     } ${
                       trailingSlotsXl === 2
@@ -440,15 +430,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       src="/assets/logo_arma_comunicacoes.png"
                       alt=""
                       aria-hidden="true"
-                      className="relative z-10 w-11 h-11 sm:w-12 sm:h-12 object-contain shrink-0 opacity-95 select-none"
+                      className="relative z-10 w-10 h-10 sm:w-11 sm:h-11 object-contain shrink-0 opacity-95 select-none"
                     />
 
                     <div className="relative z-10 min-w-0">
                       <p className="font-display italic text-sm sm:text-base font-semibold text-[#F1F5F3] leading-snug">
-                        “Comunicação forte, união ainda maior.”
-                      </p>
-                      <p className="text-xs italic text-[#DFBC75] mt-1">
-                        Regimento Sampaio
+                        “A verdadeira força nasce da união.”
                       </p>
                     </div>
                   </div>
