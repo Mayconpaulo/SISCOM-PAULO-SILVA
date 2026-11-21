@@ -3,6 +3,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
+import { createDriveRouter } from './server/driveRoutes';
 
 const PORT = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -93,7 +94,7 @@ function enforceNoStoreHeaders(res: Response): void {
 }
 
 const BLOCKED_SENSITIVE_PATHS =
-  /^\/(?:\.env(?:\.[^/]*)?|\.git(?:\/.*)?|firestore\.rules|firebase-blueprint\.json|security_spec\.md|firestore\.rules\.test\.ts|package(?:-lock)?\.json|server\.ts|tsconfig\.json|eslint\.config\.[a-z]+)$/i;
+  /^\/(?:\.env(?:\.[^/]*)?|\.git(?:\/.*)?|firestore\.rules|DRAFT_firestore\.rules|firebase-blueprint\.json|security_spec\.md|firestore\.rules\.test\.ts|package(?:-lock)?\.json|server\.ts|server\/.*|tsconfig\.json|eslint\.config\.[a-z]+)$/i;
 
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -219,6 +220,7 @@ async function startServer() {
 
   app.use(securityHeadersMiddleware);
   app.use('/api', apiRateLimitMiddleware);
+  app.use('/api/drive', createDriveRouter());
 
   app.get('/api/health', (_req, res) => {
     setNoStoreHeaders(res);

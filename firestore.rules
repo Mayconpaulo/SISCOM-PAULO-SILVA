@@ -104,6 +104,23 @@ service cloud.firestore {
         );
     }
 
+    function isValidDriveId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 256 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function canAccessArquivo() {
+      return isBootstrappedAdmin()
+        || (
+          isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+          && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+            || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permArquivo == true
+          )
+        );
+    }
+
     function isValidAdminMarker(data, targetUid) {
       return data.keys().hasAll(['uid', 'createdBy', 'createdAt'])
         && data.keys().hasOnly(['uid', 'createdBy', 'createdAt'])
@@ -147,6 +164,7 @@ service cloud.firestore {
           'permCartoes',
           'permRelatorio',
           'permAgenda',
+          'permArquivo',
           'permInstagram',
           'adminUids',
           'createdBy',
@@ -171,6 +189,7 @@ service cloud.firestore {
         && data.permCartoes is bool
         && (!('permRelatorio' in data) || data.permRelatorio is bool)
         && (!('permAgenda' in data) || data.permAgenda is bool)
+        && (!('permArquivo' in data) || data.permArquivo is bool)
         && (!('permInstagram' in data) || data.permInstagram is bool)
         && data.adminUids is list
         && data.adminUids.size() >= 1
@@ -645,6 +664,101 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidDriveConfig(data, configId) {
+      return data.keys().hasAll([
+          'id',
+          'rootFolderId',
+          'rootFolderName',
+          'institutionalEmail',
+          'linkedAccountEmail',
+          'driveWebViewUrl',
+          'sectionScope',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'rootFolderId',
+          'rootFolderName',
+          'institutionalEmail',
+          'linkedAccountEmail',
+          'driveWebViewUrl',
+          'sectionScope',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ])
+        && data.id == 'root_folder'
+        && configId == 'root_folder'
+        && isValidDriveId(data.rootFolderId)
+        && data.rootFolderName is string
+        && data.rootFolderName.size() >= 1
+        && data.rootFolderName.size() <= 140
+        && data.institutionalEmail is string
+        && data.institutionalEmail.size() <= 140
+        && data.linkedAccountEmail is string
+        && data.linkedAccountEmail.size() <= 140
+        && data.driveWebViewUrl is string
+        && data.driveWebViewUrl.size() <= 400
+        && data.sectionScope == 'comsoc'
+        && isValidId(data.updatedByUid)
+        && data.updatedByName is string
+        && data.updatedByName.size() >= 1
+        && data.updatedByName.size() <= 80
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDriveAuditLog(data, logId) {
+      return data.keys().hasAll([
+          'id',
+          'action',
+          'targetId',
+          'targetName',
+          'summary',
+          'actorUid',
+          'actorName',
+          'sectionScope',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'action',
+          'targetId',
+          'targetName',
+          'summary',
+          'actorUid',
+          'actorName',
+          'sectionScope',
+          'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.id == logId
+        && data.action in [
+          'drive_connect',
+          'drive_disconnect',
+          'root_select',
+          'root_unlink',
+          'folder_create',
+          'folder_rename',
+          'folder_delete',
+          'file_upload'
+        ]
+        && data.targetId is string
+        && data.targetId.size() <= 256
+        && data.targetName is string
+        && data.targetName.size() <= 240
+        && data.summary is string
+        && data.summary.size() >= 1
+        && data.summary.size() <= 240
+        && isValidId(data.actorUid)
+        && data.actorName is string
+        && data.actorName.size() >= 1
+        && data.actorName.size() <= 80
+        && data.sectionScope == 'comsoc'
+        && data.createdAt is timestamp;
+    }
+
     match /admins/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if false;
@@ -700,6 +814,7 @@ service cloud.firestore {
               'permCartoes',
               'permRelatorio',
               'permAgenda',
+              'permArquivo',
               'updatedAt'
             ])
             || incoming().diff(existing()).affectedKeys().hasOnly([
@@ -718,6 +833,7 @@ service cloud.firestore {
               'permCartoes',
               'permRelatorio',
               'permAgenda',
+              'permArquivo',
               'updatedAt'
             ])
           ))
@@ -918,6 +1034,46 @@ service cloud.firestore {
           'updatedByName',
           'updatedAt'
         ]);
+      allow delete: if false;
+    }
+
+    match /drive_config/{configId} {
+      allow get: if canAccessArquivo() && configId == 'root_folder';
+      allow list: if false;
+      allow create: if isAdmin()
+        && configId == 'root_folder'
+        && isValidDriveConfig(incoming(), configId)
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && configId == 'root_folder'
+        && isValidDriveConfig(incoming(), configId)
+        && incoming().id == existing().id
+        && incoming().sectionScope == existing().sectionScope
+        && incoming().updatedByUid == request.auth.uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'rootFolderId',
+          'rootFolderName',
+          'institutionalEmail',
+          'linkedAccountEmail',
+          'driveWebViewUrl',
+          'updatedByUid',
+          'updatedByName',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && configId == 'root_folder';
+    }
+
+    match /drive_audit/{logId} {
+      allow get: if canAccessArquivo() && isValidId(logId);
+      allow list: if isSignedIn() && resource.data.sectionScope == 'comsoc';
+      allow create: if canAccessArquivo()
+        && isValidId(logId)
+        && isValidDriveAuditLog(incoming(), logId)
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
       allow delete: if false;
     }
 

@@ -101,6 +101,10 @@
           "type": "boolean",
           "description": "Acesso ao módulo Agenda da Comunicação Social"
         },
+        "permArquivo": {
+          "type": "boolean",
+          "description": "Acesso ao módulo Arquivo Institucional (Google Drive)"
+        },
         "adminUids": {
           "type": "array",
           "description": "Lista limitada (máx. 10) de UIDs de administradores gerenciadores"
@@ -877,6 +881,164 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "DriveIntegrationConfig": {
+      "title": "DriveIntegrationConfig",
+      "description": "Configuração institucional da pasta raiz autorizada (fotos 2026) no Google Drive da Comunicação Social (nunca armazena tokens ou mídias).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["root_folder"],
+          "description": "Identificador fixo da configuração da pasta raiz"
+        },
+        "rootFolderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "ID oficial da pasta raiz autorizada no Google Drive"
+        },
+        "rootFolderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "Nome da pasta raiz vinculada (ex: fotos 2026)"
+        },
+        "institutionalEmail": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "E-mail institucional esperado da Seção de Comunicação Social"
+        },
+        "linkedAccountEmail": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "E-mail Google verificado no momento da vinculação da pasta raiz"
+        },
+        "driveWebViewUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "URL administrativa opcional da pasta no Google Drive"
+        },
+        "sectionScope": {
+          "type": "string",
+          "enum": ["comsoc"],
+          "description": "Escopo institucional da seção"
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do administrador que atualizou a vinculação"
+        },
+        "updatedByName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição do administrador"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de atualização no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "rootFolderId",
+        "rootFolderName",
+        "institutionalEmail",
+        "linkedAccountEmail",
+        "driveWebViewUrl",
+        "sectionScope",
+        "updatedByUid",
+        "updatedByName",
+        "updatedAt"
+      ]
+    },
+    "DriveAuditLog": {
+      "title": "DriveAuditLog",
+      "description": "Registro imutável de auditoria das ações administrativas executadas no módulo Arquivo Institucional.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único do evento de auditoria"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "drive_connect",
+            "drive_disconnect",
+            "root_select",
+            "root_unlink",
+            "folder_create",
+            "folder_rename",
+            "folder_delete",
+            "file_upload"
+          ],
+          "description": "Tipo da operação executada no Arquivo Institucional"
+        },
+        "targetId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 256,
+          "description": "ID do recurso no Google Drive, quando aplicável"
+        },
+        "targetName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 240,
+          "description": "Nome da pasta ou arquivo afetado"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "Resumo legível da operação executada"
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do usuário do SISCOM que executou a operação"
+        },
+        "actorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição do usuário no SISCOM"
+        },
+        "sectionScope": {
+          "type": "string",
+          "enum": ["comsoc"],
+          "description": "Escopo institucional da seção"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de data/hora no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "targetId",
+        "targetName",
+        "summary",
+        "actorUid",
+        "actorName",
+        "sectionScope",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -919,6 +1081,14 @@
     "/agenda_config/{configId}": {
       "schema": { "$ref": "#/entities/AgendaIntegrationConfig" },
       "description": "Preferência do calendário secundário do Google Calendar da COMSOC (sem tokens)"
+    },
+    "/drive_config/{configId}": {
+      "schema": { "$ref": "#/entities/DriveIntegrationConfig" },
+      "description": "Configuração institucional da pasta raiz fotos 2026 no Google Drive (sem tokens)"
+    },
+    "/drive_audit/{logId}": {
+      "schema": { "$ref": "#/entities/DriveAuditLog" },
+      "description": "Histórico de auditoria imutável das ações no Arquivo Institucional"
     }
   }
 }

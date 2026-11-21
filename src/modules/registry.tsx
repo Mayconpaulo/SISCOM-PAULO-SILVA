@@ -4,6 +4,7 @@ import type { ModuleKey } from '../core/auth/authService';
 import { AdminPanel } from './admin/AdminPanel';
 import { AgendaComsoc } from './agenda/AgendaComsoc';
 import { AlteracaoGenerator } from './alteracao/AlteracaoGenerator';
+import { ArquivoInstitucional } from './arquivo/ArquivoInstitucional';
 import { CartoesGenerator } from './cartoes/CartoesGenerator';
 import { CrachaGenerator } from './crachas/CrachaGenerator';
 import { DocumentosVault } from './documentos/DocumentosVault';
@@ -138,6 +139,33 @@ function AgendaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   );
 }
 
+function ArquivoSymbol({ className = 'w-14 h-14' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M10 19C10 16.7909 11.7909 15 14 15H25L30 20H50C52.2091 20 54 21.7909 54 24V46C54 48.2091 52.2091 50 50 50H14C11.7909 50 10 48.2091 10 46V19Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M32 42V29M32 29L26.5 34.5M32 29L37.5 34.5"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M22 44H42"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.7"
+      />
+    </svg>
+  );
+}
+
 export interface FeatureModuleDefinition {
   id: ModuleKey;
   title: string;
@@ -203,6 +231,14 @@ export const FEATURE_MODULES: readonly FeatureModuleDefinition[] = [
     keywords: ['agenda', 'calendario', 'evento', 'horario', 'google', 'reuniao', 'triagem'],
     renderIcon: (className) => <AgendaSymbol className={className} />,
     Component: AgendaComsoc,
+  },
+  {
+    id: 'arquivo',
+    title: 'Arquivo',
+    description: 'Gerencie pastas e envie arquivos ao Drive',
+    keywords: ['arquivo', 'institucional', 'drive', 'google', 'fotos', '2026', 'pasta', 'upload', 'envio', 'midia'],
+    renderIcon: (className) => <ArquivoSymbol className={className} />,
+    Component: ArquivoInstitucional,
   },
 ];
 
