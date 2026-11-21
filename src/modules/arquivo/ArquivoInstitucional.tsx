@@ -473,7 +473,7 @@ export function ArquivoInstitucional() {
                   value={institutionalEmailInput}
                   onChange={(e) => setInstitutionalEmailInput(e.target.value)}
                   disabled={!isAdmin && Boolean(rootConfig?.institutionalEmail)}
-                  placeholder="comsoc1bimeces@gmail.com"
+                  placeholder="comsocsampaio2026@gmail.com"
                   className="siscom-input !min-h-[38px] text-xs font-mono"
                 />
                 <p className="text-[11px] text-[#98A89F] leading-relaxed">

@@ -26,7 +26,7 @@ const GOOGLE_DRIVE_OAUTH_CONFIG = {
 const DRIVE_APP_NAME = 'siscom-google-drive';
 
 export const GOOGLE_DRIVE_OAUTH_PROJECT_ID = GOOGLE_DRIVE_OAUTH_CONFIG.projectId;
-export const DEFAULT_INSTITUTIONAL_DRIVE_EMAIL = 'comsoc1bimeces@gmail.com';
+export const DEFAULT_INSTITUTIONAL_DRIVE_EMAIL = 'comsocsampaio2026@gmail.com';
 
 // Explicitly authorized scope (Option B) — strictly confined to the authorized root folder ("fotos 2026") on the backend
 export const GOOGLE_DRIVE_SCOPES = [
