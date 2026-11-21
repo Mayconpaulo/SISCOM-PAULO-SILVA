@@ -312,6 +312,29 @@ export function AgendaComsoc() {
   );
   const notifiedIdsRef = useRef<Set<string>>(new Set());
 
+  // Open new event modal directly when triggered by the mobile Speed Dial shortcut
+  useEffect(() => {
+    const triggerNewEvent = () => {
+      setEditingEvent(null);
+      setModalError(null);
+      setModalOpen(true);
+    };
+
+    try {
+      if (sessionStorage.getItem('siscom_agenda_open_new') === '1') {
+        sessionStorage.removeItem('siscom_agenda_open_new');
+        triggerNewEvent();
+      }
+    } catch {
+      // Ignore storage errors
+    }
+
+    window.addEventListener('siscom:open-new-agenda-event', triggerNewEvent);
+    return () => {
+      window.removeEventListener('siscom:open-new-agenda-event', triggerNewEvent);
+    };
+  }, []);
+
   // Subscribe to Firestore collections
   useEffect(() => {
     if (!account) return;

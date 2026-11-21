@@ -465,7 +465,12 @@ function WorkspaceShell() {
       {!shieldLocked && (
         <>
           <DemandasNotificationToasts />
-          <DemandasFloatingQuickAdd />
+          <DemandasFloatingQuickAdd
+            activeScreen={activeScreen}
+            canAccessAgenda={hasModuleAccess('agenda')}
+            canAccessCrachas={hasModuleAccess('crachas')}
+            onNavigate={navigateToScreen}
+          />
           <DemandasPanelModal />
         </>
       )}

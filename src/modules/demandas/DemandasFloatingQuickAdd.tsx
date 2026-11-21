@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+  BadgeCheck,
   Bell,
   Calendar,
+  CalendarPlus,
   Check,
   Clock,
   ExternalLink,
@@ -11,6 +13,7 @@ import {
   Send,
   X,
 } from 'lucide-react';
+import type { ActiveScreen } from '../registry';
 import { SISCOM_EASE } from '../../shared/motion';
 import { SiscomSpinner } from '../../shared/ui';
 import { useDemandas } from './DemandasContext';
@@ -24,7 +27,19 @@ import {
   getNextMondayDateKey,
 } from './demandaTypes';
 
-export const DemandasFloatingQuickAdd: React.FC = () => {
+interface DemandasFloatingQuickAddProps {
+  activeScreen?: ActiveScreen;
+  canAccessAgenda?: boolean;
+  canAccessCrachas?: boolean;
+  onNavigate?: (screen: ActiveScreen) => void;
+}
+
+export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> = ({
+  activeScreen = 'home',
+  canAccessAgenda = false,
+  canAccessCrachas = false,
+  onNavigate,
+}) => {
   const {
     pendingDemandas,
     urgentCount,
@@ -43,12 +58,31 @@ export const DemandasFloatingQuickAdd: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [speedDialOpen, setSpeedDialOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
+  );
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handleChange = () => {
+      setIsMobileViewport(mq.matches);
+      if (!mq.matches) {
+        setSpeedDialOpen(false);
+      }
+    };
+    handleChange();
+    mq.addEventListener('change', handleChange);
+    return () => mq.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
     if (quickAddOpen) {
+      setSpeedDialOpen(false);
       setErrorMsg(null);
       setDueDate((prev) => prev || formatDateKeyLocal(new Date()));
       const timer = window.setTimeout(() => {
@@ -58,17 +92,23 @@ export const DemandasFloatingQuickAdd: React.FC = () => {
     }
   }, [quickAddOpen]);
 
+  // Close Speed Dial on screen navigation
+  useEffect(() => {
+    setSpeedDialOpen(false);
+  }, [activeScreen]);
+
   // Close on Escape
   useEffect(() => {
-    if (!quickAddOpen) return;
+    if (!quickAddOpen && !speedDialOpen) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setQuickAddOpen(false);
+        setSpeedDialOpen(false);
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [quickAddOpen, setQuickAddOpen]);
+  }, [quickAddOpen, speedDialOpen, setQuickAddOpen]);
 
   const now = new Date();
   const todayKey = formatDateKeyLocal(now);
@@ -115,10 +155,92 @@ export const DemandasFloatingQuickAdd: React.FC = () => {
     }
   };
 
+  const handleOpenNovaDemanda = () => {
+    setSpeedDialOpen(false);
+    setQuickAddOpen(true);
+  };
+
+  const handleOpenNovoEvento = () => {
+    setSpeedDialOpen(false);
+    try {
+      sessionStorage.setItem('siscom_agenda_open_new', '1');
+    } catch {
+      // Ignore storage errors
+    }
+    if (activeScreen === 'agenda') {
+      window.dispatchEvent(new CustomEvent('siscom:open-new-agenda-event'));
+    } else {
+      onNavigate?.('agenda');
+    }
+  };
+
+  const handleOpenNovoCracha = () => {
+    setSpeedDialOpen(false);
+    onNavigate?.('crachas');
+  };
+
+  const handlePrimaryFabClick = () => {
+    if (quickAddOpen) {
+      setQuickAddOpen(false);
+      return;
+    }
+    if (isMobileViewport) {
+      setSpeedDialOpen((prev) => !prev);
+      return;
+    }
+    setQuickAddOpen(true);
+  };
+
+  const speedDialItems = [
+    ...(canAccessCrachas && onNavigate
+      ? [
+          {
+            id: 'novo-cracha',
+            label: '+ Novo Crachá',
+            icon: <BadgeCheck className="w-4 h-4 text-[#C9A961]" aria-hidden="true" />,
+            onClick: handleOpenNovoCracha,
+          },
+        ]
+      : []),
+    ...(canAccessAgenda && onNavigate
+      ? [
+          {
+            id: 'novo-evento',
+            label: '+ Novo Evento',
+            icon: <CalendarPlus className="w-4 h-4 text-[#C9A961]" aria-hidden="true" />,
+            onClick: handleOpenNovoEvento,
+          },
+        ]
+      : []),
+    {
+      id: 'nova-demanda',
+      label: '+ Nova Demanda',
+      icon: <ListTodo className="w-4 h-4 text-[#C9A961]" aria-hidden="true" />,
+      onClick: handleOpenNovaDemanda,
+    },
+  ];
+
   const previewTop = pendingDemandas.slice(0, 3);
+  const isExpanded = quickAddOpen || speedDialOpen;
 
   return (
-    <div className="no-print fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 flex flex-col items-end">
+    <>
+      {/* Subtle tap-to-close backdrop when Mobile Speed Dial is open */}
+      <AnimatePresence>
+        {speedDialOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            onClick={() => setSpeedDialOpen(false)}
+            aria-hidden="true"
+            className="no-print fixed inset-0 z-30 bg-black/55 backdrop-blur-[2px] md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="no-print fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 flex flex-col items-end">
       {/* Quick-Add Popover */}
       <AnimatePresence>
         {quickAddOpen && (
@@ -329,33 +451,81 @@ export const DemandasFloatingQuickAdd: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Floating Quick-Add Circle Button */}
+      {/* Mobile Expandable Speed Dial Mini-Shortcuts */}
+      <AnimatePresence>
+        {speedDialOpen && !quickAddOpen && (
+          <motion.div
+            role="menu"
+            aria-label="Atalhos rápidos"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.16, ease: SISCOM_EASE }}
+            className="mb-3 flex flex-col items-end gap-2 md:hidden"
+          >
+            {speedDialItems.map((item, index) => (
+              <motion.button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                onClick={item.onClick}
+                initial={{ opacity: 0, y: 10, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.94 }}
+                transition={{
+                  duration: 0.16,
+                  delay: (speedDialItems.length - 1 - index) * 0.03,
+                  ease: SISCOM_EASE,
+                }}
+                className="min-h-[44px] pl-3.5 pr-2 py-1.5 rounded-full bg-[#0E1612]/94 backdrop-blur-xl border border-[#C9A961]/42 active:border-[#E5C17B] active:scale-[0.97] shadow-[inset_0_1px_0.5px_rgba(255,250,236,0.22),0_12px_28px_rgba(0,0,0,0.72)] flex items-center gap-2.5 text-xs font-semibold text-[#E8E4D8] whitespace-nowrap cursor-pointer transition-colors"
+              >
+                <span>{item.label}</span>
+                <span className="w-8 h-8 rounded-full bg-[#182720] border border-[#C9A961]/35 flex items-center justify-center shrink-0">
+                  {item.icon}
+                </span>
+              </motion.button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Quick-Add / Speed Dial Circle Button */}
       <button
         type="button"
-        onClick={() => setQuickAddOpen(!quickAddOpen)}
-        aria-label={quickAddOpen ? 'Fechar anotação rápida de demandas' : 'Nova demanda rápida'}
-        title="Anotar demanda rápida"
-        className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-full flex items-center justify-center border transition-all duration-200 cursor-pointer shadow-[0_10px_28px_rgba(0,0,0,0.58)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B46E]/70 ${
+        onClick={handlePrimaryFabClick}
+        aria-expanded={isExpanded}
+        aria-label={
           quickAddOpen
-            ? 'bg-[#17211C] border-[#D8B46E]/70 text-[#F4E6C4]'
-            : 'bg-gradient-to-br from-[#2D5A43] via-[#1C382A] to-[#13251C] border-[#C29B56]/60 hover:border-[#E5C17B] text-[#F4E6C4] hover:scale-[1.04] active:scale-[0.97]'
+            ? 'Fechar anotação rápida de demandas'
+            : speedDialOpen
+            ? 'Fechar menu de atalhos rápidos'
+            : isMobileViewport
+            ? 'Abrir atalhos rápidos'
+            : 'Nova demanda rápida'
+        }
+        title={isMobileViewport ? 'Atalhos rápidos' : 'Anotar demanda rápida'}
+        className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-full flex items-center justify-center border backdrop-blur-xl transition-all duration-200 cursor-pointer shadow-[inset_0_1px_1px_rgba(255,250,236,0.34),0_12px_30px_rgba(0,0,0,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B46E]/70 ${
+          isExpanded
+            ? 'bg-[#131D18]/88 border-[#E0BE74]/75 text-[#F4E6C4]'
+            : 'bg-gradient-to-br from-[#2D5A43]/78 via-[#193326]/78 to-[#0E1E16]/84 border-[#E0BE74]/55 hover:border-[#F2D592] text-[#F4E6C4] hover:scale-[1.04] active:scale-[0.97]'
         }`}
       >
-        {quickAddOpen ? (
-          <X className="w-5 h-5 sm:w-6 sm:h-6" />
-        ) : (
-          <Plus className="w-6 h-6 text-[#F4E6C4]" />
-        )}
+        <Plus
+          className={`w-6 h-6 text-[#F4E6C4] transition-transform duration-200 ${
+            isExpanded ? 'rotate-45' : 'rotate-0'
+          }`}
+        />
 
-        {!quickAddOpen && urgentCount > 0 && (
+        {!isExpanded && urgentCount > 0 && (
           <span
             aria-label={`${urgentCount} demanda(s) urgente(s)`}
-            className="absolute -top-1 -right-1 min-w-[21px] h-[21px] px-1 rounded-full bg-[#C29B56] text-[#0B0E0D] text-[11px] font-bold font-mono tabular-nums flex items-center justify-center border-2 border-[#0B0E0D]"
+            className="absolute -top-1 -right-1 min-w-[21px] h-[21px] px-1 rounded-full bg-[#C9A961] text-[#0B0E0D] text-[11px] font-bold font-mono tabular-nums flex items-center justify-center border-2 border-[#0B0E0D]"
           >
             {urgentCount > 9 ? '9+' : urgentCount}
           </span>
         )}
       </button>
-    </div>
+      </div>
+    </>
   );
 };

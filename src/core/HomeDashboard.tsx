@@ -1,5 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from 'motion/react';
 import {
   CornerDownLeft,
   ListTodo,
@@ -61,6 +68,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 }) => {
   const { setPanelOpen: setDemandasPanelOpen } = useDemandas();
   const [searchQuery, setSearchQuery] = useState('');
+  const prefersReducedMotion = useReducedMotion();
+
+  // Scroll-driven zoom in / zoom out on the operational backdrop (scroll only, no mouse tracking)
+  const { scrollY } = useScroll();
+  const smoothScrollY = useSpring(scrollY, {
+    stiffness: 110,
+    damping: 26,
+    mass: 0.45,
+  });
+  const bgScale = useTransform(smoothScrollY, [0, 460], [1.02, 1.18]);
 
   const normalizedQuery = useMemo(() => normalizeSearch(searchQuery), [searchQuery]);
 
@@ -106,46 +123,47 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   return (
     <div className="relative z-10 flex-1 flex flex-col min-h-screen">
-      {/* Operational military montage backdrop with balanced dark minimalist veil */}
+      {/* Operational military montage backdrop with scroll-only zoom */}
       <div
         aria-hidden="true"
         className="no-print pointer-events-none fixed inset-0 overflow-hidden z-0"
       >
-        <img
+        <motion.img
           src={heroBackdropImg}
           alt=""
-          className="w-full h-full object-cover object-center opacity-[0.42] sm:opacity-[0.46] select-none"
+          style={prefersReducedMotion ? undefined : { scale: bgScale }}
+          className="w-full h-full object-cover object-center opacity-[0.52] sm:opacity-[0.58] select-none will-change-transform"
         />
         <div
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(180deg, rgba(6, 9, 8, 0.44) 0%, rgba(7, 10, 9, 0.56) 42%, rgba(8, 11, 9, 0.78) 78%, rgba(8, 11, 9, 0.9) 100%)',
+              'linear-gradient(180deg, rgba(6, 9, 8, 0.34) 0%, rgba(7, 10, 9, 0.44) 44%, rgba(7, 10, 9, 0.66) 80%, rgba(7, 10, 9, 0.82) 100%)',
           }}
         />
         <div
           className="absolute inset-0"
           style={{
             background:
-              'radial-gradient(85% 75% at 50% 30%, rgba(8, 11, 9, 0.08) 0%, rgba(6, 9, 8, 0.56) 100%)',
+              'radial-gradient(90% 80% at 50% 35%, rgba(8, 11, 9, 0.04) 0%, rgba(6, 9, 8, 0.48) 100%)',
           }}
         />
       </div>
 
-      {/* Institutional Top Header */}
+      {/* Institutional Top Header (full width) */}
       <motion.header
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: SISCOM_EASE }}
-        className="no-print relative z-20 w-full max-w-[1260px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-3 flex items-center justify-between gap-3"
+        className="no-print relative z-20 w-full px-3.5 sm:px-5 md:px-6 lg:px-8 xl:px-10 pt-3 md:pt-5 pb-2 md:pb-3 flex items-center justify-between gap-2 md:gap-3"
       >
         {/* Left: Arma de Comunicações + SISCOM | Brasão 1º BI Mec (Es) */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-          <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 md:gap-3.5 min-w-0">
+          <div className="flex items-center gap-2 md:gap-2.5 shrink-0">
             <motion.div
               layoutId="siscom-crest"
               transition={CREST_LAYOUT_TRANSITION}
-              className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shrink-0"
+              className="w-9 h-9 md:w-12 md:h-12 flex items-center justify-center shrink-0"
             >
               <motion.img
                 src="/assets/logo_arma_comunicacoes.png"
@@ -162,11 +180,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <motion.h1
                 layoutId="siscom-wordmark"
                 transition={CREST_LAYOUT_TRANSITION}
-                className="metallic-wordmark font-display text-xl sm:text-[26px] font-bold tracking-[0.14em] uppercase"
+                className="metallic-wordmark font-display text-[19px] md:text-[26px] font-bold tracking-[0.14em] uppercase"
               >
                 SISCOM
               </motion.h1>
-              <span className="text-[10px] sm:text-xs text-[#C5D1CA]/85 tracking-[0.02em] mt-1 whitespace-nowrap">
+              <span className="text-[9.5px] md:text-xs text-[#C5D1CA]/90 tracking-[0.015em] mt-0.5 md:mt-1 whitespace-nowrap">
                 Seção de Comunicação Social
               </span>
             </div>
@@ -174,14 +192,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
           <div
             aria-hidden="true"
-            className="hidden sm:block h-9 w-px bg-gradient-to-b from-transparent via-[#C29B56]/45 to-transparent mx-0.5 shrink-0"
+            className="h-7 md:h-9 w-px bg-gradient-to-b from-transparent via-[#C9A961]/45 to-transparent mx-0.5 shrink-0"
           />
 
           <div className="flex items-center gap-2.5 min-w-0">
             <img
               src={BATTALION_CREST_SRC}
               alt="Brasão do 1º Batalhão de Infantaria Mecanizado (Escola)"
-              className="h-9 sm:h-11 w-auto object-contain shrink-0 drop-shadow-[0_4px_12px_rgba(0,0,0,0.72)] select-none"
+              className="h-8 md:h-11 w-auto object-contain shrink-0 drop-shadow-[0_4px_12px_rgba(0,0,0,0.72)] select-none"
             />
             <div className="hidden md:flex flex-col leading-snug min-w-0">
               <span className="text-[13px] font-medium text-[#E8EEEB] truncate">
@@ -195,12 +213,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
 
         {/* Right: Install PWA + User Profile + Admin + Sign Out */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 md:gap-2.5 shrink-0">
           <PWAInstallButton compact />
 
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-[#0B100E]/70 border border-white/[0.08]">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full siscom-liquid-pill">
             <User className="w-3.5 h-3.5 text-[#DFBC75] shrink-0" aria-hidden="true" />
-            <span className="text-xs font-medium text-[#E4EAE6] max-w-[150px] truncate">
+            <span className="text-xs font-medium text-[#E4EAE6] max-w-[160px] truncate">
               {account.displayName}
             </span>
           </div>
@@ -209,9 +227,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('admin')}
-              title="Administração"
-              aria-label="Administração"
-              className="relative siscom-btn siscom-btn-gold !min-h-[38px] !px-2.5 sm:!px-3 text-xs"
+              title="Configurações e Administração"
+              aria-label="Configurações e Administração"
+              className="relative siscom-btn siscom-btn-gold !min-h-[36px] md:!min-h-[38px] !px-2.5 md:!px-3 text-xs backdrop-blur-md"
             >
               <motion.div
                 layoutId="module-surface-admin"
@@ -240,27 +258,27 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             onClick={() => void signOutCurrentUser()}
             title="Sair"
             aria-label="Sair"
-            className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-2.5 sm:!px-3 text-xs text-[#C6D4CC]"
+            className="siscom-btn siscom-btn-secondary !min-h-[36px] md:!min-h-[38px] !px-2.5 md:!px-3 text-xs text-[#C6D4CC] !bg-[#0E1612]/60 backdrop-blur-md"
           >
-            <LogOut className="w-3.5 h-3.5 text-[#98A89F]" />
-            <span className="hidden sm:inline">Sair</span>
+            <LogOut className="w-3.5 h-3.5 text-[#B8B3A6] md:text-[#98A89F]" />
+            <span className="hidden md:inline">Sair</span>
           </button>
         </div>
       </motion.header>
 
-      {/* Main Content Container */}
-      <main className="relative z-10 flex-1 w-full max-w-[1260px] mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-20 sm:pb-12 flex flex-col gap-5 sm:gap-6">
+      {/* Main Content Container (Cockpit Operacional on <768px, full desktop width on >=768px) */}
+      <main className="relative z-10 flex-1 w-full px-3.5 sm:px-5 md:px-6 lg:px-8 xl:px-10 pt-2 md:pt-5 pb-5 md:pb-10 flex flex-col gap-3.5 md:gap-6">
         {/* Greeting + Command Search Row */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2.5 md:gap-4">
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, delay: 0.04, ease: SISCOM_EASE }}
             className="min-w-0"
           >
-            <h2 className="font-display text-2xl sm:text-[32px] font-bold tracking-tight leading-tight text-[#F4F7F5] drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
+            <h2 className="font-display text-[21px] sm:text-2xl md:text-[34px] font-bold tracking-tight leading-tight text-[#E8E4D8] md:text-[#F4F7F5] drop-shadow-[0_2px_12px_rgba(0,0,0,0.72)]">
               {greeting},{' '}
-              <span className="text-[#E2BE74]">{account.displayName}!</span>
+              <span className="text-[#C9A961] md:text-[#E2BE74]">{account.displayName}!</span>
             </h2>
           </motion.div>
 
@@ -269,24 +287,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, delay: 0.06, ease: SISCOM_EASE }}
-            className="w-full md:max-w-[440px]"
+            className="w-full md:max-w-[460px] lg:max-w-[500px]"
           >
-            <div className="flex items-center gap-2.5 h-11 sm:h-12 px-4 rounded-full bg-[#0A0F0D]/86 backdrop-blur-md border border-[#C29B56]/28 focus-within:border-[#DFBC75]/65 shadow-[0_10px_28px_rgba(0,0,0,0.48)] transition-colors">
-              <Search className="w-4 h-4 text-[#B8C6BE] shrink-0" aria-hidden="true" />
+            <div className="siscom-liquid-pill flex items-center gap-2.5 h-[42px] md:h-12 px-3.5 md:px-4 rounded-full focus-within:border-[#C9A961]/70 md:focus-within:border-[#DFBC75]/65 transition-colors">
+              <Search className="w-4 h-4 text-[#B8B3A6] md:text-[#B8C6BE] shrink-0" aria-hidden="true" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="O que você deseja fazer?"
                 aria-label="Pesquisar funções do SISCOM"
-                className="flex-1 min-w-0 bg-transparent text-sm text-[#F1F5F3] placeholder:text-[#86968D] focus:outline-none"
+                className="flex-1 min-w-0 bg-transparent text-sm text-[#E8E4D8] md:text-[#F1F5F3] placeholder:text-[#9D988C] md:placeholder:text-[#86968D] focus:outline-none"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
                   aria-label="Limpar pesquisa"
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[#8FA197] hover:text-[#F1F5F3] hover:bg-white/[0.08] cursor-pointer"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[#B8B3A6] hover:text-[#F1F5F3] hover:bg-white/[0.08] cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -316,37 +334,46 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           )}
         </AnimatePresence>
 
-        {/* Action-First Asymmetric Dashboard Grid:
-            Primary Stage (~72%): Unified Module Cards in full evidence
-            Secondary Corner Rail (~28%): Quiet Agenda Preview + Demandas companion panel */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_312px] xl:grid-cols-[minmax(0,1fr)_336px] gap-4 sm:gap-5 items-start">
-          {/* PRIMARY FOCUS: Unified Module Cards Container */}
+        {/* Responsive Cockpit Grid:
+            Mobile (<768px): 1. Próximo Evento -> 2. Módulos (4-col) -> 3. Demandas -> 4. Citação
+            Desktop (>=1024px): Col 1 Módulos (+ citação inline) | Col 2 Próximo Evento + Demandas */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_336px] xl:grid-cols-[minmax(0,1fr)_364px] 2xl:grid-cols-[minmax(0,1fr)_396px] lg:grid-rows-[auto_1fr] gap-3.5 md:gap-5 lg:gap-y-3.5 lg:gap-x-5 items-start flex-1">
+          {/* OPERATIONAL PRIORITY (Mobile above the fold; Desktop right rail top) */}
+          {hasAgendaAccess && (
+            <HomeAgendaPreview
+              onOpenAgenda={() => onNavigate('agenda')}
+              className="order-1 md:order-2 lg:col-start-2 lg:row-start-1 max-w-none"
+              compact
+            />
+          )}
+
+          {/* MODULES GRID (Mobile 4-column square cockpit; Desktop primary horizontal cards) */}
           <motion.section
             aria-label="Funções do SISCOM"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, delay: 0.05, ease: SISCOM_EASE }}
-            className="siscom-home-frame rounded-[16px] p-3.5 sm:p-4.5 backdrop-blur-sm"
+            className="order-2 md:order-1 lg:col-start-1 lg:row-start-1 lg:row-span-2 siscom-home-frame rounded-[16px] md:rounded-[18px] p-2.5 md:p-5"
           >
             {visibleCards.length === 0 ? (
-              <div className="py-10 text-center text-sm text-[#98A89F]">
+              <div className="py-10 text-center text-sm text-[#B8B3A6] md:text-[#98A89F]">
                 Nenhuma função liberada para este login no momento.
               </div>
             ) : filteredCards.length === 0 && !matchesDemandasQuery ? (
               <div className="py-10 text-center space-y-2">
-                <p className="text-sm text-[#C6D4CC]">
+                <p className="text-sm text-[#E8E4D8] md:text-[#C6D4CC]">
                   Nenhuma função encontrada para “{searchQuery}”.
                 </p>
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="text-xs font-medium text-[#DFBC75] hover:underline cursor-pointer"
+                  className="text-xs font-medium text-[#C9A961] md:text-[#DFBC75] hover:underline cursor-pointer"
                 >
                   Mostrar todas as funções
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-3.5">
+              <div className="grid grid-cols-4 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4">
                 {filteredCards.map((card, idx) => (
                   <motion.button
                     key={card.id}
@@ -354,32 +381,42 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     onClick={() => onNavigate(card.id)}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
+                    whileHover={
+                      prefersReducedMotion
+                        ? undefined
+                        : { scale: 1.024, transition: { duration: 0.18, ease: SISCOM_EASE } }
+                    }
+                    whileTap={
+                      prefersReducedMotion
+                        ? undefined
+                        : { scale: 0.968, transition: { duration: 0.1 } }
+                    }
                     transition={{
                       duration: 0.2,
                       delay: 0.02 + idx * 0.022,
                       ease: SISCOM_EASE,
                     }}
-                    className="relative siscom-home-card group rounded-[12px] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[84px] sm:min-h-[92px]"
+                    className="siscom-home-card group rounded-[12px] md:rounded-[14px] px-1.5 py-3 md:px-6 md:py-6 flex flex-col md:flex-row items-center justify-center md:justify-start gap-1.5 md:gap-4 text-center md:text-left cursor-pointer min-h-[78px] md:min-h-[112px] xl:min-h-[122px] will-change-transform"
                   >
                     <motion.div
                       layoutId={`module-surface-${card.id}`}
                       transition={MODULE_EXPAND_TRANSITION}
-                      className="absolute inset-0 rounded-[12px] pointer-events-none"
+                      className="absolute inset-0 rounded-[12px] md:rounded-[14px] pointer-events-none"
                     />
 
                     <motion.div
                       layoutId={`module-icon-${card.id}`}
                       transition={MODULE_LOCKUP_TRANSITION}
-                      className="relative z-10 w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592] transition-colors duration-200"
+                      className="relative z-10 w-8 h-8 md:w-13 md:h-13 shrink-0 flex items-center justify-center text-[#C9A961] md:text-[#E0BE74] group-hover:text-[#F4DBA0] transition-colors duration-200 drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]"
                     >
-                      {card.renderIcon('w-10 h-10 sm:w-11 sm:h-11')}
+                      {card.renderIcon('w-7 h-7 md:w-12 md:h-12')}
                     </motion.div>
 
-                    <div className="relative z-10 min-w-0 flex-1">
+                    <div className="relative z-10 w-full md:w-auto min-w-0 md:flex-1">
                       <motion.span
                         layoutId={`module-title-${card.id}`}
                         transition={MODULE_LOCKUP_TRANSITION}
-                        className="block font-display text-base sm:text-[18px] font-semibold tracking-tight text-[#F2F6F3] group-hover:text-[#F4E6C4] transition-colors duration-200 truncate"
+                        className="block font-display text-[11px] leading-[1.15] md:text-[20px] md:leading-normal font-medium md:font-semibold tracking-tight text-[#E8E4D8] md:text-[#F5F8F6] group-hover:text-[#F7E9C8] transition-colors duration-200 truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
                       >
                         {card.title}
                       </motion.span>
@@ -389,27 +426,37 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
                 {/* Direct Demandas shortcut when searched */}
                 {matchesDemandasQuery && (
-                  <button
+                  <motion.button
                     type="button"
                     onClick={() => setDemandasPanelOpen(true)}
-                    className="siscom-home-card group rounded-[12px] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4 text-left cursor-pointer min-h-[84px] sm:min-h-[92px]"
+                    whileHover={
+                      prefersReducedMotion
+                        ? undefined
+                        : { scale: 1.024, transition: { duration: 0.18, ease: SISCOM_EASE } }
+                    }
+                    whileTap={
+                      prefersReducedMotion
+                        ? undefined
+                        : { scale: 0.968, transition: { duration: 0.1 } }
+                    }
+                    className="siscom-home-card group rounded-[12px] md:rounded-[14px] px-1.5 py-3 md:px-6 md:py-6 flex flex-col md:flex-row items-center justify-center md:justify-start gap-1.5 md:gap-4 text-center md:text-left cursor-pointer min-h-[78px] md:min-h-[112px] xl:min-h-[122px] will-change-transform"
                   >
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center text-[#DCBA6E] group-hover:text-[#F1D592]">
-                      <ListTodo className="w-8 h-8" />
+                    <div className="relative z-10 w-8 h-8 md:w-13 md:h-13 shrink-0 flex items-center justify-center text-[#C9A961] md:text-[#E0BE74] group-hover:text-[#F4DBA0]">
+                      <ListTodo className="w-6 h-6 md:w-9 md:h-9" />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="block font-display text-base sm:text-[18px] font-semibold text-[#F2F6F3] group-hover:text-[#F4E6C4]">
+                    <div className="relative z-10 w-full md:w-auto min-w-0 md:flex-1">
+                      <span className="block font-display text-[11px] leading-[1.15] md:text-[20px] md:leading-normal font-medium md:font-semibold text-[#E8E4D8] md:text-[#F5F8F6] group-hover:text-[#F7E9C8] truncate">
                         Demandas
                       </span>
                     </div>
-                  </button>
+                  </motion.button>
                 )}
 
-                {/* Institutional Motto Card filling remaining symmetry slots cleanly */}
+                {/* Institutional Motto Card filling remaining symmetry slots cleanly on Desktop */}
                 {(trailingSlotsXl > 0 || trailingSlotsMd > 0) && (
                   <div
-                    className={`siscom-motto-card relative overflow-hidden rounded-[12px] px-5 py-4 flex items-center gap-4 min-h-[84px] sm:min-h-[92px] ${
-                      trailingSlotsMd === 0 ? 'sm:col-span-2' : 'sm:col-span-1'
+                    className={`siscom-motto-card relative overflow-hidden rounded-[14px] px-6 py-5 hidden md:flex items-center gap-4 min-h-[112px] xl:min-h-[122px] ${
+                      trailingSlotsMd === 0 ? 'md:col-span-2' : 'md:col-span-1'
                     } ${
                       trailingSlotsXl === 2
                         ? 'xl:col-span-2'
@@ -420,22 +467,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   >
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute -right-6 -bottom-10 w-36 h-44 flex gap-3 rotate-[24deg] opacity-25"
+                      className="pointer-events-none absolute -right-6 -bottom-10 w-40 h-48 flex gap-3 rotate-[24deg] opacity-25"
                     >
-                      <div className="w-4 h-full bg-gradient-to-b from-[#C29B56]/40 to-transparent" />
-                      <div className="w-7 h-full bg-gradient-to-b from-[#2D5A43]/65 to-transparent" />
+                      <div className="w-4 h-full bg-gradient-to-b from-[#C29B56]/45 to-transparent" />
+                      <div className="w-7 h-full bg-gradient-to-b from-[#2D5A43]/70 to-transparent" />
                     </div>
 
                     <img
                       src="/assets/logo_arma_comunicacoes.png"
                       alt=""
                       aria-hidden="true"
-                      className="relative z-10 w-10 h-10 sm:w-11 sm:h-11 object-contain shrink-0 opacity-95 select-none"
+                      className="relative z-10 w-12 h-12 object-contain shrink-0 opacity-95 select-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
                     />
 
                     <div className="relative z-10 min-w-0">
-                      <p className="font-display italic text-sm sm:text-base font-semibold text-[#F1F5F3] leading-snug">
-                        “A verdadeira força nasce da união.”
+                      <p className="font-display italic text-[18px] font-semibold text-[#F3F6F4] leading-snug drop-shadow-[0_1px_6px_rgba(0,0,0,0.55)]">
+                        “Sozinhos vamos mais rápido, mas juntos vamos mais longe.”
                       </p>
                     </div>
                   </div>
@@ -444,26 +491,45 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             )}
           </motion.section>
 
-          {/* SECONDARY CORNER RAIL: Quiet Agenda Preview + Demandas Companion Column */}
-          <aside
-            aria-label="Resumo rápido de agenda e demandas"
-            className="flex flex-col gap-3 lg:pt-0.5"
-          >
-            {hasAgendaAccess && (
-              <HomeAgendaPreview
-                onOpenAgenda={() => onNavigate('agenda')}
-                className="max-w-none"
-                compact
-              />
-            )}
-            <HomeDemandasWidgets className="max-w-none" compact />
-          </aside>
+          {/* DEMANDAS PANEL (Mobile immediately below module grid; Desktop right rail bottom) */}
+          <HomeDemandasWidgets
+            className={`order-3 md:order-3 max-w-none ${
+              hasAgendaAccess
+                ? 'lg:col-start-2 lg:row-start-2'
+                : 'lg:col-start-2 lg:row-start-1'
+            }`}
+            compact
+          />
+
+          {/* MOBILE-ONLY INSTITUTIONAL QUOTE CARD (Bottom of flow, right above footer) */}
+          <div className="order-4 md:hidden siscom-motto-card relative overflow-hidden rounded-[14px] px-4 py-3.5 flex items-center gap-3.5">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-6 -bottom-10 w-32 h-36 flex gap-2.5 rotate-[24deg] opacity-25"
+            >
+              <div className="w-3 h-full bg-gradient-to-b from-[#C9A961]/45 to-transparent" />
+              <div className="w-6 h-full bg-gradient-to-b from-[#2D5A43]/70 to-transparent" />
+            </div>
+
+            <img
+              src="/assets/logo_arma_comunicacoes.png"
+              alt=""
+              aria-hidden="true"
+              className="relative z-10 w-9 h-9 object-contain shrink-0 opacity-95 select-none drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
+            />
+
+            <div className="relative z-10 min-w-0">
+              <p className="font-display italic text-[14px] font-semibold text-[#E8E4D8] leading-snug drop-shadow-[0_1px_6px_rgba(0,0,0,0.55)]">
+                “Sozinhos vamos mais rápido, mas juntos vamos mais longe.”
+              </p>
+            </div>
+          </div>
         </div>
       </main>
 
-      {/* Minimalist Institutional Footer */}
-      <footer className="no-print relative z-10 mt-auto border-t border-[#C29B56]/16 bg-[#060908]/92">
-        <div className="w-full max-w-[1260px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#98A89F]">
+      {/* Minimalist Full-Width Liquid Glass Institutional Footer (extra mobile pb so FAB never overlaps) */}
+      <footer className="no-print relative z-10 mt-auto border-t border-white/[0.1] bg-[#060908]/64 backdrop-blur-xl">
+        <div className="w-full px-4 md:px-6 lg:px-8 xl:px-10 pt-3 pb-24 md:py-3 flex flex-col md:flex-row items-center justify-between gap-1.5 md:gap-2 text-xs text-[#B8B3A6] md:text-[#98A89F]">
           <div className="flex items-center gap-2.5">
             <img
               src={BATTALION_CREST_SRC}
@@ -471,18 +537,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               aria-hidden="true"
               className="h-5 w-auto object-contain shrink-0 select-none"
             />
-            <span className="font-display font-semibold tracking-wider text-[#E4EAE6]">
+            <span className="font-display font-semibold tracking-wider text-[#E8E4D8] md:text-[#E4EAE6]">
               SISCOM
             </span>
-            <span aria-hidden="true" className="text-[#C29B56]/45">
+            <span aria-hidden="true" className="text-[#C9A961]/55">
               |
             </span>
             <span>1º BI Mec (Es)</span>
           </div>
 
-          <div className="flex items-center gap-2 text-[#8F9F96]">
+          <div className="flex items-center gap-2 text-[#B8B3A6] md:text-[#8F9F96]">
             <span>Seção de Comunicação Social</span>
-            <span aria-hidden="true" className="text-[#C29B56]/55">
+            <span aria-hidden="true" className="text-[#C9A961]/60">
               ·
             </span>
             <span>Exército Brasileiro</span>

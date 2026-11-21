@@ -162,19 +162,19 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
-      className={`w-full rounded-[14px] border transition-colors ${
+      className={`w-full rounded-[16px] transition-colors ${
         compact
-          ? 'bg-[#0B100E]/78 border-white/[0.09] hover:border-[#C29B56]/26 px-3.5 py-3'
-          : 'metal-surface border-[#C29B56]/22 px-4 py-3.5'
+          ? 'siscom-liquid-panel hover:border-[#E0BE74]/32 px-4 py-3.5'
+          : 'metal-surface border border-[#C29B56]/22 px-4 py-3.5'
       } flex flex-col justify-between ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.07]">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.08]">
         <div className="flex items-baseline gap-1.5 min-w-0">
-          <h2 className="text-xs font-semibold text-[#D9E2DD] tracking-wide whitespace-nowrap">
+          <h2 className="text-xs font-semibold text-[#E8E4D8] tracking-wide whitespace-nowrap">
             {headerTitle}
           </h2>
           {preview.mode === 'today' && (
-            <span className="text-[11px] text-[#8FA197] tabular-nums whitespace-nowrap">
+            <span className="text-[11px] text-[#B8B3A6] tabular-nums whitespace-nowrap">
               <span aria-hidden="true">· </span>
               {preview.todayLabel}
             </span>
@@ -184,12 +184,12 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         <button
           type="button"
           onClick={onOpenAgenda}
-          className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#EBD4A2] bg-[#C29B56]/10 hover:bg-[#C29B56]/20 border border-[#C29B56]/26 hover:border-[#D4B06A]/50 transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C29B56]/60 ${
+          className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#EBD4A2] bg-[#C9A961]/12 hover:bg-[#C9A961]/22 border border-[#C9A961]/30 hover:border-[#D4B06A]/55 transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 ${
             compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
           }`}
         >
           <span>Acessar agenda</span>
-          <ArrowRight className="w-3 h-3 text-[#D8B46E]" aria-hidden="true" />
+          <ArrowRight className="w-3 h-3 text-[#C9A961]" aria-hidden="true" />
         </button>
       </div>
 
@@ -200,11 +200,11 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
             <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
           </div>
         ) : hasError ? (
-          <p className="text-xs text-[#98A89F]">
+          <p className="text-xs text-[#B8B3A6]">
             Não foi possível carregar a prévia da agenda.
           </p>
         ) : preview.mode === 'empty' ? (
-          <p className="text-xs text-[#8E9F96]">
+          <p className="text-xs text-[#B8B3A6]">
             Nenhuma atividade prevista nos próximos dias.
           </p>
         ) : (
@@ -232,7 +232,7 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
               if (compact) {
                 return (
                   <li key={event.id} className="py-1.5 first:pt-0.5 last:pb-0 space-y-1">
-                    <p className="text-[13px] font-medium text-[#E8EEEB] leading-snug line-clamp-2">
+                    <p className="text-[13px] font-medium text-[#E8E4D8] leading-snug line-clamp-2">
                       {event.title}
                     </p>
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]">
@@ -241,10 +241,10 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
                       </span>
                       {detailParts.length > 0 && (
                         <>
-                          <span aria-hidden="true" className="text-[#56665E]">
+                          <span aria-hidden="true" className="text-[#7E7A70]">
                             ·
                           </span>
-                          <span className="text-[#8FA197] truncate">
+                          <span className="text-[#B8B3A6] truncate">
                             {detailParts.join(' · ')}
                           </span>
                         </>
@@ -260,11 +260,11 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
                   className="py-2 first:pt-0.5 last:pb-0.5 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-0.5 sm:gap-4"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[#E9EFEA] truncate">
+                    <p className="text-sm font-medium text-[#E8E4D8] truncate">
                       {event.title}
                     </p>
                     {detailParts.length > 0 && (
-                      <p className="text-xs text-[#8FA197] truncate mt-0.5">
+                      <p className="text-xs text-[#B8B3A6] truncate mt-0.5">
                         {detailParts.join(' · ')}
                       </p>
                     )}
@@ -280,7 +280,7 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         )}
 
         {!loading && !hasError && preview.extraCount > 0 && (
-          <p className="text-[11px] text-[#8FA197] tabular-nums pt-1.5 mt-1.5 border-t border-white/[0.06]">
+          <p className="text-[11px] text-[#B8B3A6] tabular-nums pt-1.5 mt-1.5 border-t border-white/[0.06]">
             +{preview.extraCount}{' '}
             {preview.extraCount === 1 ? 'atividade hoje' : 'atividades hoje'}
           </p>
