@@ -452,5 +452,408 @@ export function createDriveRouter(): Router {
     }
   });
 
+  /**
+   * GET /api/drive/folders?rootFolderId=...&parentId=...
+   * Lists subfolders strictly inside parentId (which must be rootFolderId or a descendant)
+   * and returns the numeric count of direct files (ZERO thumbnails/media previews).
+   */
+  router.get('/folders', async (req: Request, res: Response) => {
+    try {
+      const accessToken = extractDriveAccessToken(req);
+      const rootFolderId = typeof req.query.rootFolderId === 'string' ? req.query.rootFolderId.trim() : '';
+      const parentId = typeof req.query.parentId === 'string' && req.query.parentId.trim()
+        ? req.query.parentId.trim()
+        : rootFolderId;
+
+      await assertFolderWithinRoot(accessToken, parentId, rootFolderId);
+
+      const folderParams = new URLSearchParams({
+        q: `'${escapeDriveQueryLiteral(parentId)}' in parents and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
+        spaces: 'drive',
+        pageSize: '200',
+        orderBy: 'name_natural',
+        fields:
+          'files(id,name,modifiedTime,createdTime,capabilities(canRename,canTrash,canDelete,canAddChildren))',
+      });
+
+      const fileCountParams = new URLSearchParams({
+        q: `'${escapeDriveQueryLiteral(parentId)}' in parents and mimeType != '${FOLDER_MIME_TYPE}' and trashed = false`,
+        spaces: 'drive',
+        pageSize: '200',
+        fields: 'nextPageToken,files(id)',
+      });
+
+      const [folderRes, fileCountRes] = await Promise.all([
+        googleDriveFetchJson<{ files?: Array<DriveFolderMeta & { createdTime?: string }> }>(
+          accessToken,
+          `${GOOGLE_DRIVE_API_BASE}/files?${folderParams.toString()}`
+        ),
+        googleDriveFetchJson<{ nextPageToken?: string; files?: Array<{ id: string }> }>(
+          accessToken,
+          `${GOOGLE_DRIVE_API_BASE}/files?${fileCountParams.toString()}`
+        ),
+      ]);
+
+      const folders = (folderRes.files || []).map((f) => ({
+        id: f.id,
+        name: f.name,
+        modifiedTime: f.modifiedTime || null,
+        createdTime: f.createdTime || null,
+        canRename: Boolean(f.capabilities?.canRename),
+        canDelete: Boolean(f.capabilities?.canTrash || f.capabilities?.canDelete),
+        canAddChildren: Boolean(f.capabilities?.canAddChildren),
+      }));
+
+      res.json({
+        parentId,
+        folders,
+        directFileCount: (fileCountRes.files || []).length,
+        directFileCountTruncated: Boolean(fileCountRes.nextPageToken),
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/drive/folders
+   * Creates a new subfolder strictly inside parentId (validated within rootFolderId).
+   */
+  router.post('/folders', async (req: Request, res: Response) => {
+    try {
+      const accessToken = extractDriveAccessToken(req);
+      const body = (req.body || {}) as {
+        rootFolderId?: unknown;
+        parentId?: unknown;
+        name?: unknown;
+      };
+      const rootFolderId = typeof body.rootFolderId === 'string' ? body.rootFolderId.trim() : '';
+      const parentId =
+        typeof body.parentId === 'string' && body.parentId.trim()
+          ? body.parentId.trim()
+          : rootFolderId;
+      const rawName = typeof body.name === 'string' ? body.name.trim() : '';
+
+      if (rawName.length < 1 || rawName.length > 120) {
+        throw new DriveRouteError(
+          400,
+          'INVALID_FOLDER_NAME',
+          'Informe um nome de pasta entre 1 e 120 caracteres.'
+        );
+      }
+      if (/[\\/]/.test(rawName)) {
+        throw new DriveRouteError(
+          400,
+          'INVALID_FOLDER_NAME',
+          'O nome da pasta não pode conter barras (/ ou \\).'
+        );
+      }
+
+      await assertFolderWithinRoot(accessToken, parentId, rootFolderId);
+
+      // Avoid accidental duplicate folder name in the same parent
+      const dupParams = new URLSearchParams({
+        q: `'${escapeDriveQueryLiteral(parentId)}' in parents and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false and name = '${escapeDriveQueryLiteral(rawName)}'`,
+        spaces: 'drive',
+        pageSize: '1',
+        fields: 'files(id,name)',
+      });
+      const dupCheck = await googleDriveFetchJson<{ files?: Array<{ id: string }> }>(
+        accessToken,
+        `${GOOGLE_DRIVE_API_BASE}/files?${dupParams.toString()}`
+      );
+      if ((dupCheck.files || []).length > 0) {
+        throw new DriveRouteError(
+          409,
+          'FOLDER_ALREADY_EXISTS',
+          `Já existe uma pasta chamada "${rawName}" neste diretório.`
+        );
+      }
+
+      const fields = encodeURIComponent(
+        'id,name,modifiedTime,createdTime,capabilities(canRename,canTrash,canDelete,canAddChildren)'
+      );
+      const created = await googleDriveFetchJson<DriveFolderMeta & { createdTime?: string }>(
+        accessToken,
+        `${GOOGLE_DRIVE_API_BASE}/files?fields=${fields}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: rawName,
+            mimeType: FOLDER_MIME_TYPE,
+            parents: [parentId],
+          }),
+        }
+      );
+
+      res.status(201).json({
+        folder: {
+          id: created.id,
+          name: created.name,
+          modifiedTime: created.modifiedTime || null,
+          createdTime: created.createdTime || null,
+          canRename: Boolean(created.capabilities?.canRename),
+          canDelete: Boolean(created.capabilities?.canTrash || created.capabilities?.canDelete),
+          canAddChildren: Boolean(created.capabilities?.canAddChildren),
+        },
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  /**
+   * PATCH /api/drive/folders/:folderId
+   * Renames a subfolder strictly inside rootFolderId (forbids renaming the root folder itself).
+   */
+  router.patch('/folders/:folderId', async (req: Request, res: Response) => {
+    try {
+      const accessToken = extractDriveAccessToken(req);
+      const folderId = req.params.folderId?.trim() || '';
+      const body = (req.body || {}) as { rootFolderId?: unknown; name?: unknown };
+      const rootFolderId = typeof body.rootFolderId === 'string' ? body.rootFolderId.trim() : '';
+      const rawName = typeof body.name === 'string' ? body.name.trim() : '';
+
+      if (!isValidDriveId(folderId) || !isValidDriveId(rootFolderId)) {
+        throw new DriveRouteError(400, 'INVALID_FOLDER_ID', 'Identificador de pasta inválido.');
+      }
+      if (folderId === rootFolderId) {
+        throw new DriveRouteError(
+          403,
+          'ROOT_FOLDER_PROTECTED',
+          'A pasta raiz autorizada não pode ser renomeada pelo SISCOM.'
+        );
+      }
+      if (rawName.length < 1 || rawName.length > 120 || /[\\/]/.test(rawName)) {
+        throw new DriveRouteError(
+          400,
+          'INVALID_FOLDER_NAME',
+          'Informe um nome válido (1 a 120 caracteres, sem barras).'
+        );
+      }
+
+      await assertFolderWithinRoot(accessToken, folderId, rootFolderId);
+
+      const fields = encodeURIComponent(
+        'id,name,modifiedTime,createdTime,capabilities(canRename,canTrash,canDelete,canAddChildren)'
+      );
+      const updated = await googleDriveFetchJson<DriveFolderMeta & { createdTime?: string }>(
+        accessToken,
+        `${GOOGLE_DRIVE_API_BASE}/files/${encodeURIComponent(folderId)}?fields=${fields}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ name: rawName }),
+        }
+      );
+
+      res.json({
+        folder: {
+          id: updated.id,
+          name: updated.name,
+          modifiedTime: updated.modifiedTime || null,
+          createdTime: updated.createdTime || null,
+          canRename: Boolean(updated.capabilities?.canRename),
+          canDelete: Boolean(updated.capabilities?.canTrash || updated.capabilities?.canDelete),
+          canAddChildren: Boolean(updated.capabilities?.canAddChildren),
+        },
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/drive/folders/:folderId/inspect?rootFolderId=...
+   * Inspects child subfolders and files before deletion so the UI can warn the user clearly.
+   */
+  router.get('/folders/:folderId/inspect', async (req: Request, res: Response) => {
+    try {
+      const accessToken = extractDriveAccessToken(req);
+      const folderId = req.params.folderId?.trim() || '';
+      const rootFolderId = typeof req.query.rootFolderId === 'string' ? req.query.rootFolderId.trim() : '';
+
+      if (!isValidDriveId(folderId) || !isValidDriveId(rootFolderId)) {
+        throw new DriveRouteError(400, 'INVALID_FOLDER_ID', 'Identificador de pasta inválido.');
+      }
+      if (folderId === rootFolderId) {
+        throw new DriveRouteError(
+          403,
+          'ROOT_FOLDER_PROTECTED',
+          'A pasta raiz autorizada não pode ser excluída.'
+        );
+      }
+
+      const targetMeta = await assertFolderWithinRoot(accessToken, folderId, rootFolderId);
+
+      // BFS scan up to 25 folders to report accurate impact without unbounded API calls
+      const queue: string[] = [folderId];
+      const visited = new Set<string>([folderId]);
+      let directSubfolderCount = 0;
+      let directFileCount = 0;
+      let totalSubfolderCount = 0;
+      let totalFileCount = 0;
+      let scanTruncated = false;
+
+      while (queue.length > 0 && visited.size <= 25) {
+        const currentId = queue.shift() as string;
+        const params = new URLSearchParams({
+          q: `'${escapeDriveQueryLiteral(currentId)}' in parents and trashed = false`,
+          spaces: 'drive',
+          pageSize: '200',
+          fields: 'nextPageToken,files(id,mimeType)',
+        });
+        const list = await googleDriveFetchJson<{
+          nextPageToken?: string;
+          files?: Array<{ id: string; mimeType: string }>;
+        }>(accessToken, `${GOOGLE_DRIVE_API_BASE}/files?${params.toString()}`);
+
+        if (list.nextPageToken) {
+          scanTruncated = true;
+        }
+
+        for (const item of list.files || []) {
+          if (item.mimeType === FOLDER_MIME_TYPE) {
+            totalSubfolderCount += 1;
+            if (currentId === folderId) directSubfolderCount += 1;
+            if (!visited.has(item.id) && visited.size < 25) {
+              visited.add(item.id);
+              queue.push(item.id);
+            } else if (!visited.has(item.id)) {
+              scanTruncated = true;
+            }
+          } else {
+            totalFileCount += 1;
+            if (currentId === folderId) directFileCount += 1;
+          }
+        }
+      }
+
+      if (queue.length > 0) {
+        scanTruncated = true;
+      }
+
+      res.json({
+        folderId: targetMeta.id,
+        folderName: targetMeta.name,
+        directSubfolderCount,
+        directFileCount,
+        totalSubfolderCount,
+        totalFileCount,
+        scanTruncated,
+        isEmpty: totalSubfolderCount === 0 && totalFileCount === 0,
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  /**
+   * DELETE /api/drive/folders/:folderId?rootFolderId=...&confirmNonEmpty=true|false
+   * Moves a subfolder to Google Drive Trash ONLY after verifying ancestry within rootFolderId,
+   * strictly forbidding deletion of rootFolderId, and requiring explicit confirmNonEmpty=true if not empty.
+   */
+  router.delete('/folders/:folderId', async (req: Request, res: Response) => {
+    try {
+      const accessToken = extractDriveAccessToken(req);
+      const folderId = req.params.folderId?.trim() || '';
+      const rootFolderId = typeof req.query.rootFolderId === 'string' ? req.query.rootFolderId.trim() : '';
+      const confirmNonEmpty = req.query.confirmNonEmpty === 'true';
+
+      if (!isValidDriveId(folderId) || !isValidDriveId(rootFolderId)) {
+        throw new DriveRouteError(400, 'INVALID_FOLDER_ID', 'Identificador de pasta inválido.');
+      }
+      if (folderId === rootFolderId) {
+        throw new DriveRouteError(
+          403,
+          'ROOT_FOLDER_PROTECTED',
+          'Operação bloqueada: não é permitido excluir a pasta raiz autorizada.'
+        );
+      }
+
+      const targetMeta = await assertFolderWithinRoot(accessToken, folderId, rootFolderId);
+
+      // Guard against accidental recursive deletion without explicit confirmation
+      const childCheckParams = new URLSearchParams({
+        q: `'${escapeDriveQueryLiteral(folderId)}' in parents and trashed = false`,
+        spaces: 'drive',
+        pageSize: '1',
+        fields: 'files(id)',
+      });
+      const childCheck = await googleDriveFetchJson<{ files?: Array<{ id: string }> }>(
+        accessToken,
+        `${GOOGLE_DRIVE_API_BASE}/files?${childCheckParams.toString()}`
+      );
+      if ((childCheck.files || []).length > 0 && !confirmNonEmpty) {
+        throw new DriveRouteError(
+          409,
+          'FOLDER_NOT_EMPTY_CONFIRMATION_REQUIRED',
+          'Esta pasta contém arquivos ou subpastas e exige confirmação explícita antes de ser excluída.'
+        );
+      }
+
+      // Move to Google Drive Trash (safer than irreversible permanent purge)
+      await googleDriveFetchJson(
+        accessToken,
+        `${GOOGLE_DRIVE_API_BASE}/files/${encodeURIComponent(folderId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ trashed: true }),
+        }
+      );
+
+      res.json({
+        deleted: true,
+        folderId: targetMeta.id,
+        folderName: targetMeta.name,
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/drive/files/check-duplicate
+   * Checks whether a non-trashed file with the same name already exists inside targetFolderId
+   * (after verifying targetFolderId is strictly within rootFolderId).
+   */
+  router.post('/files/check-duplicate', async (req: Request, res: Response) => {
+    try {
+      const accessToken = extractDriveAccessToken(req);
+      const body = (req.body || {}) as {
+        rootFolderId?: unknown;
+        parentId?: unknown;
+        fileName?: unknown;
+      };
+      const rootFolderId = typeof body.rootFolderId === 'string' ? body.rootFolderId.trim() : '';
+      const parentId = typeof body.parentId === 'string' ? body.parentId.trim() : '';
+      const fileName = typeof body.fileName === 'string' ? body.fileName.trim() : '';
+
+      if (!fileName || fileName.length > 240) {
+        throw new DriveRouteError(400, 'INVALID_FILE_NAME', 'Nome de arquivo inválido.');
+      }
+
+      await assertFolderWithinRoot(accessToken, parentId, rootFolderId);
+
+      const params = new URLSearchParams({
+        q: `'${escapeDriveQueryLiteral(parentId)}' in parents and name = '${escapeDriveQueryLiteral(fileName)}' and mimeType != '${FOLDER_MIME_TYPE}' and trashed = false`,
+        spaces: 'drive',
+        pageSize: '1',
+        fields: 'files(id,name,size)',
+      });
+      const result = await googleDriveFetchJson<{
+        files?: Array<{ id: string; name: string; size?: string }>;
+      }>(accessToken, `${GOOGLE_DRIVE_API_BASE}/files?${params.toString()}`);
+
+      const existing = result.files?.[0];
+      res.json({
+        exists: Boolean(existing),
+        existingId: existing?.id || null,
+        existingName: existing?.name || null,
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
   return router;
 }
