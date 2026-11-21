@@ -559,7 +559,7 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
       )}
 
       {/* Folder & Document List */}
-      <div className="rounded-lg border border-white/[0.07] bg-[#0B0F0D] divide-y divide-white/[0.05] max-h-64 overflow-y-auto">
+      <div className="siscom-liquid-subcard rounded-lg divide-y divide-white/[0.06] max-h-64 overflow-y-auto">
         {loading ? (
           <div className="py-5 flex items-center justify-center gap-2 text-xs text-[#98A89F]">
             <SiscomSpinner tone="gold" className="w-4 h-4" />
@@ -768,7 +768,7 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
           </div>
 
           {showInlineNewFolder && (
-            <div className="rounded-lg border border-white/10 bg-[#0B0F0D] p-3 space-y-2">
+            <div className="siscom-liquid-subcard rounded-lg p-3 space-y-2">
               <div className="text-[11px] text-[#98A89F]">
                 Criar dentro de:{' '}
                 <span className="text-[#F4E6C4] font-medium">

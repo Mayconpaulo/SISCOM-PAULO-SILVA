@@ -36,8 +36,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       const containerClass = this.props.inline
-        ? 'flex-1 bg-[#0B0E0D] text-[#E4EAE6] flex items-center justify-center p-6'
-        : 'min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex items-center justify-center p-6';
+        ? 'flex-1 bg-transparent text-[#E4EAE6] flex items-center justify-center p-6'
+        : 'min-h-screen bg-[#080B09] text-[#E4EAE6] flex items-center justify-center p-6';
 
       return (
         <div className={containerClass}>
@@ -52,7 +52,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                     ? `Instabilidade isolada em ${this.props.scopeLabel}`
                     : 'Recuperação automática disponível'}
                 </h1>
-                <p className="text-sm text-[#98A89F] leading-relaxed">
+                <p className="text-sm text-[#B8B3A6] leading-relaxed">
                   {this.props.scopeLabel
                     ? 'As demais funções do SISCOM continuam intactas. Clique abaixo para recarregar esta função.'
                     : 'A visualização encontrou um estado inesperado. Clique abaixo para restaurar o SISCOM.'}
@@ -60,14 +60,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               </div>
             </div>
 
-            <div className="rounded-lg bg-[#0E1211] border border-white/10 p-3 text-xs font-mono text-[#98A89F] break-words">
+            <div className="siscom-liquid-subcard rounded-lg p-3 text-xs font-mono text-[#B8B3A6] break-words">
               {this.state.message}
             </div>
 
             <button
               type="button"
               onClick={this.handleRecover}
-              className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-lg bg-[#2D5A43] hover:bg-[#376C51] px-4 py-2 text-sm font-medium text-white transition-colors"
+              className="siscom-btn siscom-btn-primary w-full min-h-[44px] text-sm"
             >
               <RefreshCw className="w-4 h-4" />
               {this.props.scopeLabel ? `Recarregar ${this.props.scopeLabel}` : 'Restaurar gerador'}

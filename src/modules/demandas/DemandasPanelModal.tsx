@@ -276,7 +276,7 @@ export const DemandasPanelModal: React.FC = () => {
         {formOpen && (
           <form
             onSubmit={handleSaveForm}
-            className="rounded-[12px] border border-[#C29B56]/30 bg-[#0B100E] p-4 space-y-3"
+            className="rounded-[14px] siscom-liquid-subcard !border-[#C9A961]/30 p-4 space-y-3"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#DFBC75]">
@@ -406,7 +406,7 @@ export const DemandasPanelModal: React.FC = () => {
 
         {/* Filter Tabs + Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="inline-flex items-center rounded-[9px] bg-[#0B100E] border border-white/[0.08] p-1 overflow-x-auto">
+          <div className="inline-flex items-center siscom-tab-track overflow-x-auto">
             {(
               [
                 { id: 'pendentes', label: `Pendentes (${pendingDemandas.length})` },

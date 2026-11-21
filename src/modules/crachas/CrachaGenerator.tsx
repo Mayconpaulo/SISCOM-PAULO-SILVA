@@ -709,7 +709,7 @@ interface ColorFieldProps {
 const ColorField: React.FC<ColorFieldProps> = ({ id, label, value, onChange }) => (
   <label
     htmlFor={id}
-    className="flex items-center justify-between gap-2.5 min-h-[46px] rounded-lg bg-[#0C100F] border border-white/[0.08] px-3 py-2 cursor-pointer hover:border-white/[0.18] transition-colors duration-150"
+    className="siscom-liquid-subcard flex items-center justify-between gap-2.5 min-h-[46px] rounded-lg px-3 py-2 cursor-pointer hover:border-white/[0.22] transition-colors duration-150"
   >
     <div className="min-w-0">
       <span className="block text-xs text-[#C6D4CC] truncate">{label}</span>
@@ -1213,8 +1213,8 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             }}
             className={`w-full rounded-xl border border-dashed px-4 py-4 flex flex-col items-center justify-center gap-1.5 text-center transition-all duration-180 active:scale-[0.99] disabled:opacity-60 cursor-pointer ${
               isDraggingDoc
-                ? 'border-[#E5C17B] bg-[#22281D]'
-                : 'border-[#C8A461]/50 bg-[#141712] hover:bg-[#1B1F18] hover:border-[#C8A461]/75'
+                ? 'border-[#E5C17B] bg-[#222B1F]/70 backdrop-blur-md'
+                : 'border-[#C8A461]/50 bg-[#121B15]/52 hover:bg-[#1A261E]/64 backdrop-blur-md hover:border-[#C8A461]/75'
             }`}
           >
             {isImportingDoc ? (
@@ -1251,7 +1251,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 animate="animate"
                 exit="exit"
                 transition={UI_TRANSITION}
-                className="rounded-xl bg-[#0B0E0D] border border-[#C8A461]/28 p-3.5 space-y-3"
+                className="siscom-liquid-subcard rounded-xl !border-[#C8A461]/30 p-3.5 space-y-3"
               >
                 {/* Uploaded files list */}
                 <div className="space-y-2 border-b border-white/[0.07] pb-2.5">
@@ -1279,7 +1279,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     {importedDocs.map((src, idx) => (
                       <div
                         key={src.id}
-                        className="rounded-lg bg-[#121715] border border-white/[0.08] px-2.5 py-2 space-y-2"
+                        className="rounded-lg bg-white/[0.04] border border-white/[0.10] px-2.5 py-2 space-y-2"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
@@ -1316,7 +1316,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                           {src.columns.map((col) => (
                             <div
                               key={col.id}
-                              className="rounded-md bg-[#0B0E0D] border border-white/[0.06] px-2 py-1.5 min-w-0"
+                              className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2 py-1.5 min-w-0"
                             >
                               <div className="flex items-center justify-between gap-1.5 min-w-0">
                                 <span
@@ -1395,7 +1395,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 {activeMode === 'identificacao' ? (
                   <div className="space-y-3">
                     {/* Flexible Prefix + Main Name Assembly */}
-                    <div className="rounded-lg bg-[#101513] border border-[#C8A461]/22 p-2.5 space-y-2.5">
+                    <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
                       <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
                         Montagem do Nome (Prefixo + Principal)
                       </span>
@@ -1436,7 +1436,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                           ? composed.toUpperCase()
                           : composed;
                         return (
-                          <div className="rounded-md bg-[#0B0E0D] border border-white/[0.06] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
+                          <div className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
                             <span className="text-[10px] text-[#83B499] shrink-0">
                               Prévia (1º crachá):
                             </span>
@@ -1487,7 +1487,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 ) : (
                   <div className="space-y-3">
                     {/* Flexible Prefix + Main Text Assembly (RP) */}
-                    <div className="rounded-lg bg-[#101513] border border-[#C8A461]/22 p-2.5 space-y-2.5">
+                    <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
                       <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
                         Montagem do Texto Central (Prefixo + Principal)
                       </span>
@@ -1528,7 +1528,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                           ? composed.toUpperCase()
                           : composed;
                         return (
-                          <div className="rounded-md bg-[#0B0E0D] border border-white/[0.06] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
+                          <div className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
                             <span className="text-[10px] text-[#83B499] shrink-0">
                               Prévia (1º crachá):
                             </span>
@@ -1782,7 +1782,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
           <label
             htmlFor="cracha-uppercase"
-            className="flex items-center justify-between gap-3 min-h-[42px] px-3 rounded-lg bg-[#0C100F] border border-white/[0.06] cursor-pointer select-none hover:border-white/[0.12] transition-colors"
+            className="siscom-liquid-subcard flex items-center justify-between gap-3 min-h-[42px] px-3 rounded-lg cursor-pointer select-none hover:border-white/[0.2] transition-colors"
           >
             <span className="text-xs text-[#C6D4CC]">Sempre maiúsculas</span>
             <input
@@ -1861,7 +1861,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
               return (
               <div
                 key={`entry-${idx}`}
-                className="w-[268px] sm:w-[290px] shrink-0 snap-start rounded-lg bg-[#0C100F] border border-white/[0.08] p-3 space-y-2.5"
+                className="siscom-liquid-subcard w-[268px] sm:w-[290px] shrink-0 snap-start rounded-lg p-3 space-y-2.5"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">

@@ -544,7 +544,7 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
             </label>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-[#0C100F] border border-white/8 px-3 py-2 text-xs">
+          <div className="siscom-liquid-subcard flex items-center justify-between rounded-lg px-3 py-2 text-xs">
             <span className="text-[#98A89F]">Máx. A4</span>
             <span className="font-mono font-semibold text-[#83B499]">
               {layout.maxPerPage} {layout.maxPerPage === 1 ? 'cartão' : 'cartões'}
@@ -579,8 +579,8 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
                   onClick={() => handleCountChange(n)}
                   className={`min-h-[40px] rounded-lg text-sm font-mono font-semibold transition-all active:scale-[0.96] border ${
                     layout.effectiveCount === n
-                      ? 'bg-[#2D5A43] border-[#83B499]/60 text-white'
-                      : 'bg-[#0C100F] border-white/10 text-[#98A89F] hover:text-[#E4EAE6]'
+                      ? 'bg-[#2D5A43]/80 border-[#83B499]/65 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]'
+                      : 'bg-[#0A110E]/45 backdrop-blur-md border-white/12 text-[#B8B3A6] hover:text-[#E4EAE6] hover:border-white/25'
                   }`}
                 >
                   {n}

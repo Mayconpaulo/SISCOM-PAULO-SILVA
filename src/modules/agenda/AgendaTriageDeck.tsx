@@ -145,7 +145,7 @@ const SwipeCard: React.FC<SwipeCardProps> = ({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, transition: { duration: 0.14 } }}
       transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className="relative w-full rounded-2xl border border-[#C29B56]/35 bg-gradient-to-b from-[#17211C] to-[#0F1412] p-5 shadow-2xl select-none cursor-grab active:cursor-grabbing space-y-4 overflow-hidden touch-pan-y"
+      className="relative w-full metal-elevated rounded-2xl p-5 select-none cursor-grab active:cursor-grabbing space-y-4 overflow-hidden touch-pan-y"
     >
       {/* Dynamic directional tint washes while dragging */}
       <motion.div
@@ -189,7 +189,7 @@ const SwipeCard: React.FC<SwipeCardProps> = ({
       </div>
 
       {/* Metadata */}
-      <div className="relative z-10 rounded-xl border border-white/8 bg-[#0C100F]/90 p-3.5 space-y-2 text-xs text-[#C6D4CC]">
+      <div className="relative z-10 rounded-xl siscom-liquid-subcard p-3.5 space-y-2 text-xs text-[#D5DFD9]">
         <div className="flex items-center gap-2">
           <Clock className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
           <span className="tabular-nums">

@@ -392,7 +392,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             if (files.length > 0) void handleImportFiles(files);
           }}
           className={`metal-surface rounded-xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 transition-colors duration-200 ${
-            isDraggingFile ? 'border-[#C8A461]/70 bg-[#18201B]' : ''
+            isDraggingFile ? 'border-[#C8A461]/70 bg-[#1B2A22]/70' : ''
           }`}
         >
           <div className="flex items-center gap-3.5">
@@ -469,7 +469,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="w-9 h-9 rounded-lg bg-[#0C100F] border border-white/[0.08] flex items-center justify-center text-[#83B499] shrink-0">
+                  <div className="w-9 h-9 rounded-lg siscom-liquid-subcard flex items-center justify-center text-[#83B499] shrink-0">
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <span className="font-mono text-[11px] text-[#83B499]">
@@ -747,7 +747,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             {activeDoc.columns.map((col, idx) => (
               <div
                 key={col.id}
-                className="rounded-lg bg-[#0C100F] border border-white/[0.08] p-3 space-y-2.5"
+                className="siscom-liquid-subcard rounded-lg p-3 space-y-2.5"
               >
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] text-[#83B499] w-5 shrink-0">

@@ -535,7 +535,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                   type="button"
                   disabled={Boolean(parseProgress)}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full min-h-[44px] rounded-lg border border-dashed border-[#83B499]/45 bg-[#0E1613] hover:bg-[#14201B] disabled:opacity-60 px-3 py-2.5 flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-[#E4EAE6] transition-all active:scale-[0.985]"
+                  className="w-full min-h-[44px] rounded-lg border border-dashed border-[#83B499]/45 bg-[#0F1B16]/52 hover:bg-[#172921]/65 backdrop-blur-md disabled:opacity-60 px-3 py-2.5 flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-[#E4EAE6] transition-all active:scale-[0.985]"
                 >
                   {parseProgress ? (
                     <SiscomSpinner className="w-4 h-4" tone="olive" />
@@ -552,7 +552,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 </button>
 
                 {parseProgress && (
-                  <div className="rounded-lg bg-[#0C100F] border border-white/8 p-3 space-y-2">
+                  <div className="siscom-liquid-subcard rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-[#C6D4CC]">{parseProgress.label}</span>
                       <span className="font-mono text-[#83B499]">{parseProgress.pct}%</span>
@@ -626,11 +626,11 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                   </div>
 
                   {entries.length === 0 ? (
-                    <p className="rounded-lg bg-[#0C100F] border border-white/8 p-3 text-xs text-[#98A89F]">
+                    <p className="siscom-liquid-subcard rounded-lg p-3 text-xs text-[#B8B3A6]">
                       Envie o PDF mensal da relação.
                     </p>
                   ) : (
-                    <div className="max-h-56 overflow-y-auto rounded-lg bg-[#0C100F] border border-white/8 divide-y divide-white/6">
+                    <div className="siscom-liquid-subcard max-h-56 overflow-y-auto rounded-lg divide-y divide-white/8">
                       {entries.map((entry, idx) => {
                         const isSel = entry.id === selectedEntry?.id;
                         const formatted = formatAniversarianteRecipientLine(
@@ -665,7 +665,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
 
                 {/* Selected Row Quick Editor */}
                 {selectedEntry && (
-                  <div className="rounded-lg bg-[#0C100F] border border-white/8 p-3 space-y-2.5">
+                  <div className="siscom-liquid-subcard rounded-lg p-3 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-medium text-[#83B499]">Selecionado</span>
                       <button

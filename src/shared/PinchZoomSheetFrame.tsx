@@ -244,14 +244,14 @@ export const PinchZoomSheetFrame: React.FC<PinchZoomSheetFrameProps> = ({
   return (
     <div className={`w-full ${maxWidthClass} mx-auto relative print-zoom-reset print-wrapper`}>
       {isZoomed && (
-        <div className="no-print mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/12 bg-[#121715]/95 px-2.5 py-1.5 text-xs text-[#E4EAE6]">
+        <div className="no-print mb-2 flex items-center justify-between gap-2 rounded-xl siscom-liquid-panel px-2.5 py-1.5 text-xs text-[#E8E4D8]">
           <span className="font-mono text-[#E5C17B]">{Math.round(zoom * 100)}%</span>
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => adjustZoomStep(-0.35)}
               aria-label="Diminuir zoom"
-              className="h-7 w-7 inline-flex items-center justify-center rounded border border-white/10 bg-[#0E1211] hover:bg-white/10 text-[#C6D4CC]"
+              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-white/14 bg-white/[0.06] hover:bg-white/[0.12] text-[#E8E4D8] cursor-pointer"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
@@ -259,14 +259,14 @@ export const PinchZoomSheetFrame: React.FC<PinchZoomSheetFrameProps> = ({
               type="button"
               onClick={() => adjustZoomStep(0.35)}
               aria-label="Aumentar zoom"
-              className="h-7 w-7 inline-flex items-center justify-center rounded border border-white/10 bg-[#0E1211] hover:bg-white/10 text-[#C6D4CC]"
+              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-white/14 bg-white/[0.06] hover:bg-white/[0.12] text-[#E8E4D8] cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setZoom(1)}
-              className="h-7 px-2 inline-flex items-center gap-1 rounded border border-[#C29B56]/40 bg-[#1B1913] hover:bg-[#252118] text-[11px] font-medium text-[#E5C17B]"
+              className="h-7 px-2.5 inline-flex items-center gap-1 rounded-lg border border-[#C9A961]/42 bg-[#C9A961]/14 hover:bg-[#C9A961]/24 text-[11px] font-medium text-[#F4E6C4] cursor-pointer"
             >
               <Maximize2 className="w-3 h-3" />
               <span>Folha inteira</span>

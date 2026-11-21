@@ -482,7 +482,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 min-h-[44px] rounded-lg border border-dashed border-[#83B499]/45 bg-[#0E1613] hover:bg-[#14201B] px-3 py-2 flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-[#E4EAE6] transition-all active:scale-[0.985] min-w-0"
+                    className="flex-1 min-h-[44px] rounded-lg border border-dashed border-[#83B499]/45 bg-[#0F1B16]/52 hover:bg-[#172921]/65 backdrop-blur-md px-3 py-2 flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-[#E4EAE6] transition-all active:scale-[0.985] min-w-0"
                   >
                     <Upload className="w-4 h-4 text-[#83B499] shrink-0" />
                     <span className="truncate">
@@ -504,7 +504,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                 </div>
 
                 {photoUrl && miniCropGeom && (
-                  <div className="rounded-xl bg-[#0C100F] border border-white/8 p-3.5 space-y-3.5">
+                  <div className="siscom-liquid-subcard rounded-xl p-3.5 space-y-3.5">
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="inline-flex items-center gap-1.5 text-[#C6D4CC] font-medium">
                         <Move className="w-3.5 h-3.5 text-[#83B499]" />

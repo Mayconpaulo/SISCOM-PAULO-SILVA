@@ -10,6 +10,7 @@ import {
   signOutCurrentUser,
 } from './authService';
 import { SISCOM_EASE, stepSlideVariants } from '../../shared/motion';
+import { OperationalBackdrop } from '../../shared/OperationalBackdrop';
 import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
 
 interface FirstLoginOnboardingProps {
@@ -102,9 +103,10 @@ export function FirstLoginOnboarding({ user, account }: FirstLoginOnboardingProp
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: SISCOM_EASE }}
-      className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col items-center justify-center px-4 py-8"
+      className="min-h-screen bg-[#080B09] text-[#E4EAE6] flex flex-col items-center justify-center px-4 py-8 relative"
     >
-      <div className="w-full max-w-[420px] flex flex-col items-center space-y-6">
+      <OperationalBackdrop mode="auth" />
+      <div className="relative z-10 w-full max-w-[420px] flex flex-col items-center space-y-6">
         <div className="flex flex-col items-center text-center space-y-2">
           <img
             src="/assets/logo_arma_comunicacoes.png"

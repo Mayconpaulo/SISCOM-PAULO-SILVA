@@ -36,7 +36,7 @@ export const DemandasNotificationToasts: React.FC = () => {
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 24, scale: 0.96 }}
               transition={{ duration: 0.2, ease: SISCOM_EASE }}
-              className={`pointer-events-auto rounded-[12px] border ${borderTone} bg-[#0F1513]/96 backdrop-blur-md shadow-[0_14px_38px_rgba(0,0,0,0.62)] p-3.5 space-y-2.5`}
+              className={`pointer-events-auto metal-elevated rounded-[14px] !border ${borderTone} p-3.5 space-y-2.5`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2.5 min-w-0">

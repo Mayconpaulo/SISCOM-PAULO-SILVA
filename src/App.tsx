@@ -31,6 +31,7 @@ import {
   MODULE_LOCKUP_TRANSITION,
   SISCOM_EASE,
 } from './shared/motion';
+import { OperationalBackdrop } from './shared/OperationalBackdrop';
 import { SiscomSpinner } from './shared/ui';
 
 type ViewStage = 'boot' | 'login' | 'onboarding' | 'home' | 'module';
@@ -324,11 +325,12 @@ function WorkspaceShell() {
 
   if (currentView === 'boot') {
     return (
-      <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-[#080B09] text-[#E4EAE6] flex flex-col items-center justify-center gap-4 relative">
+        <OperationalBackdrop mode="auth" />
         <motion.div
           layoutId="siscom-crest"
           transition={CREST_LAYOUT_TRANSITION}
-          className="w-16 h-16 flex items-center justify-center"
+          className="relative z-10 w-16 h-16 flex items-center justify-center"
         >
           <img
             src="/assets/logo_arma_comunicacoes.png"
@@ -336,7 +338,7 @@ function WorkspaceShell() {
             className="w-full h-full object-contain opacity-95"
           />
         </motion.div>
-        <div className="inline-flex items-center gap-2 text-xs text-[#98A89F]">
+        <div className="relative z-10 inline-flex items-center gap-2 text-xs text-[#B8B3A6]">
           <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
           <span className="font-mono tracking-wide">Carregando...</span>
         </div>
@@ -371,18 +373,21 @@ function WorkspaceShell() {
         activeScreen !== 'home' ? 'lg:h-screen lg:overflow-hidden' : ''
       }`}
     >
-      {/* Expanding backdrop surface when opening a module */}
+      {/* Persistent Operational Backdrop for all internal module views */}
+      {activeScreen !== 'home' && <OperationalBackdrop mode="workspace" />}
+
+      {/* Expanding translucent surface transition when opening a module */}
       {activeScreen !== 'home' && (
         <motion.div
           layoutId={`module-surface-${activeScreen}`}
           transition={MODULE_EXPAND_TRANSITION}
-          className="no-print fixed inset-0 bg-[#080B09] pointer-events-none z-0"
+          className="no-print fixed inset-0 bg-[#080B09]/25 pointer-events-none z-0"
         />
       )}
 
-      {/* Minimalist Top Bar (Module Views) */}
+      {/* Liquid Glass Top Bar (Module Views) */}
       {activeScreen !== 'home' && (
-        <header className="no-print sticky top-0 z-30 h-14 shrink-0 px-3.5 sm:px-6 border-b border-[#C29B56]/18 bg-[#0C110F]/94 backdrop-blur-md grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <header className="no-print siscom-liquid-bar sticky top-0 z-30 h-14 shrink-0 px-3.5 sm:px-6 border-b border-white/[0.11] grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <motion.div
             initial={{ opacity: 0, x: -6 }}
             animate={{ opacity: 1, x: 0 }}
@@ -392,9 +397,9 @@ function WorkspaceShell() {
             <button
               type="button"
               onClick={navigateBackToHome}
-              className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs sm:text-sm !border-[#C29B56]/25 hover:!border-[#C29B56]/48"
+              className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs sm:text-sm !border-[#C9A961]/28 hover:!border-[#C9A961]/55"
             >
-              <ArrowLeft className="w-4 h-4 text-[#C8A461] shrink-0" />
+              <ArrowLeft className="w-4 h-4 text-[#C9A961] shrink-0" />
               <span>Voltar</span>
             </button>
           </motion.div>
@@ -403,14 +408,14 @@ function WorkspaceShell() {
             <motion.div
               layoutId={`module-icon-${activeScreen}`}
               transition={MODULE_LOCKUP_TRANSITION}
-              className="w-8 h-8 shrink-0 rounded-[8px] bg-[#0B110E]/90 border border-[#C29B56]/35 flex items-center justify-center text-[#C8A461] shadow-[inset_0_1px_0_rgba(244,230,196,0.12)]"
+              className="w-8 h-8 shrink-0 rounded-[9px] bg-[#0E1813]/65 backdrop-blur-md border border-[#C9A961]/38 flex items-center justify-center text-[#DFBC75] shadow-[inset_0_1px_0.5px_rgba(255,250,236,0.22)]"
             >
               {renderScreenIcon(activeScreen, 'w-4 h-4 sm:w-[18px] sm:h-[18px]')}
             </motion.div>
             <motion.h1
               layoutId={`module-title-${activeScreen}`}
               transition={MODULE_LOCKUP_TRANSITION}
-              className="font-display text-sm sm:text-base font-semibold tracking-wide text-[#F4E6C4] truncate whitespace-nowrap"
+              className="font-display text-sm sm:text-base font-semibold tracking-wide text-[#F4E6C4] truncate whitespace-nowrap drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
             >
               {getScreenTitle(activeScreen)}
             </motion.h1>

@@ -40,7 +40,7 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
     <main className="workspace-split-container flex-1 w-full flex flex-col lg:flex-row lg:h-full lg:min-h-0 lg:overflow-hidden print-wrapper">
       {/* Left Fixed Sidebar (vertical leg of the L on desktop) */}
       <aside
-        className={`no-print w-full ${sidebarWidthClass} shrink-0 p-3.5 sm:p-5 lg:p-4 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-[#C29B56]/16 lg:bg-[#0D1210]/96`}
+        className={`no-print w-full ${sidebarWidthClass} shrink-0 p-3.5 sm:p-5 lg:p-4 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-white/[0.11] siscom-liquid-sidebar`}
       >
         {sidebar}
       </aside>
@@ -56,11 +56,11 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
 
         {bottomBar && (
           <div
-            className={`no-print shrink-0 bg-[#0E1311]/96 backdrop-blur-md px-3.5 sm:px-5 py-2.5 ${
+            className={`no-print siscom-liquid-bar shrink-0 px-3.5 sm:px-5 py-2.5 ${
               mobileBottomBarPosition === 'top'
-                ? 'order-first lg:order-last border-b border-[#C29B56]/18 lg:border-b-0 lg:border-t lg:border-[#C29B56]/18'
-                : 'border-t border-[#C29B56]/18'
-            } lg:shadow-[0_-10px_24px_-18px_rgba(0,0,0,0.85)] ${bottomBarClassName}`}
+                ? 'order-first lg:order-last border-b border-white/[0.12] lg:border-b-0 lg:border-t lg:border-white/[0.12]'
+                : 'border-t border-white/[0.12]'
+            } lg:shadow-[0_-12px_28px_-16px_rgba(0,0,0,0.8)] ${bottomBarClassName}`}
           >
             {bottomBar}
           </div>

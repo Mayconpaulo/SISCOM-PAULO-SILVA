@@ -50,10 +50,10 @@ export const SiscomAlert: React.FC<SiscomAlertProps> = ({
   onDismiss,
 }) => {
   const styles: Record<NonNullable<SiscomAlertProps['tone']>, string> = {
-    success: 'bg-[#2D5A43]/18 border-[#83B499]/30 text-[#C9E2D4]',
-    error: 'bg-[#2B1416]/85 border-red-400/30 text-red-200',
-    warning: 'bg-[#221D12]/90 border-[#C29B56]/35 text-[#F0D69A]',
-    info: 'bg-[#141B18] border-white/12 text-[#C6D4CC]',
+    success: 'bg-[#1D3E2E]/55 backdrop-blur-lg border-[#83B499]/32 text-[#D2ECDD]',
+    error: 'bg-[#2B1215]/68 backdrop-blur-lg border-red-400/35 text-red-200',
+    warning: 'bg-[#261F12]/68 backdrop-blur-lg border-[#C9A961]/38 text-[#F2DAA2]',
+    info: 'bg-[#101815]/60 backdrop-blur-lg border-white/[0.14] text-[#D8E2DC]',
   };
 
   const Icon =
@@ -151,14 +151,14 @@ export const SiscomModal: React.FC<SiscomModalProps> = ({
                 }
               : undefined
           }
-          className={`no-print fixed inset-0 ${zIndexClass} flex items-center justify-center bg-[#060908]/80 backdrop-blur-md p-4 overflow-y-auto`}
+          className={`no-print fixed inset-0 ${zIndexClass} flex items-center justify-center bg-[#040706]/64 backdrop-blur-lg p-4 overflow-y-auto`}
         >
           <motion.div
             variants={modalPanelVariants}
             initial="initial"
             animate="animate"
             exit="exit"
-            className={`metal-elevated w-full ${maxWidthClass} rounded-2xl p-5 sm:p-6 border border-[#C29B56]/25 shadow-2xl space-y-4 my-auto`}
+            className={`metal-elevated w-full ${maxWidthClass} rounded-2xl p-5 sm:p-6 space-y-4 my-auto`}
           >
             {title && (
               <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/8">
@@ -232,15 +232,15 @@ export function SiscomSegmentedTabs<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(opt.value)}
-            className={`relative ${minH} px-3 rounded-[7px] font-medium transition-colors whitespace-nowrap select-none cursor-pointer ${
-              active ? 'text-white' : 'text-[#98A89F] hover:text-[#E4EAE6]'
+            className={`relative ${minH} px-3 rounded-[8px] font-medium transition-colors whitespace-nowrap select-none cursor-pointer ${
+              active ? 'text-[#F8F3E6]' : 'text-[#B8B3A6] hover:text-[#E8E4D8]'
             }`}
           >
             {active && (
               <motion.span
                 layoutId={layoutId}
                 transition={MICRO_TRANSITION}
-                className="absolute inset-0 rounded-[7px] bg-[#2D5A43] shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_2px_8px_-2px_rgba(0,0,0,0.5)]"
+                className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-[#3A7456]/85 to-[#254E39]/90 border border-[#96C8AC]/30 shadow-[inset_0_1px_0.5px_rgba(255,255,255,0.24),0_4px_12px_-4px_rgba(0,0,0,0.6)]"
               />
             )}
             <span className="relative z-10">{opt.label}</span>

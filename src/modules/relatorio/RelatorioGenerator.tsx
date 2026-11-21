@@ -775,7 +775,7 @@ export const RelatorioGenerator: React.FC = () => {
           )}
 
           {/* Active Friday→Thursday Period Bar (quick switch anytime) */}
-          <div className="rounded-lg bg-[#0C100F] border border-white/8 p-3 space-y-2.5">
+          <div className="siscom-liquid-subcard rounded-lg p-3 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <span className="block text-[10px] uppercase tracking-wider text-[#98A89F]">
@@ -841,8 +841,8 @@ export const RelatorioGenerator: React.FC = () => {
                           onClick={() => handlePickPeriodForActiveReport(period.headerLabel)}
                           className={`p-2.5 rounded-lg border text-left transition-all active:scale-[0.98] ${
                             selected
-                              ? 'bg-[#2D5A43]/35 border-[#83B499] text-[#F4E6C4]'
-                              : 'bg-[#121715] border-white/10 text-[#C6D4CC] hover:border-[#C29B56]/45'
+                              ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
+                              : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/45'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1">
@@ -968,10 +968,10 @@ export const RelatorioGenerator: React.FC = () => {
                       onClick={() => handleJumpToStep(idx)}
                       className={`min-h-[46px] rounded-lg px-2.5 py-1.5 border text-left transition-all active:scale-[0.98] flex flex-col justify-center gap-0.5 ${
                         isActive
-                          ? 'bg-[#191711] border-[#C29B56]/75 text-[#F4E6C4]'
+                          ? 'bg-[#241E12]/65 backdrop-blur-md border-[#C29B56]/75 text-[#F4E6C4]'
                           : isDone
-                            ? 'bg-[#2D5A43]/22 border-[#83B499]/40 text-[#B4D8C5] hover:border-[#83B499]/70'
-                            : 'bg-[#0C100F] border-white/8 text-[#7A8A82] hover:border-white/18'
+                            ? 'bg-[#2D5A43]/28 backdrop-blur-md border-[#83B499]/45 text-[#B4D8C5] hover:border-[#83B499]/70'
+                            : 'bg-[#0A110E]/45 backdrop-blur-md border-white/10 text-[#98A89F] hover:border-white/22'
                       }`}
                     >
                       <span className="flex items-center justify-between text-[10px] font-mono">
@@ -1042,8 +1042,8 @@ export const RelatorioGenerator: React.FC = () => {
                           aria-pressed={selected}
                           className={`p-3 rounded-lg border text-left transition-all active:scale-[0.98] space-y-1 ${
                             selected
-                              ? 'bg-[#2D5A43]/35 border-[#83B499] text-[#F4E6C4]'
-                              : 'bg-[#0C100F] border-white/10 text-[#C6D4CC] hover:border-[#C29B56]/50'
+                              ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
+                              : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/50'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1.5">
@@ -1105,7 +1105,7 @@ export const RelatorioGenerator: React.FC = () => {
                   exit="exit"
                   className="space-y-3"
                 >
-                  <div className="rounded-lg bg-[#0C100F] border border-white/8 px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+                  <div className="siscom-liquid-subcard rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
                     <span className="text-[#98A89F]">Semana selecionada:</span>
                     <span className="font-semibold text-[#E5C17B] truncate">
                       {activePeriodHeaderForDays}
@@ -1152,8 +1152,8 @@ export const RelatorioGenerator: React.FC = () => {
                           onClick={() => handleDayButtonClick(day)}
                           className={`min-h-[48px] py-2 px-1.5 rounded-lg border text-center transition-all active:scale-[0.97] ${
                             isPicked
-                              ? 'bg-[#2D5A43]/40 border-[#83B499] text-[#F4E6C4]'
-                              : 'bg-[#0C100F] border-white/10 text-[#C6D4CC] hover:border-[#C29B56]/50'
+                              ? 'bg-[#2D5A43]/45 border-[#83B499] text-[#F4E6C4]'
+                              : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/50'
                           }`}
                         >
                           <span className="block text-[10px] uppercase text-[#98A89F]">
@@ -1178,7 +1178,7 @@ export const RelatorioGenerator: React.FC = () => {
                           );
                         }
                       }}
-                      className="min-h-[48px] py-2 px-1.5 rounded-lg border border-[#C29B56]/35 bg-[#191711] hover:bg-[#231F16] text-center transition-all active:scale-[0.97]"
+                      className="min-h-[48px] py-2 px-1.5 rounded-lg border border-[#C29B56]/40 bg-[#241E12]/60 hover:bg-[#2F2717]/70 backdrop-blur-md text-center transition-all active:scale-[0.97]"
                     >
                       <span className="block text-[10px] uppercase text-[#E5C17B]">
                         Sex→Qui
@@ -1231,7 +1231,7 @@ export const RelatorioGenerator: React.FC = () => {
                   exit="exit"
                   className="space-y-3"
                 >
-                  <div className="rounded-lg bg-[#0C100F] border border-white/8 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <div className="siscom-liquid-subcard rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                     <span className="text-[#98A89F]">Data do evento:</span>
                     <span className="font-semibold text-[#83B499]">{qDataPeriodo}</span>
                   </div>
@@ -1263,7 +1263,7 @@ export const RelatorioGenerator: React.FC = () => {
                   exit="exit"
                   className="space-y-3"
                 >
-                  <div className="rounded-lg bg-[#0C100F] border border-white/8 px-3 py-2 space-y-0.5 text-[11px]">
+                  <div className="siscom-liquid-subcard rounded-lg px-3 py-2 space-y-0.5 text-[11px]">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[#98A89F]">Data:</span>
                       <span className="font-semibold text-[#83B499]">{qDataPeriodo}</span>
@@ -1289,8 +1289,8 @@ export const RelatorioGenerator: React.FC = () => {
                             aria-pressed={selected}
                             className={`min-h-[42px] px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center justify-between gap-1.5 transition-all active:scale-[0.98] text-left ${
                               selected
-                                ? 'bg-[#2D5A43]/35 border-[#83B499] text-[#F4E6C4]'
-                                : 'bg-[#0C100F] border-white/10 text-[#C6D4CC] hover:border-[#C29B56]/45'
+                                ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
+                                : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/45'
                             }`}
                           >
                             <span>{opt}</span>
@@ -1312,7 +1312,7 @@ export const RelatorioGenerator: React.FC = () => {
 
                   {/* Formatted Line Preview */}
                   {(qProvidencias.length > 0 || qObservacao.trim()) && (
-                    <div className="rounded-lg bg-[#121916] border border-[#83B499]/28 p-3 space-y-1">
+                    <div className="rounded-lg bg-[#16271F]/55 backdrop-blur-md border border-[#83B499]/32 p-3 space-y-1">
                       <span className="block text-[10px] uppercase tracking-wider text-[#83B499]">
                         Como ficará em 5. Diversos
                       </span>
@@ -1412,7 +1412,7 @@ export const RelatorioGenerator: React.FC = () => {
               {activeDoc.diversosEventos.map((ev, idx) => (
                 <li
                   key={ev.id}
-                  className="rounded-lg bg-[#0C100F] border border-white/8 p-3 space-y-2"
+                  className="siscom-liquid-subcard rounded-lg p-3 space-y-2"
                 >
                   <p className="text-xs text-[#E4EAE6] leading-relaxed">
                     {formatRelatorioEventText(ev)}

@@ -1284,7 +1284,7 @@ export function AgendaComsoc() {
     return (
       <article
         key={ev.id}
-        className={`rounded-xl border border-white/10 border-l-[3px] ${catMeta.borderClass} bg-[#121815] p-3.5 sm:p-4 space-y-2.5 transition-colors hover:border-white/18 ${
+        className={`rounded-xl border border-white/[0.12] border-l-[3px] ${catMeta.borderClass} bg-[#0E1612]/52 backdrop-blur-md p-3.5 sm:p-4 space-y-2.5 transition-colors hover:border-white/22 shadow-[inset_0_1px_0_rgba(255,250,236,0.12)] ${
           isCancelled ? 'opacity-65' : ''
         }`}
         style={googleColorHex ? { borderLeftColor: googleColorHex } : undefined}
@@ -1579,7 +1579,7 @@ export function AgendaComsoc() {
           <div className="space-y-4">
             {/* Dual Calendar Switch (COMSOC vs Geral) + Actions */}
             <div className="siscom-card p-3.5 space-y-3">
-              <div className="grid grid-cols-2 rounded-lg border border-white/10 bg-[#0C100F] p-1 gap-1">
+              <div className="grid grid-cols-2 rounded-xl border border-white/[0.12] bg-black/32 backdrop-blur-md p-1 gap-1">
                 <button
                   type="button"
                   onClick={() => setCalendarScope('comsoc')}
@@ -1676,7 +1676,7 @@ export function AgendaComsoc() {
             </div>
 
             {/* Institutional Google Calendar Strip */}
-            <div className="rounded-xl border border-[#C29B56]/25 bg-[#0E1311] p-3.5 space-y-3">
+            <div className="rounded-xl siscom-liquid-subcard !border-[#C9A961]/28 p-3.5 space-y-3">
               {isAdmin ? (
                 <>
                   <div className="space-y-2.5">
@@ -2009,18 +2009,18 @@ export function AgendaComsoc() {
             /* ── MONTHLY VIEW ─────────────────────────────────────────────────── */
             <div className="space-y-4">
               <section className="siscom-card overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-white/8 bg-[#0E1311]">
+            <div className="grid grid-cols-7 border-b border-white/10 bg-black/28">
               {WEEKDAYS_PT.map((wd) => (
                 <div
                   key={wd}
-                  className="py-2.5 text-center text-[11px] font-mono uppercase tracking-wider text-[#98A89F]"
+                  className="py-2.5 text-center text-[11px] font-mono uppercase tracking-wider text-[#B8B3A6]"
                 >
                   {wd}
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 divide-x divide-y divide-white/[0.06]">
+            <div className="grid grid-cols-7 divide-x divide-y divide-white/[0.07]">
               {monthDays.map((day) => {
                 const key = formatLocalDateKey(day);
                 const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
@@ -2035,10 +2035,10 @@ export function AgendaComsoc() {
                     onClick={() => setSelectedDay(startOfDay(day))}
                     className={`min-h-[84px] sm:min-h-[108px] p-1.5 sm:p-2 text-left flex flex-col gap-1 transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-[#1D2D25]/85 ring-1 ring-inset ring-[#C29B56]/60'
+                        ? 'bg-[#213A2D]/58 ring-1 ring-inset ring-[#C9A961]/65'
                         : isCurrentMonth
-                          ? 'bg-[#121815] hover:bg-[#17201C]'
-                          : 'bg-[#0C100F]/80 opacity-55 hover:opacity-85'
+                          ? 'bg-white/[0.02] hover:bg-white/[0.055]'
+                          : 'bg-black/28 opacity-55 hover:opacity-85'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1">
@@ -2154,7 +2154,7 @@ export function AgendaComsoc() {
                           key={ev.id}
                           type="button"
                           onClick={() => openEditModal(ev)}
-                          className={`w-full text-left rounded-lg border border-white/10 border-l-[3px] ${cat.borderClass} bg-[#0E1311] p-2 space-y-1 hover:border-white/25 cursor-pointer`}
+                          className={`w-full text-left rounded-lg border border-white/[0.12] border-l-[3px] ${cat.borderClass} bg-black/28 hover:bg-white/[0.06] p-2 space-y-1 hover:border-white/25 cursor-pointer transition-colors`}
                           style={customColor ? { borderLeftColor: customColor } : undefined}
                         >
                           <div className="flex items-center justify-between gap-1 text-[10px] font-mono text-[#C8A461]">
@@ -2257,7 +2257,7 @@ export function AgendaComsoc() {
               Nenhum registro de auditoria disponível ainda.
             </div>
           ) : (
-            <div className="divide-y divide-white/[0.06] rounded-xl border border-white/8 bg-[#0E1311]">
+            <div className="divide-y divide-white/[0.07] rounded-xl siscom-liquid-subcard">
               {auditLogs.map((log) => (
                 <div
                   key={log.id}

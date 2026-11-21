@@ -100,10 +100,10 @@ export const PrivacyShieldModal: React.FC<PrivacyShieldModalProps> = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            className="w-full max-w-[400px] metal-elevated rounded-2xl p-6 space-y-5 border border-[#C29B56]/30 shadow-2xl"
+            className="w-full max-w-[400px] metal-elevated rounded-2xl p-6 space-y-5"
           >
             <div className="flex flex-col items-center text-center space-y-2.5">
-              <div className="w-12 h-12 rounded-xl bg-[#141C18] border border-[#C29B56]/35 flex items-center justify-center text-[#E5C17B]">
+              <div className="w-12 h-12 rounded-xl bg-[#14201A]/70 backdrop-blur-md border border-[#C9A961]/38 flex items-center justify-center text-[#E5C17B]">
                 <Lock className="w-5 h-5" />
               </div>
               <h2
@@ -224,14 +224,14 @@ export const PrivacyControlsButton: React.FC<PrivacyControlsButtonProps> = ({
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="Privacidade e proteção sigilosa (Ctrl+Shift+L para bloquear)"
-        className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-[#C29B56]/30 bg-[#161D1A] hover:bg-[#1E2824] hover:border-[#C29B56]/55 px-2.5 text-xs font-medium text-[#E5C17B] transition-colors"
+        className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-[#C9A961]/34 bg-[#101814]/65 backdrop-blur-md hover:bg-[#192620]/75 hover:border-[#C9A961]/60 px-2.5 text-xs font-medium text-[#E5C17B] transition-colors cursor-pointer"
       >
         <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
         <span className="hidden sm:inline">Privacidade</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-[#C29B56]/35 bg-[#101513] shadow-2xl p-3.5 space-y-3 z-50">
+        <div className="absolute right-0 mt-2 w-72 rounded-xl metal-elevated p-3.5 space-y-3 z-50">
           <div className="flex items-center justify-between border-b border-white/10 pb-2">
             <span className="text-xs font-semibold text-[#F4E6C4] flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-[#C8A461]" />
@@ -267,7 +267,7 @@ export const PrivacyControlsButton: React.FC<PrivacyControlsButtonProps> = ({
               id="siscom-autolock-select"
               value={idleMinutes}
               onChange={(e) => onChangeIdleMinutes(Number(e.target.value))}
-              className="w-full h-8 rounded-lg bg-[#0B0E0D] border border-white/12 px-2.5 text-xs text-[#E4EAE6] focus:outline-none focus:border-[#C29B56]"
+              className="siscom-input !min-h-[34px] !py-1 !px-2.5 !text-xs"
             >
               <option value={5}>5 minutos</option>
               <option value={15}>15 minutos (padrão)</option>
@@ -278,7 +278,7 @@ export const PrivacyControlsButton: React.FC<PrivacyControlsButtonProps> = ({
 
           <div className="pt-2 border-t border-white/10 space-y-1.5">
             {confirmWipe ? (
-              <div className="space-y-1.5 rounded-lg bg-red-950/35 border border-red-500/30 p-2.5">
+              <div className="space-y-1.5 rounded-lg bg-red-950/35 backdrop-blur-md border border-red-500/30 p-2.5">
                 <p className="text-[11px] text-red-200 leading-snug">
                   Apagar todos os rascunhos locais de Alterações, Crachás e Documentos deste navegador?
                 </p>
@@ -291,14 +291,14 @@ export const PrivacyControlsButton: React.FC<PrivacyControlsButtonProps> = ({
                       setWipedFeedback(true);
                       window.setTimeout(() => setWipedFeedback(false), 2500);
                     }}
-                    className="flex-1 h-7 rounded bg-red-700 hover:bg-red-600 text-[11px] font-medium text-white transition-colors"
+                    className="flex-1 h-7 rounded bg-red-700/85 hover:bg-red-600/90 text-[11px] font-medium text-white transition-colors"
                   >
                     Confirmar limpeza
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmWipe(false)}
-                    className="h-7 px-2.5 rounded bg-[#181F1C] text-[11px] text-[#C6D4CC]"
+                    className="h-7 px-2.5 rounded bg-white/[0.08] hover:bg-white/[0.14] border border-white/10 text-[11px] text-[#E4EAE6] transition-colors"
                   >
                     Cancelar
                   </button>
@@ -308,7 +308,7 @@ export const PrivacyControlsButton: React.FC<PrivacyControlsButtonProps> = ({
               <button
                 type="button"
                 onClick={() => setConfirmWipe(true)}
-                className="w-full min-h-[34px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-[#1B1314] hover:bg-red-950/45 px-2.5 text-xs text-red-200 transition-colors"
+                className="siscom-btn siscom-btn-danger w-full !min-h-[34px] !px-2.5 !py-1 text-xs"
               >
                 <Eraser className="w-3.5 h-3.5" />
                 <span>Limpar rastros locais agora</span>

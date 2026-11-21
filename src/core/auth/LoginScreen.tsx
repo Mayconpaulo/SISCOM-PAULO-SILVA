@@ -25,6 +25,7 @@ import {
 } from './authService';
 import { FIREBASE_PROJECT_ID } from './firebase';
 import { CREST_LAYOUT_TRANSITION, SISCOM_EASE, stepSlideVariants } from '../../shared/motion';
+import { OperationalBackdrop } from '../../shared/OperationalBackdrop';
 import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
 
 interface LoginScreenProps {
@@ -267,15 +268,8 @@ export function LoginScreen({
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E0D] text-[#E4EAE6] flex flex-col items-center justify-center px-4 py-8 relative">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0"
-        style={{
-          background:
-            'radial-gradient(560px 360px at 50% 20%, rgba(45, 90, 67, 0.14) 0%, rgba(194, 155, 86, 0.04) 44%, rgba(11, 14, 13, 0) 76%)',
-        }}
-      />
+    <div className="min-h-screen bg-[#080B09] text-[#E4EAE6] flex flex-col items-center justify-center px-4 py-8 relative">
+      <OperationalBackdrop mode="auth" />
       <div className="relative z-10 w-full max-w-[400px] flex flex-col items-center space-y-6">
         <div className="flex flex-col items-center text-center space-y-2.5">
           <motion.div
@@ -386,7 +380,7 @@ export function LoginScreen({
 
                 {recoveryStep === 'answer' && recoveryRecord && (
                   <form onSubmit={handleVerifyAnswer} className="space-y-4">
-                    <div className="rounded-xl border border-[#C29B56]/30 bg-[#141A17] px-3.5 py-3 space-y-1">
+                    <div className="rounded-xl siscom-liquid-subcard !border-[#C9A961]/32 px-3.5 py-3 space-y-1">
                       <span className="block text-[11px] text-[#E5C17B]">
                         Pergunta de segurança · @{recoveryRecord.username}
                       </span>

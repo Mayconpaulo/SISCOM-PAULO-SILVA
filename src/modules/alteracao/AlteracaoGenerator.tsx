@@ -1586,7 +1586,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDropAlteracao}
-            className="w-full rounded-xl border border-dashed border-[#C8A461]/45 bg-[#141712] hover:bg-[#1B1F18] hover:border-[#C8A461]/75 px-4 py-4 flex flex-col items-center justify-center gap-1.5 text-center transition-all duration-180 active:scale-[0.99] disabled:opacity-55 cursor-pointer"
+            className="w-full rounded-xl border border-dashed border-[#C8A461]/45 bg-[#121C16]/55 hover:bg-[#1A2820]/65 backdrop-blur-md hover:border-[#C8A461]/75 px-4 py-4 flex flex-col items-center justify-center gap-1.5 text-center transition-all duration-180 active:scale-[0.99] disabled:opacity-55 cursor-pointer"
           >
             {isImporting ? (
               <SiscomSpinner tone="gold" className="w-5 h-5" />
@@ -1879,7 +1879,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                 return (
                   <div
                     key={group.key}
-                    className="rounded-lg border border-white/[0.08] bg-[#0C100F] p-2.5 space-y-1.5"
+                    className="siscom-liquid-subcard rounded-lg p-2.5 space-y-1.5"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <button

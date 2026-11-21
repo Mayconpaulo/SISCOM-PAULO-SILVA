@@ -252,10 +252,10 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.18, ease: SISCOM_EASE }}
-            className="mb-3 w-[calc(100vw-2rem)] sm:w-[368px] rounded-[14px] border border-[#C29B56]/35 bg-[#0F1513]/98 backdrop-blur-md shadow-[0_22px_60px_rgba(0,0,0,0.72)] overflow-hidden"
+            className="mb-3 w-[calc(100vw-2rem)] sm:w-[368px] metal-elevated rounded-[16px] overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-white/[0.08] bg-[#121A17]">
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-white/[0.1] bg-white/[0.04]">
               <div className="flex items-center gap-2 min-w-0">
                 <ListTodo className="w-4 h-4 text-[#DFBC75] shrink-0" />
                 <span className="font-display text-sm font-semibold text-[#F4E6C4] truncate">
@@ -407,7 +407,7 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
 
             {/* Quick glance of top pending demands */}
             {previewTop.length > 0 && (
-              <div className="border-t border-white/[0.07] bg-[#0B100E]/90 px-3.5 py-2.5 space-y-1.5">
+              <div className="border-t border-white/[0.09] bg-black/28 px-3.5 py-2.5 space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] text-[#8FA197]">
                   <span className="font-medium text-[#C6D4CC]">Próximas pendentes</span>
                   <span className="tabular-nums">{pendingDemandas.length} total</span>
