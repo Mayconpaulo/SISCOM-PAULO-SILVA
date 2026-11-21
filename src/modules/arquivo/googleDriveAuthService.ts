@@ -3,6 +3,7 @@ import {
   Auth,
   GoogleAuthProvider,
   User,
+  getAdditionalUserInfo,
   getAuth,
   onAuthStateChanged,
   signInWithPopup,
@@ -213,16 +214,26 @@ export async function connectGoogleDriveAccount(
       );
     }
 
+    const additionalProfile = getAdditionalUserInfo(result)?.profile as
+      | { email?: unknown; name?: unknown }
+      | undefined;
+    const profileEmail =
+      typeof additionalProfile?.email === 'string' ? additionalProfile.email : null;
+    const profileName =
+      typeof additionalProfile?.name === 'string' ? additionalProfile.name : null;
+
     const expiresAt = Date.now() + ACCESS_TOKEN_TTL_MS;
     cachedAccessToken = credential.accessToken;
     cachedTokenExpiresAt = expiresAt;
     cachedUserEmail =
       result.user.email ||
       result.user.providerData?.find((p) => Boolean(p?.email))?.email ||
+      profileEmail ||
       null;
     cachedUserName =
       result.user.displayName ||
       result.user.providerData?.find((p) => Boolean(p?.displayName))?.displayName ||
+      profileName ||
       null;
     wasPreviouslyConnected = true;
     scheduleExpiryCheck(expiresAt);
