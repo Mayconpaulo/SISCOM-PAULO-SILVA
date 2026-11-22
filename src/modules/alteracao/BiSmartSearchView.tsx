@@ -53,6 +53,7 @@ export interface BiSmartSearchSendPayload {
   headerExtract: AlteracaoHeaderExtract;
   semestre: string;
   periodo: string;
+  closingDateIso: string;
   summaryLabel: string;
 }
 
@@ -641,6 +642,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
       headerExtract: built.headerExtract,
       semestre: built.semestre,
       periodo: built.periodo,
+      closingDateIso: built.closingDateIso,
       summaryLabel: label,
     });
   };
@@ -1316,7 +1318,10 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                 type="button"
                 disabled={occurrences.length === 0}
                 onClick={() =>
-                  handleCopyText(formatAllSelectedPlainText(occurrences, semester), 'all')
+                  handleCopyText(
+                    formatAllSelectedPlainText(occurrences, semester, military.postoGraduacao),
+                    'all'
+                  )
                 }
                 className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs disabled:opacity-45"
               >

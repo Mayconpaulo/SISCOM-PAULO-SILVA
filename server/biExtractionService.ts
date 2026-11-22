@@ -283,6 +283,7 @@ function buildSystemInstruction(includeFirstPart: boolean): string {
     '   - Identifique a estrutura real da seção do BI sem depender de um layout rígido (os BIs variam entre OMs: podem ter ou não numeração, podem ter ou não tabelas, podem citar outros boletins).',
     '   - title: Título principal da seção EM MAIÚSCULAS, removendo prefixos de enumeração (ex.: "2. ALTERAÇÕES DE SUBTENENTES E SARGENTOS" -> "ALTERAÇÕES DE SUBTENENTES E SARGENTOS"; "INSTRUÇÃO" -> "INSTRUÇÃO"; "3. SERVIÇO DE SAÚDE" -> "SERVIÇO DE SAÚDE").',
     '   - subtitle: Assunto/subtítulo específico daquela matéria, removendo prefixos de letra/número (ex.: "b. Férias - Apresentação por Término" -> "Férias - Apresentação por Término"; "1. Instrução de Quadros" -> "Instrução de Quadros"; "a. Aditamento da DCEM - Transcrição" -> "Aditamento da DCEM - Transcrição"). Se não houver subtítulo distinto, deixe "".',
+    '   - REGRA DE FÉRIAS: "Férias" NUNCA é title isolado — é SEMPRE subtitle (ex.: title="ALTERAÇÕES DE SUBTENENTES E SARGENTOS", subtitle="Férias - Apresentação por Término").',
     '   - NUNCA coloque o subtítulo dentro do title nem repita o title dentro do subtitle.',
     '',
     '3. SEPARAÇÃO ENTRE TEXTO PRINCIPAL, LISTA LONGA DE MILITARES, "EM CONSEQUÊNCIA" E TABELAS:',
@@ -660,10 +661,30 @@ function cleanHeadingPrefix(raw: string): string {
     .trim();
 }
 
+function inferAlteracoesSectionTitleByRank(postoGraduacao?: string): string {
+  const norm = stripAccentsUpper(postoGraduacao || '');
+  if (/\b(?:GEN|CEL|TEN\s*CEL|MAJ|CAP|1[º°O]?\s*TEN|2[º°O]?\s*TEN|ASP|OFICIAL)\b/.test(norm)) {
+    return 'ALTERAÇÕES DE OFICIAIS';
+  }
+  if (/\b(?:SUBTEN|ST|S\s*TEN|1[º°O]?\s*SGT|2[º°O]?\s*SGT|3[º°O]?\s*SGT|SARGENTO)\b/.test(norm)) {
+    return 'ALTERAÇÕES DE SUBTENENTES E SARGENTOS';
+  }
+  if (/\b(?:CB|CABO|SD|SOLDADO)\b/.test(norm)) {
+    return 'ALTERAÇÕES DE CABOS E SOLDADOS';
+  }
+  return 'ASSUNTOS GERAIS E ADMINISTRATIVOS';
+}
+
+function isNonTitleFeriasTopic(value: string): boolean {
+  const u = stripAccentsUpper(value).replace(/[:.\-\s]+$/g, '');
+  return u === 'FERIAS' || /^FERIAS(\s|$|-)/.test(u);
+}
+
 function normalizeAndMergeResults(
   chunkOutputs: RawAiChunkResponse[],
   headerHints: Partial<BiBulletinMetadata>,
-  maxPageNumber: number
+  maxPageNumber: number,
+  postoGraduacao?: string
 ): {
   bulletinMeta: BiBulletinMetadata;
   occurrences: BiExtractedOccurrenceServer[];
@@ -725,8 +746,20 @@ function normalizeAndMergeResults(
         : [];
       if (!contentText && tableRows.length === 0) continue;
 
-      const rawTitle = cleanHeadingPrefix(rawOcc.title || '').toUpperCase();
+      let rawTitle = cleanHeadingPrefix(rawOcc.title || '').toUpperCase();
       let rawSubtitle = cleanHeadingPrefix(rawOcc.subtitle || '');
+
+      // Enforce Formatar Alteração standard: "Férias" is NEVER a standalone Title
+      if (rawTitle && isNonTitleFeriasTopic(rawTitle)) {
+        const feriasLabel = rawTitle.replace(/^F[ÉE]RIAS\b/i, 'Férias');
+        rawSubtitle = rawSubtitle
+          ? /^f[ée]rias\b/i.test(rawSubtitle)
+            ? rawSubtitle.replace(/^f[ée]rias\b/i, 'Férias')
+            : `${feriasLabel} - ${rawSubtitle}`
+          : feriasLabel;
+        rawTitle = inferAlteracoesSectionTitleByRank(postoGraduacao);
+      }
+
       if (rawTitle && stripAccentsUpper(rawSubtitle) === stripAccentsUpper(rawTitle)) {
         rawSubtitle = '';
       }
@@ -854,7 +887,12 @@ export async function extractAlterationsFromBulletin(
   }
 
   const maxPageNumber = Math.max(1, ...payload.bulletin.pages.map((p) => p.pageNumber));
-  const merged = normalizeAndMergeResults(chunkOutputs, headerHints, maxPageNumber);
+  const merged = normalizeAndMergeResults(
+    chunkOutputs,
+    headerHints,
+    maxPageNumber,
+    payload.military.postoGraduacao
+  );
 
   return {
     providerUsed,

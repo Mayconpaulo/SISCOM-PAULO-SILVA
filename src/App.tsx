@@ -260,6 +260,11 @@ function WorkspaceShell() {
     }
   }, [currentView]);
 
+  // Ensure every screen transition opens cleanly at the top of the viewport (prevents mid-page entry on mobile)
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [activeScreen]);
+
   // Handle system/mobile back & forward gestures
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -425,42 +430,47 @@ function WorkspaceShell() {
         </header>
       )}
 
-      {/* Home Dashboard */}
-      {activeScreen === 'home' && (
-        <HomeDashboard
-          account={account}
-          greeting={greeting}
-          shouldSpinCrest={shouldSpinCrest}
-          visibleCards={visibleCards}
-          hasAgendaAccess={hasModuleAccess('agenda')}
-          accessNotice={accessNotice}
-          onDismissAccessNotice={() => setAccessNotice(null)}
-          onNavigate={navigateToScreen}
-        />
-      )}
-
-      {/* Active Module View (each feature isolated inside its own ErrorBoundary) */}
-      <AnimatePresence mode="wait">
-        {activeScreen !== 'home' &&
-          (activeScreen === 'admin' ? account.role === 'admin' : hasModuleAccess(activeScreen)) && (
-            <motion.div
-              key={activeScreen}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
-              transition={{ duration: 0.24, ease: SISCOM_EASE }}
-              className="workspace-split-container relative z-10 flex-1 flex flex-col min-h-0 lg:overflow-hidden"
+      {/* Home Dashboard & Active Module View (mutually exclusive so Voltar never stacks Home + exiting module) */}
+      <AnimatePresence mode="wait" initial={false}>
+        {activeScreen === 'home' ? (
+          <motion.div
+            key="screen-home"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: SISCOM_EASE }}
+            className="flex-1 flex flex-col min-h-screen"
+          >
+            <HomeDashboard
+              account={account}
+              greeting={greeting}
+              shouldSpinCrest={shouldSpinCrest}
+              visibleCards={visibleCards}
+              hasAgendaAccess={hasModuleAccess('agenda')}
+              accessNotice={accessNotice}
+              onDismissAccessNotice={() => setAccessNotice(null)}
+              onNavigate={navigateToScreen}
+            />
+          </motion.div>
+        ) : (activeScreen === 'admin' ? account.role === 'admin' : hasModuleAccess(activeScreen)) ? (
+          <motion.div
+            key={`screen-${activeScreen}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.22, ease: SISCOM_EASE }}
+            className="workspace-split-container relative z-10 flex-1 flex flex-col min-h-0 lg:overflow-hidden"
+          >
+            <ErrorBoundary
+              key={`${activeScreen}-${moduleResetTick}`}
+              inline
+              scopeLabel={getScreenTitle(activeScreen)}
+              onReset={() => setModuleResetTick((tick) => tick + 1)}
             >
-              <ErrorBoundary
-                key={`${activeScreen}-${moduleResetTick}`}
-                inline
-                scopeLabel={getScreenTitle(activeScreen)}
-                onReset={() => setModuleResetTick((tick) => tick + 1)}
-              >
-                {renderScreenContent(activeScreen)}
-              </ErrorBoundary>
-            </motion.div>
-          )}
+              {renderScreenContent(activeScreen)}
+            </ErrorBoundary>
+          </motion.div>
+        ) : null}
       </AnimatePresence>
 
       <div className="no-print relative z-10">

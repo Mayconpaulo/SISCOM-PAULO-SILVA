@@ -1625,7 +1625,16 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
       payload.structuredDoc.monthOrder
     );
 
-    const paginated = paginateAlteracaoBlocksInDom(rendered.blocks, {
+    const prevName = header.nomeCompleto.trim().toUpperCase();
+    const nextName = nextHeader.nomeCompleto.trim().toUpperCase();
+    if (nextName && prevName && nextName !== prevName) {
+      setDataPraca('');
+    }
+    if (payload.closingDateIso) {
+      setDataFinal(payload.closingDateIso);
+    }
+
+    const initialPaginated = paginateAlteracaoBlocksInDom(rendered.blocks, {
       fontFamily: fontStyleRef.current.fontFamily,
       fontSizePt: fontStyleRef.current.fontSizePt,
       lineHeight: fontStyleRef.current.lineHeight,
@@ -1635,17 +1644,36 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     setHeader(nextHeader);
     setStructuredDoc(payload.structuredDoc);
     setEnabledItemIds(payload.structuredDoc.items.map((item) => item.id));
-    setPagesHtml(paginated);
+    setPagesHtml(initialPaginated);
     setActivePageIndex(0);
     setSyncVersion((v) => v + 1);
     setAlteracaoMode('formatar');
     setNotice(
-      `${payload.summaryLabel} (${paginated.length} folha${paginated.length > 1 ? 's' : ''}).`
+      `${payload.summaryLabel} (${initialPaginated.length} folha${initialPaginated.length > 1 ? 's' : ''}).`
     );
+
+    // Once the Formatar A4 canvas becomes visible, re-measure with live DOM header/editor heights
+    // so pagination matches Formatar Alteração pixel-for-pixel.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (pagesViewportRef.current) {
+          setViewportWidth(pagesViewportRef.current.clientWidth);
+        }
+        const livePaginated = paginateAlteracaoBlocksInDom(
+          rendered.blocks,
+          getLivePaginateOptions()
+        ).map((p) => sanitizeAlteracaoHtml(p));
+        setPagesHtml(livePaginated);
+        setSyncVersion((v) => v + 1);
+        setNotice(
+          `${payload.summaryLabel} (${livePaginated.length} folha${livePaginated.length > 1 ? 's' : ''}).`
+        );
+      });
+    });
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 lg:overflow-hidden">
+    <div className="workspace-split-container print-wrapper flex-1 flex flex-col min-h-0 lg:overflow-hidden">
       {/* Mode Switcher: Formatar (existing) vs Gerar de Boletins (new) */}
       <div className="no-print shrink-0 px-3.5 sm:px-6 py-2 border-b border-white/[0.08] bg-[#0B120E]/75 backdrop-blur-md flex flex-wrap items-center justify-between gap-2">
         <div
@@ -1658,14 +1686,21 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             role="tab"
             aria-selected={alteracaoMode === 'formatar'}
             onClick={() => setAlteracaoMode('formatar')}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+            className={`relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
               alteracaoMode === 'formatar'
-                ? 'bg-[#2D5A43]/85 text-[#F4E6C4] border border-[#C9A961]/45 shadow-sm'
-                : 'text-[#98A89F] hover:text-[#E8EEEA] border border-transparent'
+                ? 'text-[#F4E6C4]'
+                : 'text-[#98A89F] hover:text-[#E8EEEA]'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Formatar Alteração</span>
+            {alteracaoMode === 'formatar' && (
+              <motion.span
+                layoutId="alteracao-mode-tab-bg"
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 rounded-md bg-[#2D5A43]/85 border border-[#C9A961]/45 shadow-sm"
+              />
+            )}
+            <FileText className="relative z-10 w-3.5 h-3.5" />
+            <span className="relative z-10">Formatar Alteração</span>
           </button>
 
           <button
@@ -1673,14 +1708,21 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             role="tab"
             aria-selected={alteracaoMode === 'gerar'}
             onClick={() => setAlteracaoMode('gerar')}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+            className={`relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
               alteracaoMode === 'gerar'
-                ? 'bg-[#2D5A43]/85 text-[#F4E6C4] border border-[#C9A961]/45 shadow-sm'
-                : 'text-[#98A89F] hover:text-[#E8EEEA] border border-transparent'
+                ? 'text-[#F4E6C4]'
+                : 'text-[#98A89F] hover:text-[#E8EEEA]'
             }`}
           >
-            <FileSearch className="w-3.5 h-3.5 text-[#E5C17B]" />
-            <span>Gerar de Boletins</span>
+            {alteracaoMode === 'gerar' && (
+              <motion.span
+                layoutId="alteracao-mode-tab-bg"
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 rounded-md bg-[#2D5A43]/85 border border-[#C9A961]/45 shadow-sm"
+              />
+            )}
+            <FileSearch className="relative z-10 w-3.5 h-3.5 text-[#E5C17B]" />
+            <span className="relative z-10">Gerar de Boletins</span>
           </button>
         </div>
 
@@ -1705,7 +1747,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
       <div
         className={
           alteracaoMode === 'formatar'
-            ? 'flex-1 flex flex-col min-h-0 lg:overflow-hidden'
+            ? 'workspace-split-container print-wrapper flex-1 flex flex-col min-h-0 lg:overflow-hidden'
             : 'hidden'
         }
       >

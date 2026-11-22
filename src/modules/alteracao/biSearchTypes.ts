@@ -3,6 +3,8 @@ import {
   MONTHS_UPPER,
   ParsedAlteracaoSectionItem,
   StructuredAlteracaoDoc,
+  applyServiceTimeToPart2Lines,
+  formatPtBrDateLong,
 } from './alteracaoFormatter';
 
 export interface BiSearchMilitaryProfile {
@@ -90,20 +92,81 @@ export interface BiSemesterSelection {
 export function getSemesterLabels(sel: BiSemesterSelection): {
   semestre: string;
   periodo: string;
+  closingDateIso: string;
   months: readonly string[];
 } {
   if (sel.half === '2') {
     return {
       semestre: `2º Semestre de ${sel.year}`,
       periodo: `01/07/${sel.year} a 31/12/${sel.year}`,
+      closingDateIso: `${sel.year}-12-31`,
       months: MONTHS_UPPER.slice(6, 12),
     };
   }
   return {
     semestre: `1º Semestre de ${sel.year}`,
     periodo: `01/01/${sel.year} a 30/06/${sel.year}`,
+    closingDateIso: `${sel.year}-06-30`,
     months: MONTHS_UPPER.slice(0, 6),
   };
+}
+
+function stripDiacriticsUpperLocal(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
+}
+
+function inferDefaultSectionTitle(postoGraduacao?: string): string {
+  const norm = stripDiacriticsUpperLocal(postoGraduacao || '');
+  if (/\b(?:GEN|CEL|TEN\s*CEL|MAJ|CAP|1[º°O]?\s*TEN|2[º°O]?\s*TEN|ASP|OFICIAL)\b/.test(norm)) {
+    return 'ALTERAÇÕES DE OFICIAIS';
+  }
+  if (/\b(?:SUBTEN|ST|S\s*TEN|1[º°O]?\s*SGT|2[º°O]?\s*SGT|3[º°O]?\s*SGT|SARGENTO)\b/.test(norm)) {
+    return 'ALTERAÇÕES DE SUBTENENTES E SARGENTOS';
+  }
+  if (/\b(?:CB|CABO|SD|SOLDADO)\b/.test(norm)) {
+    return 'ALTERAÇÕES DE CABOS E SOLDADOS';
+  }
+  return 'ASSUNTOS GERAIS E ADMINISTRATIVOS';
+}
+
+/**
+ * Normalizes BI occurrence title/subtitle to match Formatar Alteração standard:
+ * - Title always UPPERCASE
+ * - "Férias" is never a standalone Title (always a Subtitle under ALTERAÇÕES DE ...)
+ * - Never duplicates Title inside Subtitle
+ */
+export function normalizeBiOccurrenceHeading(
+  rawTitle: string,
+  rawSubtitle: string,
+  postoGraduacao?: string
+): { title: string; subtitle: string } {
+  let title = rawTitle.trim().toUpperCase();
+  let subtitle = rawSubtitle.trim();
+
+  const normTitle = stripDiacriticsUpperLocal(title).replace(/[:.\-\s]+$/g, '');
+  if (normTitle === 'FERIAS' || /^FERIAS(\s|$|-)/.test(normTitle)) {
+    const feriasFixed = title.replace(/^F[ÉE]RIAS\b/i, 'Férias');
+    subtitle = subtitle
+      ? /^f[ée]rias\b/i.test(subtitle)
+        ? subtitle.replace(/^f[ée]rias\b/i, 'Férias')
+        : `${feriasFixed} - ${subtitle}`
+      : feriasFixed;
+    title = inferDefaultSectionTitle(postoGraduacao);
+  }
+
+  if (!title) {
+    title = inferDefaultSectionTitle(postoGraduacao);
+  }
+
+  if (subtitle && stripDiacriticsUpperLocal(subtitle) === stripDiacriticsUpperLocal(title)) {
+    subtitle = '';
+  }
+
+  return { title, subtitle };
 }
 
 /**
@@ -182,9 +245,10 @@ export function buildOccurrenceParagraphs(occ: BiOccurrenceItem): string[] {
  * Formats a single occurrence into copyable plain text matching Folha 26.1 structure.
  */
 export function formatSingleOccurrencePlainText(occ: BiOccurrenceItem): string {
+  const { title, subtitle } = normalizeBiOccurrenceHeading(occ.title, occ.subtitle);
   const lines: string[] = [];
-  if (occ.title.trim()) lines.push(occ.title.trim().toUpperCase());
-  if (occ.subtitle.trim()) lines.push(occ.subtitle.trim());
+  if (title) lines.push(title);
+  if (subtitle) lines.push(subtitle);
   const paragraphs = buildOccurrenceParagraphs(occ);
   if (paragraphs.length > 0) {
     lines.push('');
@@ -221,13 +285,15 @@ export function sortOccurrencesChronologically(list: BiOccurrenceItem[]): BiOccu
 }
 
 /**
- * Builds plain-text full semester transcription (including "<MÊS>: Sem Alteração" for empty months).
+ * Builds plain-text full semester transcription matching Formatar Alteração layout
+ * (including "<MÊS>:\n\n- Sem Alteração" for empty months and 2ª PARTE).
  */
 export function formatAllSelectedPlainText(
   occurrences: BiOccurrenceItem[],
-  semester: BiSemesterSelection
+  semester: BiSemesterSelection,
+  postoGraduacao?: string
 ): string {
-  const { months } = getSemesterLabels(semester);
+  const { months, closingDateIso } = getSemesterLabels(semester);
   const selected = sortOccurrencesChronologically(occurrences.filter((o) => o.selected));
 
   const out: string[] = ['1ª PARTE:', ''];
@@ -241,6 +307,7 @@ export function formatAllSelectedPlainText(
 
   for (const month of allMonths) {
     out.push(`${month}:`);
+    out.push('');
     const monthItems = selected.filter((o) => o.bulletinMonth === month);
     if (monthItems.length === 0) {
       out.push('- Sem Alteração');
@@ -248,21 +315,31 @@ export function formatAllSelectedPlainText(
       continue;
     }
 
-    // Group by title within the month
-    const byTitle = new Map<string, BiOccurrenceItem[]>();
+    // Group by normalized title within the month
+    const byTitle = new Map<string, { displayTitle: string; items: { occ: BiOccurrenceItem; subtitle: string }[] }>();
     for (const item of monthItems) {
-      const key = item.title.trim().toUpperCase() || 'ASSUNTOS GERAIS E ADMINISTRATIVOS';
-      const arr = byTitle.get(key) || [];
-      arr.push(item);
-      byTitle.set(key, arr);
+      const { title, subtitle } = normalizeBiOccurrenceHeading(
+        item.title,
+        item.subtitle,
+        postoGraduacao
+      );
+      const key = stripDiacriticsUpperLocal(title);
+      let grp = byTitle.get(key);
+      if (!grp) {
+        grp = { displayTitle: title, items: [] };
+        byTitle.set(key, grp);
+      }
+      grp.items.push({ occ: item, subtitle });
     }
 
-    for (const [title, group] of byTitle.entries()) {
-      out.push(title);
-      for (const occ of group) {
-        if (occ.subtitle.trim()) out.push(occ.subtitle.trim());
+    for (const grp of byTitle.values()) {
+      out.push(grp.displayTitle);
+      for (const { occ, subtitle } of grp.items) {
+        if (subtitle) out.push(subtitle);
+        out.push('');
         out.push(...buildOccurrenceParagraphs(occ));
         if (occ.includeTable && occ.tableRows.length > 0) {
+          out.push('');
           for (const row of occ.tableRows) {
             out.push(row.join(' | '));
           }
@@ -272,12 +349,18 @@ export function formatAllSelectedPlainText(
     }
   }
 
+  const part2Lines = applyServiceTimeToPart2Lines([], '', {
+    datePtBr: formatPtBrDateLong(closingDateIso),
+  });
+  out.push(...part2Lines);
+
   return out.join('\n').trim();
 }
 
 /**
  * Converts approved BI occurrences into a full StructuredAlteracaoDoc ready for
- * renderBlocksFromStructuredDoc() and the live A4 editor (100% verbatim, with empty months as Sem Alteração).
+ * renderBlocksFromStructuredDoc() and the live A4 editor — 100% aligned with
+ * the Formatar Alteração standard (1ª PARTE, all 6 months with Sem Alteração, and standard 2ª PARTE).
  */
 export function buildStructuredAlteracaoFromBiOccurrences(params: {
   military: BiSearchMilitaryProfile;
@@ -288,9 +371,10 @@ export function buildStructuredAlteracaoFromBiOccurrences(params: {
   headerExtract: AlteracaoHeaderExtract;
   semestre: string;
   periodo: string;
+  closingDateIso: string;
 } {
   const { military, semester } = params;
-  const { semestre, periodo, months } = getSemesterLabels(semester);
+  const { semestre, periodo, closingDateIso, months } = getSemesterLabels(semester);
   const selected = sortOccurrencesChronologically(
     params.occurrences.filter((o) => o.selected)
   );
@@ -307,8 +391,11 @@ export function buildStructuredAlteracaoFromBiOccurrences(params: {
 
   for (const occ of selected) {
     const month = occ.bulletinMonth || months[0];
-    const title = occ.title.trim().toUpperCase() || 'ASSUNTOS GERAIS E ADMINISTRATIVOS';
-    const subtitle = occ.subtitle.trim();
+    const { title, subtitle } = normalizeBiOccurrenceHeading(
+      occ.title,
+      occ.subtitle,
+      military.postoGraduacao
+    );
     const paragraphs = buildOccurrenceParagraphs(occ);
 
     if (paragraphs.length > 0) {
@@ -353,10 +440,15 @@ export function buildStructuredAlteracaoFromBiOccurrences(params: {
     periodo,
   };
 
+  // Populate standard 2ª PARTE (exact same standard as Formatar Alteração)
+  const standardPart2Lines = applyServiceTimeToPart2Lines([], '', {
+    datePtBr: formatPtBrDateLong(closingDateIso),
+  });
+
   const structuredDoc: StructuredAlteracaoDoc = {
     items,
     monthOrder,
-    part2Lines: [],
+    part2Lines: standardPart2Lines,
     extractedHeader: headerExtract,
   };
 
@@ -365,5 +457,6 @@ export function buildStructuredAlteracaoFromBiOccurrences(params: {
     headerExtract,
     semestre,
     periodo,
+    closingDateIso,
   };
 }

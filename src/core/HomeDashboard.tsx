@@ -252,13 +252,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               >
                 <Settings className="w-4 h-4" />
               </motion.div>
-              <motion.span
-                layoutId="module-title-admin"
-                transition={MODULE_LOCKUP_TRANSITION}
-                className="relative z-10 hidden lg:inline whitespace-nowrap"
-              >
+              <span className="relative z-10 hidden lg:inline whitespace-nowrap">
                 Administração
-              </motion.span>
+              </span>
             </button>
           )}
 
