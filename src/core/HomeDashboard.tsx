@@ -163,12 +163,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         />
       </div>
 
-      {/* Compact Institutional Header */}
+      {/* Compact Institutional Liquid Glass Header */}
       <motion.header
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, ease: SISCOM_EASE }}
-        className="no-print relative z-20 w-full border-b border-white/[0.08] bg-[#080C0A]/76 backdrop-blur-sm"
+        className="no-print siscom-liquid-bar relative z-20 w-full border-b border-white/[0.1]"
       >
         <div className="w-full max-w-[1320px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
           {/* Left: Institutional identity & crests */}
@@ -241,12 +241,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 onClick={() => onNavigate('admin')}
                 title="Configurações e Administração"
                 aria-label="Configurações e Administração"
-                className="relative inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] sm:min-h-[36px] sm:min-w-0 px-2.5 sm:px-3 rounded-lg border border-[#C9A961]/35 bg-[#C9A961]/10 hover:bg-[#C9A961]/18 hover:border-[#C9A961]/60 text-[#E5C17B] text-xs font-medium transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                className="relative siscom-btn siscom-btn-gold !min-h-[40px] sm:!min-h-[36px] !px-2.5 sm:!px-3 text-xs shrink-0"
               >
                 <motion.div
                   layoutId="module-surface-admin"
                   transition={MODULE_EXPAND_TRANSITION}
-                  className="absolute inset-0 rounded-lg pointer-events-none"
+                  className="absolute inset-0 rounded-[0.625rem] pointer-events-none"
                 />
                 <motion.div
                   layoutId="module-icon-admin"
@@ -264,7 +264,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               onClick={() => void signOutCurrentUser()}
               title="Sair"
               aria-label="Sair"
-              className="inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] sm:min-h-[36px] sm:min-w-0 px-2.5 sm:px-3 rounded-lg border border-white/[0.12] bg-[#0D1411]/80 hover:border-white/[0.24] hover:bg-[#131E19]/90 text-[#CFDAD3] text-xs font-medium transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+              className="siscom-btn siscom-btn-secondary !min-h-[40px] sm:!min-h-[36px] !px-2.5 sm:!px-3 text-xs text-[#CFDAD3] shrink-0"
             >
               <LogOut className="w-3.5 h-3.5 text-[#A5B3AB]" />
               <span className="hidden sm:inline">Sair</span>
@@ -299,7 +299,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             transition={{ duration: 0.22, delay: 0.05, ease: SISCOM_EASE }}
             className="w-full md:w-[360px] lg:w-[400px] shrink-0"
           >
-            <div className="flex items-center gap-2.5 h-11 px-3.5 rounded-xl bg-[#0B120F]/84 backdrop-blur-sm border border-white/[0.12] focus-within:border-[#C9A961]/60 transition-colors">
+            <div className="siscom-liquid-pill flex items-center gap-2.5 h-11 px-3.5 rounded-xl focus-within:border-[#C9A961]/65 transition-colors">
               <Search className="w-4 h-4 text-[#95A49B] shrink-0" aria-hidden="true" />
               <input
                 type="text"
@@ -380,7 +380,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     ease: SISCOM_EASE,
                   },
                   className:
-                    'siscom-home-card group rounded-xl p-3.5 sm:p-4 lg:p-5 flex flex-col justify-between items-start text-left cursor-pointer min-h-[112px] sm:min-h-[126px] lg:min-h-[136px] will-change-transform no-underline',
+                    'siscom-home-card group rounded-xl p-4 sm:p-4 lg:p-5 flex flex-col justify-between items-start text-left cursor-pointer min-h-[96px] sm:min-h-[108px] lg:min-h-[116px] will-change-transform no-underline',
                 };
 
                 const cardInner = (
@@ -416,13 +416,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       <motion.span
                         layoutId={`module-title-${card.id}`}
                         transition={MODULE_LOCKUP_TRANSITION}
-                        className="block font-display text-[14px] sm:text-[16px] lg:text-[17px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] transition-colors duration-150 truncate"
+                        className="block font-display text-[15px] sm:text-[16px] lg:text-[18px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] transition-colors duration-150 truncate"
                       >
                         {card.title}
                       </motion.span>
-                      <p className="text-[11px] sm:text-xs text-[#95A49B] leading-snug line-clamp-2 mt-0.5">
-                        {card.description}
-                      </p>
                     </div>
                   </>
                 );
@@ -461,7 +458,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18, ease: SISCOM_EASE }}
-                  className="siscom-home-card group rounded-xl p-3.5 sm:p-4 lg:p-5 flex flex-col justify-between items-start text-left cursor-pointer min-h-[112px] sm:min-h-[126px] lg:min-h-[136px] will-change-transform"
+                  className="siscom-home-card group rounded-xl p-4 sm:p-4 lg:p-5 flex flex-col justify-between items-start text-left cursor-pointer min-h-[96px] sm:min-h-[108px] lg:min-h-[116px] will-change-transform"
                 >
                   <div className="relative z-10 w-full flex items-start justify-between gap-2">
                     <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center text-[#D8B467] group-hover:text-[#F0D18A]">
@@ -473,12 +470,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     />
                   </div>
                   <div className="relative z-10 w-full min-w-0 pt-3">
-                    <span className="block font-display text-[14px] sm:text-[16px] lg:text-[17px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] truncate">
+                    <span className="block font-display text-[15px] sm:text-[16px] lg:text-[18px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] truncate">
                       Demandas
                     </span>
-                    <p className="text-[11px] sm:text-xs text-[#95A49B] leading-snug line-clamp-2 mt-0.5">
-                      Painel de tarefas e prazos
-                    </p>
                   </div>
                 </motion.button>
               )}
@@ -509,8 +503,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </section>
       </main>
 
-      {/* Minimalist Institutional Footer */}
-      <footer className="no-print relative z-10 mt-auto border-t border-white/[0.08] bg-[#080C0A]/82">
+      {/* Minimalist Liquid Glass Institutional Footer */}
+      <footer className="no-print siscom-liquid-bar relative z-10 mt-auto border-t border-white/[0.1]">
         <div className="w-full max-w-[1320px] mx-auto px-4 sm:px-6 lg:px-8 pt-3.5 pb-24 md:py-3.5 flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-[#95A49B]">
           <div className="flex items-center gap-2.5">
             <img
