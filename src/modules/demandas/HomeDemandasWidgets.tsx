@@ -148,15 +148,15 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.1, ease: SISCOM_EASE }}
-      className={`w-full rounded-[16px] transition-colors ${
+      className={`w-full rounded-xl transition-colors ${
         compact
-          ? 'siscom-liquid-panel hover:border-[#E0BE74]/32 px-4 py-3.5'
+          ? 'siscom-home-panel px-4 py-3.5'
           : 'metal-surface border border-[#C29B56]/22 px-4 py-3.5'
       } flex flex-col justify-between gap-2.5 ${className}`}
     >
       <div>
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.08]">
+        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.08]">
           <div className="flex items-baseline gap-1.5 min-w-0">
             <h2 className="text-xs font-semibold text-[#E8E4D8] tracking-wide whitespace-nowrap">
               Demandas
@@ -175,14 +175,12 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             <button
               type="button"
               onClick={() => setQuickAddOpen(true)}
               title="Nova demanda rápida"
-              className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#D6EEE0] bg-[#2D5A43]/38 hover:bg-[#2D5A43]/62 border border-[#83B499]/30 transition-colors cursor-pointer ${
-                compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
-              }`}
+              className="inline-flex items-center gap-1 min-h-[28px] px-2 rounded-md text-[11px] font-medium text-[#9DD1B3] hover:text-[#D6EEE0] bg-[#2D5A43]/25 hover:bg-[#2D5A43]/45 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3 h-3" aria-hidden="true" />
               <span>Nova</span>
@@ -191,12 +189,10 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
-              className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#EBD4A2] bg-[#C29B56]/10 hover:bg-[#C29B56]/20 border border-[#C29B56]/26 hover:border-[#D4B06A]/50 transition-colors cursor-pointer ${
-                compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
-              }`}
+              className="inline-flex items-center gap-1 min-h-[28px] px-1 text-xs font-medium text-[#DFBC75] hover:text-[#F4E6C4] transition-colors cursor-pointer whitespace-nowrap"
             >
               <span>Gerenciar</span>
-              <ArrowRight className="w-3 h-3 text-[#D8B46E]" aria-hidden="true" />
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -341,19 +337,13 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
         )}
       </div>
 
-      {/* Compact Integrated Mini-Widgets Footer (Nearest Deadline + Progress) */}
+      {/* Clean Hairline-Separated Summary Footer (Nearest Deadline + Progress) */}
       {mode !== 'lista' && !loading && (
-        <div
-          className={`pt-2 border-t border-white/[0.08] ${
-            compact
-              ? 'grid grid-cols-2 lg:grid-cols-1 gap-2'
-              : 'grid grid-cols-1 sm:grid-cols-2 gap-2'
-          }`}
-        >
-          {/* Mini-Widget 1: Nearest Deadline */}
-          <div className="rounded-[10px] bg-black/30 border border-white/[0.09] px-2.5 lg:px-3 py-2 flex flex-col justify-between gap-1">
-            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-[#B8B3A6]">
-              <span className="inline-flex items-center gap-1 font-medium text-[#E8E4D8]">
+        <div className="pt-2.5 border-t border-white/[0.08] grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          {/* Nearest Deadline */}
+          <div className="flex flex-col justify-between gap-1 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-[#9AA8A0]">
+              <span className="inline-flex items-center gap-1 font-medium text-[#D8E0DB]">
                 <Clock className="w-3 h-3 text-[#C9A961] shrink-0" />
                 <span>Prazo mais próximo</span>
               </span>
@@ -374,7 +364,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                     type="button"
                     onClick={() => void toggleComplete(nextCritical)}
                     title="Concluir demanda"
-                    className="text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer"
+                    className="text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer p-0.5"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
@@ -382,36 +372,36 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                     type="button"
                     onClick={() => void postponeOneDay(nextCritical)}
                     title="Adiar 1 dia"
-                    className="text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer"
+                    className="text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer p-0.5"
                   >
                     <CalendarPlus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-[#B8B3A6] leading-snug">
+              <p className="text-[11px] text-[#9AA8A0] leading-snug">
                 Tudo em dia por enquanto.
               </p>
             )}
           </div>
 
-          {/* Mini-Widget 2: Progress */}
-          <div className="rounded-[10px] bg-black/30 border border-white/[0.09] px-2.5 lg:px-3 py-2 flex flex-col justify-between gap-1.5">
+          {/* Progress */}
+          <div className="flex flex-col justify-between gap-1.5 min-w-0 sm:border-l sm:border-white/[0.07] sm:pl-4">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] font-medium text-[#E8E4D8]">Andamento</span>
+              <span className="text-[11px] font-medium text-[#D8E0DB]">Andamento</span>
               <span className="text-xs font-mono font-semibold tabular-nums text-[#F4E6C4]">
                 {completionRatio}%
               </span>
             </div>
 
             <div className="space-y-1">
-              <div className="h-1.5 w-full rounded-full bg-white/[0.09] overflow-hidden">
+              <div className="h-1 w-full rounded-full bg-white/[0.09] overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[#2D5A43] to-[#C9A961] transition-all duration-300"
                   style={{ width: `${completionRatio}%` }}
                 />
               </div>
-              <p className="text-[11px] text-[#B8B3A6] tabular-nums leading-snug">
+              <p className="text-[11px] text-[#9AA8A0] tabular-nums leading-snug">
                 {completedDemandas.length}/{demandas.length}{' '}
                 {demandas.length === 1 ? 'concluída' : 'concluídas'} · {pendingDemandas.length}{' '}
                 {pendingDemandas.length === 1 ? 'aberta' : 'abertas'}

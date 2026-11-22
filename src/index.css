@@ -221,99 +221,44 @@
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.72));
 }
 
-.siscom-home-frame {
-  background: linear-gradient(
-    160deg,
-    rgba(255, 255, 255, 0.045) 0%,
-    rgba(12, 19, 15, 0.34) 55%,
-    rgba(7, 11, 9, 0.48) 100%
-  );
-  -webkit-backdrop-filter: blur(18px) saturate(145%);
-  backdrop-filter: blur(18px) saturate(145%);
-  border: 1px solid rgba(235, 214, 170, 0.16);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 248, 232, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.32),
-    0 24px 54px -22px rgba(0, 0, 0, 0.72);
-}
-
 .siscom-home-card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.085) 0%,
-    rgba(19, 31, 25, 0.38) 46%,
-    rgba(9, 15, 12, 0.54) 100%
-  );
-  -webkit-backdrop-filter: blur(22px) saturate(165%);
-  backdrop-filter: blur(22px) saturate(165%);
-  border: 1px solid rgba(240, 220, 178, 0.18);
-  box-shadow:
-    inset 0 1px 0.5px rgba(255, 250, 236, 0.28),
-    inset 1px 0 0 rgba(255, 248, 230, 0.08),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.36),
-    0 14px 30px -14px rgba(0, 0, 0, 0.65);
+  background: rgba(11, 17, 14, 0.8);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(201, 169, 97, 0.16);
+  box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.5);
   transition:
     transform var(--dur-micro) var(--ease-siscom),
     border-color var(--dur-micro) var(--ease-siscom),
-    box-shadow var(--dur-ui) var(--ease-siscom),
-    background var(--dur-micro) var(--ease-siscom);
-}
-
-.siscom-home-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    140% 90% at 14% 0%,
-    rgba(255, 248, 230, 0.12) 0%,
-    rgba(255, 248, 230, 0.02) 42%,
-    transparent 70%
-  );
-  pointer-events: none;
+    background-color var(--dur-micro) var(--ease-siscom);
 }
 
 @media (hover: hover) {
   .siscom-home-card:hover {
-    background: linear-gradient(
-      145deg,
-      rgba(255, 248, 230, 0.135) 0%,
-      rgba(28, 46, 36, 0.5) 46%,
-      rgba(12, 20, 16, 0.62) 100%
-    );
-    border-color: rgba(226, 190, 116, 0.58);
+    background: rgba(17, 27, 22, 0.88);
+    border-color: rgba(201, 169, 97, 0.48);
+    transform: translateY(-2px);
     z-index: 5;
-    box-shadow:
-      inset 0 1px 1px rgba(255, 250, 236, 0.42),
-      inset 1px 0 0 rgba(244, 230, 196, 0.16),
-      0 22px 42px -14px rgba(8, 12, 9, 0.78);
   }
 }
 
 .siscom-home-card:active {
-  border-color: rgba(201, 169, 97, 0.72);
-  box-shadow:
-    inset 0 1px 1px rgba(255, 250, 236, 0.36),
-    0 10px 24px -12px rgba(8, 12, 9, 0.78);
+  border-color: rgba(201, 169, 97, 0.68);
+  transform: scale(0.985);
 }
 
-.siscom-motto-card {
-  background:
-    radial-gradient(280px 180px at 14% 45%, rgba(45, 90, 67, 0.28) 0%, rgba(12, 18, 15, 0) 75%),
-    linear-gradient(
-      145deg,
-      rgba(255, 248, 230, 0.075) 0%,
-      rgba(16, 26, 21, 0.42) 55%,
-      rgba(9, 14, 11, 0.56) 100%
-    );
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  backdrop-filter: blur(22px) saturate(160%);
-  border: 1px solid rgba(235, 214, 170, 0.2);
-  box-shadow:
-    inset 0 1px 0.5px rgba(255, 250, 236, 0.24),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.34),
-    0 14px 30px -14px rgba(0, 0, 0, 0.64);
+.siscom-home-panel {
+  background: rgba(10, 16, 13, 0.78);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: border-color var(--dur-micro) var(--ease-siscom);
+}
+
+.siscom-home-panel:hover {
+  border-color: rgba(201, 169, 97, 0.24);
 }
 
 .siscom-liquid-panel {

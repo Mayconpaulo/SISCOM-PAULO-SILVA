@@ -162,19 +162,19 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
-      className={`w-full rounded-[16px] transition-colors ${
+      className={`w-full rounded-xl transition-colors ${
         compact
-          ? 'siscom-liquid-panel hover:border-[#E0BE74]/32 px-4 py-3.5'
+          ? 'siscom-home-panel px-4 py-3.5'
           : 'metal-surface border border-[#C29B56]/22 px-4 py-3.5'
       } flex flex-col justify-between ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.08]">
+      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.08]">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <h2 className="text-xs font-semibold text-[#E8E4D8] tracking-wide whitespace-nowrap">
             {headerTitle}
           </h2>
           {preview.mode === 'today' && (
-            <span className="text-[11px] text-[#B8B3A6] tabular-nums whitespace-nowrap">
+            <span className="text-[11px] text-[#9AA8A0] tabular-nums whitespace-nowrap">
               <span aria-hidden="true">· </span>
               {preview.todayLabel}
             </span>
@@ -184,12 +184,10 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         <button
           type="button"
           onClick={onOpenAgenda}
-          className={`inline-flex items-center gap-1 rounded-[7px] font-medium text-[#EBD4A2] bg-[#C9A961]/12 hover:bg-[#C9A961]/22 border border-[#C9A961]/30 hover:border-[#D4B06A]/55 transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 ${
-            compact ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
-          }`}
+          className="inline-flex items-center gap-1 min-h-[28px] px-1.5 text-xs font-medium text-[#DFBC75] hover:text-[#F4E6C4] transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 rounded"
         >
           <span>Acessar agenda</span>
-          <ArrowRight className="w-3 h-3 text-[#C9A961]" aria-hidden="true" />
+          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>
 
