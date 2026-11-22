@@ -12,7 +12,10 @@ import {
 } from './server/biExtractionService.ts';
 
 const PORT = Number(process.env.PORT || 3000);
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction =
+  process.env.NODE_ENV === 'production' ||
+  (process.env.NODE_ENV !== 'development' &&
+    fs.existsSync(path.resolve(import.meta.dirname, 'dist', 'index.html')));
 const SERVER_BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 // Simple per-IP sliding window limiter for /api/* routes

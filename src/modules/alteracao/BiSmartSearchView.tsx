@@ -456,7 +456,8 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
           }),
         });
 
-        const payload = (await response.json().catch(() => ({}))) as {
+        const rawBodyText = await response.text().catch(() => '');
+        let payload: {
           error?: string;
           providerUsed?: 'openai' | 'gemini';
           modelUsed?: string;
@@ -490,12 +491,23 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
             bulletinPart: string;
             reason: string;
           }>;
-        };
+        } = {};
+        if (rawBodyText) {
+          try {
+            payload = JSON.parse(rawBodyText) as typeof payload;
+          } catch {
+            payload = {};
+          }
+        }
 
         if (!response.ok) {
           if (response.status === 404 && !payload.error) {
+            const currentHost =
+              typeof window !== 'undefined' && window.location?.host
+                ? window.location.host
+                : 'servidor atual';
             throw new Error(
-              'Serviço de análise indisponível nesta versão em cache (HTTP 404). Recarregue a página e tente novamente.'
+              `Rota /api/bi/extract indisponível em ${currentHost} (HTTP 404). Este endereço está servindo apenas arquivos estáticos sem o servidor Node ativo — recarregue na URL de execução do servidor ou republique o aplicativo.`
             );
           }
           throw new Error(payload.error || `Falha na análise (HTTP ${response.status}).`);
