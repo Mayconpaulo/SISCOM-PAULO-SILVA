@@ -1,8 +1,15 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
+import {
+  extractAlterationsFromBulletin,
+  getBiAiProviderStatus,
+  type BiBulletinPageInput,
+  type BiExtractRequestPayload,
+} from './server/biExtractionService';
 
 const PORT = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -12,6 +19,110 @@ const SERVER_BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).
 const apiHits = new Map<string, number[]>();
 const API_WINDOW_MS = 60_000;
 const API_MAX_REQ = 240;
+
+// Stricter per-IP sliding window limiter specifically for AI extraction calls
+const biExtractHits = new Map<string, number[]>();
+const BI_EXTRACT_WINDOW_MS = 60_000;
+const BI_EXTRACT_MAX_REQ = 30;
+
+// Short-lived in-memory cache of verified Firebase ID tokens (keyed by SHA-256 hash)
+const verifiedTokenCache = new Map<string, { uid: string; expiresAt: number }>();
+
+function loadFirebaseWebApiKey(): string | null {
+  try {
+    const cfgPath = path.resolve(import.meta.dirname, 'firebase-applet-config.json');
+    if (!fs.existsSync(cfgPath)) return null;
+    const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')) as { apiKey?: string };
+    return typeof parsed.apiKey === 'string' && parsed.apiKey.trim() ? parsed.apiKey.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+const FIREBASE_WEB_API_KEY = loadFirebaseWebApiKey();
+
+async function verifyFirebaseAuthMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  setNoStoreHeaders(res);
+  const authHeader = req.headers.authorization || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const idToken = match?.[1]?.trim();
+
+  if (!idToken || idToken.length < 40 || idToken.length > 8192) {
+    res.status(401).json({ error: 'Sessão não autenticada. Faça login novamente no SISCOM.' });
+    return;
+  }
+
+  if (!FIREBASE_WEB_API_KEY) {
+    res.status(500).json({ error: 'Configuração de autenticação do servidor indisponível.' });
+    return;
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(idToken).digest('hex');
+  const now = Date.now();
+  const cached = verifiedTokenCache.get(tokenHash);
+  if (cached && cached.expiresAt > now) {
+    next();
+    return;
+  }
+
+  try {
+    const lookupRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_WEB_API_KEY)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      }
+    );
+
+    if (!lookupRes.ok) {
+      res.status(401).json({ error: 'Sessão expirada ou inválida. Faça login novamente.' });
+      return;
+    }
+
+    const data = (await lookupRes.json()) as {
+      users?: Array<{ localId?: string; disabled?: boolean }>;
+    };
+    const user = data.users?.[0];
+    if (!user?.localId || user.disabled) {
+      res.status(401).json({ error: 'Conta não autorizada ou desativada.' });
+      return;
+    }
+
+    verifiedTokenCache.set(tokenHash, { uid: user.localId, expiresAt: now + 120_000 });
+    if (verifiedTokenCache.size > 500) {
+      for (const [k, v] of verifiedTokenCache.entries()) {
+        if (v.expiresAt <= now) verifiedTokenCache.delete(k);
+      }
+    }
+
+    next();
+  } catch {
+    res.status(503).json({ error: 'Não foi possível validar sua sessão no momento.' });
+  }
+}
+
+function biExtractRateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
+  const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const prev = biExtractHits.get(clientIp) || [];
+  const recent = prev.filter((ts) => now - ts < BI_EXTRACT_WINDOW_MS);
+
+  if (recent.length >= BI_EXTRACT_MAX_REQ) {
+    res.status(429).json({
+      error: 'Limite temporário de análises atingido. Aguarde alguns segundos e tente novamente.',
+    });
+    return;
+  }
+
+  recent.push(now);
+  biExtractHits.set(clientIp, recent);
+  next();
+}
 
 function getNewestMtimeMs(dirPath: string): number {
   let newest = 0;
@@ -219,11 +330,106 @@ async function startServer() {
 
   app.use(securityHeadersMiddleware);
   app.use('/api', apiRateLimitMiddleware);
+  app.use('/api', express.json({ limit: '25mb' }));
 
   app.get('/api/health', (_req, res) => {
     setNoStoreHeaders(res);
     res.json({ ok: true, timestamp: new Date().toISOString() });
   });
+
+  app.get('/api/bi/provider-status', verifyFirebaseAuthMiddleware, (_req, res) => {
+    setNoStoreHeaders(res);
+    res.json(getBiAiProviderStatus());
+  });
+
+  app.post(
+    '/api/bi/extract',
+    verifyFirebaseAuthMiddleware,
+    biExtractRateLimitMiddleware,
+    async (req, res) => {
+      setNoStoreHeaders(res);
+      try {
+        const body = req.body as Partial<BiExtractRequestPayload> | null;
+        if (!body || typeof body !== 'object') {
+          res.status(400).json({ error: 'Corpo da requisição inválido.' });
+          return;
+        }
+
+        const rawMil = body.military;
+        const nomeCompleto =
+          typeof rawMil?.nomeCompleto === 'string' ? rawMil.nomeCompleto.trim() : '';
+        if (nomeCompleto.length < 2 || nomeCompleto.length > 180) {
+          res.status(400).json({ error: 'Informe o nome do militar pesquisado.' });
+          return;
+        }
+
+        const rawBul = body.bulletin;
+        const fileName =
+          typeof rawBul?.fileName === 'string' && rawBul.fileName.trim()
+            ? rawBul.fileName.trim().slice(0, 240)
+            : 'boletim.pdf';
+
+        if (!Array.isArray(rawBul?.pages) || rawBul.pages.length === 0 || rawBul.pages.length > 250) {
+          res.status(400).json({ error: 'Boletim sem páginas válidas para análise.' });
+          return;
+        }
+
+        const pages: BiBulletinPageInput[] = [];
+        let totalChars = 0;
+        for (const p of rawBul.pages) {
+          const pageNumber = Math.floor(Number(p?.pageNumber));
+          const text = typeof p?.text === 'string' ? p.text : '';
+          if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 500) continue;
+          const clampedText = text.slice(0, 40_000);
+          totalChars += clampedText.length;
+          if (totalChars > 1_200_000) {
+            res.status(413).json({ error: 'Boletim muito extenso para processamento único.' });
+            return;
+          }
+          pages.push({
+            pageNumber,
+            text: clampedText,
+            usedOcr: Boolean(p?.usedOcr),
+          });
+        }
+
+        if (pages.length === 0 || totalChars < 20) {
+          res.status(400).json({
+            error: 'Não foi possível extrair texto legível deste boletim.',
+          });
+          return;
+        }
+
+        const result = await extractAlterationsFromBulletin({
+          military: {
+            nomeCompleto,
+            postoGraduacao:
+              typeof rawMil?.postoGraduacao === 'string'
+                ? rawMil.postoGraduacao.trim().slice(0, 80)
+                : '',
+            nomeGuerra:
+              typeof rawMil?.nomeGuerra === 'string' ? rawMil.nomeGuerra.trim().slice(0, 80) : '',
+            subunidade:
+              typeof rawMil?.subunidade === 'string' ? rawMil.subunidade.trim().slice(0, 80) : '',
+            identidade:
+              typeof rawMil?.identidade === 'string' ? rawMil.identidade.trim().slice(0, 60) : '',
+            qasQms: typeof rawMil?.qasQms === 'string' ? rawMil.qasQms.trim().slice(0, 100) : '',
+          },
+          bulletin: { fileName, pages },
+          options: {
+            includeFirstPart: Boolean(body.options?.includeFirstPart),
+          },
+        });
+
+        res.json(result);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Erro inesperado ao processar o Boletim Interno.';
+        console.error('[BI Extract Error]', message);
+        res.status(502).json({ error: message });
+      }
+    }
+  );
 
   app.get('/api/version', (_req, res) => {
     setNoStoreHeaders(res);

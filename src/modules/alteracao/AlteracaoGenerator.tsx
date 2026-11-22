@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Eraser,
   FilePlus2,
+  FileSearch,
   FileText,
   Highlighter,
   Indent,
@@ -40,6 +41,7 @@ import {
   formatAlteracaoHtmlOrText,
   formatAlteracaoLinesToBlocks,
   formatPtBrDateLong,
+  renderBlocksFromStructuredDoc,
 } from './alteracaoFormatter';
 import { paginateAlteracaoBlocksInDom, readAlteracaoFile } from './alteracaoFileReader';
 import {
@@ -57,6 +59,7 @@ import {
   AlteracaoArchiveDocRecord,
   parseStructuredDocJson,
 } from './alteracaoArchiveService';
+import { BiSmartSearchSendPayload, BiSmartSearchView } from './BiSmartSearchView';
 import { inferPortugueseContinuacaoArticle } from '../../shared/portugueseGender';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import {
@@ -480,6 +483,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   const [dataPraca, setDataPraca] = useState<string>(initial.dataPraca ?? '');
   const [dataFinal, setDataFinal] = useState<string>(initial.dataFinal ?? getTodayIsoDate());
   const [updateClosingDateWithCalc, setUpdateClosingDateWithCalc] = useState(false);
+  const [alteracaoMode, setAlteracaoMode] = useState<'formatar' | 'gerar'>('formatar');
   const [isImporting, setIsImporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeArchivedDoc, setActiveArchivedDoc] = useState<{
@@ -1598,8 +1602,114 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     }
   };
 
+  const handleSendBiToEditor = (payload: BiSmartSearchSendPayload) => {
+    const rendered = renderBlocksFromStructuredDoc(payload.structuredDoc, undefined, {
+      semestre: payload.semestre,
+      periodo: payload.periodo,
+      fillSemesterMonths: true,
+      preferOptionSemester: true,
+    });
+    const nextHeader = mergeExtractedHeader(
+      {
+        ...DEFAULT_HEADER,
+        ministerio: header.ministerio,
+        forca: header.forca,
+        comandoDivisao: header.comandoDivisao,
+        grandeUnidade: header.grandeUnidade,
+        omCodom: header.omCodom,
+        omExtenso: header.omExtenso,
+        tituloDocumento: header.tituloDocumento,
+        guarnicao: header.guarnicao,
+      },
+      payload.headerExtract,
+      payload.structuredDoc.monthOrder
+    );
+
+    const paginated = paginateAlteracaoBlocksInDom(rendered.blocks, {
+      fontFamily: fontStyleRef.current.fontFamily,
+      fontSizePt: fontStyleRef.current.fontSizePt,
+      lineHeight: fontStyleRef.current.lineHeight,
+    }).map((p) => sanitizeAlteracaoHtml(p));
+
+    setActiveArchivedDoc({ id: null, title: '', folderId: '' });
+    setHeader(nextHeader);
+    setStructuredDoc(payload.structuredDoc);
+    setEnabledItemIds(payload.structuredDoc.items.map((item) => item.id));
+    setPagesHtml(paginated);
+    setActivePageIndex(0);
+    setSyncVersion((v) => v + 1);
+    setAlteracaoMode('formatar');
+    setNotice(
+      `${payload.summaryLabel} (${paginated.length} folha${paginated.length > 1 ? 's' : ''}).`
+    );
+  };
+
   return (
-    <WorkspaceSplitLayout
+    <div className="flex-1 flex flex-col min-h-0 lg:overflow-hidden">
+      {/* Mode Switcher: Formatar (existing) vs Gerar de Boletins (new) */}
+      <div className="no-print shrink-0 px-3.5 sm:px-6 py-2 border-b border-white/[0.08] bg-[#0B120E]/75 backdrop-blur-md flex flex-wrap items-center justify-between gap-2">
+        <div
+          role="tablist"
+          aria-label="Modo do módulo Alterações"
+          className="inline-flex items-center rounded-lg border border-white/10 bg-[#080D0A]/80 p-1 gap-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={alteracaoMode === 'formatar'}
+            onClick={() => setAlteracaoMode('formatar')}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+              alteracaoMode === 'formatar'
+                ? 'bg-[#2D5A43]/85 text-[#F4E6C4] border border-[#C9A961]/45 shadow-sm'
+                : 'text-[#98A89F] hover:text-[#E8EEEA] border border-transparent'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Formatar Alteração</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={alteracaoMode === 'gerar'}
+            onClick={() => setAlteracaoMode('gerar')}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+              alteracaoMode === 'gerar'
+                ? 'bg-[#2D5A43]/85 text-[#F4E6C4] border border-[#C9A961]/45 shadow-sm'
+                : 'text-[#98A89F] hover:text-[#E8EEEA] border border-transparent'
+            }`}
+          >
+            <FileSearch className="w-3.5 h-3.5 text-[#E5C17B]" />
+            <span>Gerar de Boletins</span>
+          </button>
+        </div>
+
+        <span className="hidden sm:inline text-[11px] text-[#8EA196]">
+          {alteracaoMode === 'gerar'
+            ? 'Pesquisa Inteligente em Boletins Internos (BI)'
+            : 'Editor e Formatador de Folhas de Alterações'}
+        </span>
+      </div>
+
+      {/* Keep BiSmartSearchView mounted while switching tabs so uploaded BIs & review cards are preserved */}
+      <div
+        className={
+          alteracaoMode === 'gerar'
+            ? 'no-print flex-1 flex flex-col min-h-0 lg:overflow-hidden'
+            : 'hidden no-print'
+        }
+      >
+        <BiSmartSearchView onSendToEditor={handleSendBiToEditor} />
+      </div>
+
+      <div
+        className={
+          alteracaoMode === 'formatar'
+            ? 'flex-1 flex flex-col min-h-0 lg:overflow-hidden'
+            : 'hidden'
+        }
+      >
+      <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[305px] xl:w-[335px]"
       rightSidebarWidthClass="lg:w-[268px] xl:w-[292px]"
       sidebar={
@@ -2707,5 +2817,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
           })}
       </div>
     </WorkspaceSplitLayout>
+      </div>
+    </div>
   );
 };
