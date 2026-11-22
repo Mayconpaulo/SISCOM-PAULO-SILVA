@@ -6,6 +6,7 @@ import {
   AlignRight,
   Bold,
   Calculator,
+  ChevronDown,
   Eraser,
   FilePlus2,
   FileText,
@@ -39,13 +40,14 @@ import {
   formatAlteracaoHtmlOrText,
   formatAlteracaoLinesToBlocks,
   formatPtBrDateLong,
-  renderBlocksFromStructuredDoc,
 } from './alteracaoFormatter';
 import { paginateAlteracaoBlocksInDom, readAlteracaoFile } from './alteracaoFileReader';
 import {
   LiveCaretBookmark,
   applyChecklistDeltaToLivePages,
+  applyPart2UpdatesSurgicallyToPages,
   captureEditorHtmlWithCaretMarker,
+  detectLivePresentItemIds,
   reflowLiveEditedPages,
   restoreCaretBookmarkInEditors,
   tryHandleLinkedBoundaryKey,
@@ -477,6 +479,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   );
   const [dataPraca, setDataPraca] = useState<string>(initial.dataPraca ?? '');
   const [dataFinal, setDataFinal] = useState<string>(initial.dataFinal ?? getTodayIsoDate());
+  const [updateClosingDateWithCalc, setUpdateClosingDateWithCalc] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeArchivedDoc, setActiveArchivedDoc] = useState<{
@@ -522,6 +525,27 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   effectiveScaleRef.current = totalScale;
   pinchZoomRef.current = pinchZoom;
   totalScaleRef.current = totalScale;
+
+  // Keep "Tópicos e Tabelas" checkboxes live-synced with manual deletions/edits in the A4 sheets
+  useEffect(() => {
+    if (!structuredDoc || structuredDoc.items.length === 0) return;
+    const timer = window.setTimeout(() => {
+      const livePages = pagesHtmlRef.current.map(
+        (html, idx) => editorRefs.current[idx]?.innerHTML ?? html
+      );
+      const presentIds = detectLivePresentItemIds(livePages, structuredDoc);
+      setEnabledItemIds((prev) => {
+        if (prev.length === presentIds.length) {
+          const prevSet = new Set(prev);
+          if (presentIds.every((id) => prevSet.has(id))) {
+            return prev;
+          }
+        }
+        return presentIds;
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [pagesHtml, structuredDoc]);
 
   useEffect(() => {
     const el = pagesViewportRef.current;
@@ -1264,10 +1288,16 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
     highlightResetRef.current = restore;
   };
 
+  /**
+   * Isolated service-time updater: surgically modifies ONLY the service-time lines inside 2ª PARTE
+   * (and optionally the closing date line) directly on the live edited sheets.
+   * NEVER rebuilds the document or touches manual edits in 1ª PARTE.
+   */
   const applyServiceTimeToDocument = (
     pracaIso: string,
     finalIso: string,
-    shouldScrollToPart2: boolean
+    shouldScrollToPart2: boolean,
+    alsoUpdateClosingDate = updateClosingDateWithCalc
   ) => {
     const calc = calculateServiceTime(pracaIso, finalIso);
     if (!calc) {
@@ -1277,44 +1307,38 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
       return;
     }
 
-    const datePtBr = formatPtBrDateLong(finalIso);
+    const closingDatePtBr = alsoUpdateClosingDate ? formatPtBrDateLong(finalIso) : undefined;
+    const livePagesHtml = pagesHtml.map(
+      (html, idx) => editorRefs.current[idx]?.innerHTML ?? html
+    );
 
-    let baseDoc = structuredDoc;
-    let activeIdSet = enabledItemIdSet;
-    if (!baseDoc) {
-      const currentHtmls = pagesHtml.map((html, idx) => editorRefs.current[idx]?.innerHTML ?? html);
-      const formatted = formatAlteracaoHtmlOrText(currentHtmls.join('\n'), {
-        semestre: header.semestre,
-        periodo: header.periodo,
-        fillSemesterMonths: true,
-      });
-      baseDoc = formatted.structuredDoc;
-      const allIds = baseDoc.items.map((i) => i.id);
-      setEnabledItemIds(allIds);
-      activeIdSet = new Set(allIds);
+    const surgical = applyPart2UpdatesSurgicallyToPages({
+      livePagesHtml,
+      serviceTimeFormatted: calc.formatted,
+      closingDatePtBr,
+      guarnicao: header.guarnicao,
+      paginateOptions: getLivePaginateOptions(),
+    });
+
+    const sanitizedPages = surgical.pagesHtml.map((p) => sanitizeAlteracaoHtml(p));
+    setPagesHtml(sanitizedPages);
+    setSyncVersion((v) => v + 1);
+
+    // Keep structuredDoc.part2Lines metadata quietly in sync WITHOUT rebuilding the sheet
+    if (structuredDoc) {
+      const updatedPart2 = applyServiceTimeToPart2Lines(
+        structuredDoc.part2Lines,
+        calc.formatted,
+        {
+          datePtBr: closingDatePtBr,
+          guarnicao: header.guarnicao,
+          updateClosingDate: alsoUpdateClosingDate,
+        }
+      );
+      setStructuredDoc((prev) => (prev ? { ...prev, part2Lines: updatedPart2 } : prev));
     }
 
-    const updatedPart2 = applyServiceTimeToPart2Lines(baseDoc.part2Lines, calc.formatted, {
-      datePtBr,
-      guarnicao: header.guarnicao,
-    });
-    const nextDoc: StructuredAlteracaoDoc = {
-      ...baseDoc,
-      part2Lines: updatedPart2,
-    };
-
-    const rendered = renderBlocksFromStructuredDoc(nextDoc, activeIdSet, {
-      semestre: header.semestre,
-      periodo: header.periodo,
-      fillSemesterMonths: true,
-    });
-    const paginated = measureAndPaginateBlocks(rendered.blocks).map((p) =>
-      sanitizeAlteracaoHtml(p)
-    );
-    setStructuredDoc(nextDoc);
-    setPagesHtml(paginated);
-    setSyncVersion((v) => v + 1);
-    setNotice(`Tempo aplicado na 2ª Parte: ${calc.formatted}.`);
+    setNotice(`Tempo aplicado na 2ª Parte: ${calc.formatted} (texto acima preservado).`);
 
     if (shouldScrollToPart2) {
       window.requestAnimationFrame(() => {
@@ -1331,17 +1355,8 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   };
 
   const handleDateCalculatorChange = (field: 'praca' | 'final', value: string) => {
-    const nextPraca = field === 'praca' ? value : dataPraca;
-    const nextFinal = field === 'final' ? value : dataFinal;
     if (field === 'praca') setDataPraca(value);
     else setDataFinal(value);
-
-    if (structuredDoc && structuredDoc.part2Lines.length > 0) {
-      const calc = calculateServiceTime(nextPraca, nextFinal);
-      if (calc) {
-        applyServiceTimeToDocument(nextPraca, nextFinal, false);
-      }
-    }
   };
 
   const processAlteracaoFile = async (file: File) => {
@@ -1441,6 +1456,25 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
       folderId: docItem.folderId,
     });
     setNotice(`Alteração "${docItem.title}" carregada para edição.`);
+  };
+
+  const handleBatchUpdatedDocs = (updatedDocs: AlteracaoArchiveDocRecord[]) => {
+    if (!activeArchivedDoc.id) return;
+    const match = updatedDocs.find((d) => d.id === activeArchivedDoc.id);
+    if (!match) return;
+    const restoredStructured = parseStructuredDocJson(match.structuredDocJson);
+    const restoredPages =
+      match.pagesHtml.length > 0
+        ? match.pagesHtml.map((p) => sanitizeAlteracaoHtml(p))
+        : pagesHtml;
+    setHeader({ ...match.header });
+    setDataPraca(match.dataPraca || '');
+    setDataFinal(match.dataFinal || dataFinal);
+    if (restoredStructured) {
+      setStructuredDoc(restoredStructured);
+    }
+    setPagesHtml(restoredPages);
+    setSyncVersion((v) => v + 1);
   };
 
   const handleResetModel = () => {
@@ -1634,6 +1668,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
           getCurrentSnapshot={getArchiveSnapshot}
           onOpenArchivedDoc={handleOpenArchivedDoc}
           onActiveDocChange={setActiveArchivedDoc}
+          onBatchUpdatedDocs={handleBatchUpdatedDocs}
           onNotify={setNotice}
         />
 
@@ -1641,24 +1676,11 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
           <span className="siscom-field-label">Dados do Militar</span>
         </div>
 
-        {/* Dados do Militar & Período */}
+        {/* Dados do Militar: Nome de guerra & QAS/QMS sempre abertos; demais campos compactos */}
         <div className="space-y-2.5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div className="sm:col-span-2 space-y-1">
-              <label htmlFor="alt-nome" className="block text-[11px] text-[#98A89F]">
-                Nome completo
-              </label>
-              <input
-                id="alt-nome"
-                type="text"
-                value={header.nomeCompleto}
-                onChange={(e) => updateHeaderField('nomeCompleto', e.target.value)}
-                className="siscom-input w-full min-h-[40px] px-3 text-xs"
-              />
-            </div>
-
+          <div className="grid grid-cols-2 gap-2.5">
             <div className="space-y-1">
-              <label htmlFor="alt-guerra" className="block text-[11px] text-[#98A89F]">
+              <label htmlFor="alt-guerra" className="block text-[11px] font-medium text-[#E5C17B]">
                 Nome de guerra
               </label>
               <input
@@ -1666,25 +1688,13 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                 type="text"
                 value={header.nomeGuerra}
                 onChange={(e) => updateHeaderField('nomeGuerra', e.target.value)}
+                placeholder="Ex.: CARDOSO"
                 className="siscom-input w-full min-h-[40px] px-3 text-xs"
               />
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="alt-posto" className="block text-[11px] text-[#98A89F]">
-                Posto / Grad.
-              </label>
-              <input
-                id="alt-posto"
-                type="text"
-                value={header.postoGraduacao}
-                onChange={(e) => updateHeaderField('postoGraduacao', e.target.value)}
-                className="siscom-input w-full min-h-[40px] px-3 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="alt-qas" className="block text-[11px] text-[#98A89F]">
+              <label htmlFor="alt-qas" className="block text-[11px] font-medium text-[#E5C17B]">
                 QAS / QMS
               </label>
               <input
@@ -1692,84 +1702,137 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                 type="text"
                 value={header.qasQms}
                 onChange={(e) => updateHeaderField('qasQms', e.target.value)}
+                placeholder="Ex.: Infantaria"
                 className="siscom-input w-full min-h-[40px] px-3 text-xs"
               />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="alt-idt" className="block text-[11px] text-[#98A89F]">
-                Identidade
-              </label>
-              <input
-                id="alt-idt"
-                type="text"
-                value={header.identidade}
-                onChange={(e) => updateHeaderField('identidade', e.target.value)}
-                className="siscom-input w-full min-h-[40px] px-3 font-mono text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="alt-semestre" className="block text-[11px] text-[#98A89F]">
-                Semestre
-              </label>
-              <input
-                id="alt-semestre"
-                type="text"
-                value={header.semestre}
-                onChange={(e) => updateHeaderField('semestre', e.target.value)}
-                className="siscom-input w-full min-h-[40px] px-3 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="alt-folha" className="block text-[11px] text-[#98A89F]">
-                Folha inicial
-              </label>
-              <input
-                id="alt-folha"
-                type="number"
-                min={1}
-                max={999}
-                value={header.folhaInicial}
-                onChange={(e) =>
-                  updateHeaderField('folhaInicial', Math.max(1, Number(e.target.value) || 1))
-                }
-                className="siscom-input w-full min-h-[40px] px-3 font-mono text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="alt-periodo" className="block text-[11px] text-[#98A89F]">
-                Período
-              </label>
-              <input
-                id="alt-periodo"
-                type="text"
-                value={header.periodo}
-                onChange={(e) => updateHeaderField('periodo', e.target.value)}
-                className="siscom-input w-full min-h-[40px] px-3 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="alt-genero" className="block text-[11px] text-[#98A89F]">
-                Tratamento (continuação)
-              </label>
-              <select
-                id="alt-genero"
-                value={header.generoCont}
-                onChange={(e) =>
-                  updateHeaderField('generoCont', e.target.value as 'auto' | 'do' | 'da')
-                }
-                className="siscom-input w-full min-h-[40px] px-2.5 text-xs"
-              >
-                <option value="auto">Auto ({continuacaoArticle})</option>
-                <option value="do">do (Masculino)</option>
-                <option value="da">da (Feminino)</option>
-              </select>
             </div>
           </div>
+
+          <details className="rounded-lg border border-white/[0.08] bg-[#0B130F]/55 group/militar">
+            <summary className="cursor-pointer px-3 py-2 flex items-center justify-between gap-2 select-none list-none hover:bg-white/[0.03] rounded-lg transition-colors">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="text-[11px] font-medium text-[#DCE5DF] truncate">
+                  {[header.postoGraduacao, header.nomeCompleto].filter(Boolean).join(' · ') ||
+                    'Dados preenchidos automaticamente'}
+                </div>
+                <div className="text-[10px] text-[#8EA196] truncate">
+                  {[
+                    header.identidade ? `Idt ${header.identidade}` : '',
+                    header.semestre || header.periodo,
+                    `Fl. ${String(header.folhaInicial).padStart(2, '0')}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' • ')}
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[10px] text-[#98A89F] shrink-0 group-open/militar:text-[#E5C17B]">
+                <span>Editar</span>
+                <ChevronDown className="w-3.5 h-3.5 transition-transform group-open/militar:rotate-180" />
+              </span>
+            </summary>
+
+            <div className="px-3 pb-3 pt-2 border-t border-white/[0.07] grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="sm:col-span-2 space-y-1">
+                <label htmlFor="alt-nome" className="block text-[11px] text-[#98A89F]">
+                  Nome completo
+                </label>
+                <input
+                  id="alt-nome"
+                  type="text"
+                  value={header.nomeCompleto}
+                  onChange={(e) => updateHeaderField('nomeCompleto', e.target.value)}
+                  className="siscom-input w-full min-h-[38px] px-3 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="alt-posto" className="block text-[11px] text-[#98A89F]">
+                  Posto / Grad.
+                </label>
+                <input
+                  id="alt-posto"
+                  type="text"
+                  value={header.postoGraduacao}
+                  onChange={(e) => updateHeaderField('postoGraduacao', e.target.value)}
+                  className="siscom-input w-full min-h-[38px] px-3 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="alt-idt" className="block text-[11px] text-[#98A89F]">
+                  Identidade
+                </label>
+                <input
+                  id="alt-idt"
+                  type="text"
+                  value={header.identidade}
+                  onChange={(e) => updateHeaderField('identidade', e.target.value)}
+                  className="siscom-input w-full min-h-[38px] px-3 font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="alt-semestre" className="block text-[11px] text-[#98A89F]">
+                  Semestre
+                </label>
+                <input
+                  id="alt-semestre"
+                  type="text"
+                  value={header.semestre}
+                  onChange={(e) => updateHeaderField('semestre', e.target.value)}
+                  className="siscom-input w-full min-h-[38px] px-3 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="alt-folha" className="block text-[11px] text-[#98A89F]">
+                  Folha inicial
+                </label>
+                <input
+                  id="alt-folha"
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={header.folhaInicial}
+                  onChange={(e) =>
+                    updateHeaderField('folhaInicial', Math.max(1, Number(e.target.value) || 1))
+                  }
+                  className="siscom-input w-full min-h-[38px] px-3 font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="alt-periodo" className="block text-[11px] text-[#98A89F]">
+                  Período
+                </label>
+                <input
+                  id="alt-periodo"
+                  type="text"
+                  value={header.periodo}
+                  onChange={(e) => updateHeaderField('periodo', e.target.value)}
+                  className="siscom-input w-full min-h-[38px] px-3 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="alt-genero" className="block text-[11px] text-[#98A89F]">
+                  Tratamento (continuação)
+                </label>
+                <select
+                  id="alt-genero"
+                  value={header.generoCont}
+                  onChange={(e) =>
+                    updateHeaderField('generoCont', e.target.value as 'auto' | 'do' | 'da')
+                  }
+                  className="siscom-input w-full min-h-[38px] px-2.5 text-xs"
+                >
+                  <option value="auto">Auto ({continuacaoArticle})</option>
+                  <option value="do">do (Masculino)</option>
+                  <option value="da">da (Feminino)</option>
+                </select>
+              </div>
+            </div>
+          </details>
         </div>
 
         {/* Cabeçalho da OM */}
@@ -1876,6 +1939,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             <div className="space-y-2">
               {groupedChecklist.map((group) => {
                 const allGroupChecked = group.items.every((i) => enabledItemIdSet.has(i.id));
+                const someGroupChecked = group.items.some((i) => enabledItemIdSet.has(i.id));
                 return (
                   <div
                     key={group.key}
@@ -1904,6 +1968,11 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
                       </button>
                       <input
                         type="checkbox"
+                        ref={(el) => {
+                          if (el) {
+                            el.indeterminate = someGroupChecked && !allGroupChecked;
+                          }
+                        }}
                         checked={allGroupChecked}
                         onChange={() => handleToggleChecklistGroup(group.items)}
                         aria-label={`Incluir tópico ${group.title}`}
@@ -2444,14 +2513,29 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
               </label>
             </div>
 
+            <label className="flex items-center gap-2 text-[11px] text-[#B8C6BE] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={updateClosingDateWithCalc}
+                onChange={(e) => setUpdateClosingDateWithCalc(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#C8A461] cursor-pointer"
+              />
+              <span>Atualizar também a data do fecho</span>
+            </label>
+
             <button
               type="button"
               disabled={!serviceTime}
-              onClick={() => applyServiceTimeToDocument(dataPraca, dataFinal, true)}
+              onClick={() =>
+                applyServiceTimeToDocument(dataPraca, dataFinal, true, updateClosingDateWithCalc)
+              }
               className="siscom-btn siscom-btn-gold w-full !min-h-[38px] text-xs"
             >
               Aplicar na 2ª Parte
             </button>
+            <p className="text-[10px] leading-snug text-[#8EA196]">
+              Altera somente as linhas de tempo na 2ª Parte, sem resetar o documento.
+            </p>
           </div>
         </div>
       }

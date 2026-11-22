@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Calculator,
+  Calendar,
   ChevronRight,
   Cloud,
   FileText,
   Folder,
   FolderInput,
   FolderPlus,
+  Layers,
   Pencil,
   Save,
   Search,
@@ -16,19 +19,30 @@ import { SiscomAlert, SiscomModal, SiscomSpinner } from '../../shared/ui';
 import {
   AlteracaoArchiveDocRecord,
   AlteracaoFolderRecord,
+  BatchAlteracaoDocPatch,
   SaveAlteracaoDocInput,
+  batchUpdateAlteracaoDocs,
   createAlteracaoFolder,
   deleteAlteracaoDoc,
   deleteAlteracaoFolderCascade,
   getDescendantFolderIds,
   moveAlteracaoDoc,
   moveAlteracaoFolder,
+  parseStructuredDocJson,
   renameAlteracaoDoc,
   renameAlteracaoFolder,
   saveAlteracaoDoc,
   subscribeAlteracaoDocs,
   subscribeAlteracaoFolders,
 } from './alteracaoArchiveService';
+import {
+  applyServiceTimeToPart2Lines,
+  calculateServiceTime,
+  formatPtBrDateLong,
+  normalizeTimeValueStr,
+} from './alteracaoFormatter';
+import { applyPart2UpdatesSurgicallyToPages } from './alteracaoLiveReflow';
+import { sanitizeAlteracaoHtml } from '../../shared/htmlSanitizer';
 
 export interface AlteracaoArchivePanelProps {
   activeDocId: string | null;
@@ -38,6 +52,7 @@ export interface AlteracaoArchivePanelProps {
   getCurrentSnapshot: () => Omit<SaveAlteracaoDocInput, 'existingDocId' | 'folderId' | 'title'>;
   onOpenArchivedDoc: (doc: AlteracaoArchiveDocRecord) => void;
   onActiveDocChange: (info: { id: string | null; title: string; folderId: string }) => void;
+  onBatchUpdatedDocs?: (updatedDocs: AlteracaoArchiveDocRecord[]) => void;
   onNotify: (msg: string) => void;
 }
 
@@ -114,6 +129,7 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
   getCurrentSnapshot,
   onOpenArchivedDoc,
   onActiveDocChange,
+  onBatchUpdatedDocs,
   onNotify,
 }) => {
   const { firebaseUser } = useAuth();
@@ -152,6 +168,30 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
     | null
   >(null);
   const [docTitleInput, setDocTitleInput] = useState('');
+
+  // Batch edit modal state
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchFolderId, setBatchFolderId] = useState('');
+  const [batchIncludeSubfolders, setBatchIncludeSubfolders] = useState(true);
+  const [batchExcludedDocIds, setBatchExcludedDocIds] = useState<Set<string>>(new Set());
+  const [batchApplyServiceTime, setBatchApplyServiceTime] = useState(false);
+  const [batchTimeMode, setBatchTimeMode] = useState<'dates' | 'manual'>('dates');
+  const [batchDataPraca, setBatchDataPraca] = useState('');
+  const [batchDataFinal, setBatchDataFinal] = useState('');
+  const [batchManualTime, setBatchManualTime] = useState('');
+  const [batchApplyClosingDate, setBatchApplyClosingDate] = useState(false);
+  const [batchClosingDateIso, setBatchClosingDateIso] = useState('');
+  const [batchApplyHeader, setBatchApplyHeader] = useState(false);
+  const [batchNomeGuerra, setBatchNomeGuerra] = useState('');
+  const [batchQasQms, setBatchQasQms] = useState('');
+  const [batchPostoGraduacao, setBatchPostoGraduacao] = useState('');
+  const [batchNomeCompleto, setBatchNomeCompleto] = useState('');
+  const [batchIdentidade, setBatchIdentidade] = useState('');
+  const [batchSemestre, setBatchSemestre] = useState('');
+  const [batchPeriodo, setBatchPeriodo] = useState('');
+  const [batchGuarnicao, setBatchGuarnicao] = useState('');
+  const [batchGeneroCont, setBatchGeneroCont] = useState<'keep' | 'auto' | 'do' | 'da'>('keep');
+  const [batchError, setBatchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uid) {
@@ -429,6 +469,225 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
     return { subfolders: Math.max(0, descendants.size - 1), docs: docsInside };
   }, [folderModal, folders, docs]);
 
+  const batchTargetDocs = useMemo(() => {
+    if (!showBatchModal) return [];
+    if (batchFolderId === '') {
+      if (batchIncludeSubfolders) return docs;
+      return docs.filter((d) => d.folderId === '');
+    }
+    const allowedFolders = batchIncludeSubfolders
+      ? getDescendantFolderIds(batchFolderId, folders)
+      : new Set<string>([batchFolderId]);
+    return docs.filter((d) => allowedFolders.has(d.folderId));
+  }, [showBatchModal, batchFolderId, batchIncludeSubfolders, docs, folders]);
+
+  const batchSelectedDocs = useMemo(
+    () => batchTargetDocs.filter((d) => !batchExcludedDocIds.has(d.id)),
+    [batchTargetDocs, batchExcludedDocIds]
+  );
+
+  const batchCalculatedServiceTime = useMemo(
+    () => calculateServiceTime(batchDataPraca, batchDataFinal),
+    [batchDataPraca, batchDataFinal]
+  );
+
+  const batchResolvedServiceTime = useMemo(() => {
+    if (!batchApplyServiceTime) return '';
+    if (batchTimeMode === 'dates') {
+      return batchCalculatedServiceTime?.formatted || '';
+    }
+    const clean = batchManualTime.trim();
+    if (!/^\d{1,2}\s*a\s*\d{1,2}\s*m\s*\d{1,2}\s*d$/i.test(clean)) return '';
+    return normalizeTimeValueStr(clean);
+  }, [batchApplyServiceTime, batchTimeMode, batchCalculatedServiceTime, batchManualTime]);
+
+  const batchClosingDatePtBr = useMemo(
+    () => (batchApplyClosingDate && batchClosingDateIso ? formatPtBrDateLong(batchClosingDateIso) : ''),
+    [batchApplyClosingDate, batchClosingDateIso]
+  );
+
+  const openBatchEditModal = (targetFolderId: string) => {
+    setBatchFolderId(targetFolderId);
+    setBatchIncludeSubfolders(true);
+    setBatchExcludedDocIds(new Set());
+    setBatchApplyServiceTime(false);
+    setBatchTimeMode('dates');
+    setBatchDataPraca('');
+    setBatchDataFinal('');
+    setBatchManualTime('');
+    setBatchApplyClosingDate(false);
+    setBatchClosingDateIso('');
+    setBatchApplyHeader(false);
+    setBatchNomeGuerra('');
+    setBatchQasQms('');
+    setBatchPostoGraduacao('');
+    setBatchNomeCompleto('');
+    setBatchIdentidade('');
+    setBatchSemestre('');
+    setBatchPeriodo('');
+    setBatchGuarnicao('');
+    setBatchGeneroCont('keep');
+    setBatchError(null);
+    setShowBatchModal(true);
+  };
+
+  const handleConfirmBatchEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uid) return;
+    setBatchError(null);
+
+    if (batchSelectedDocs.length === 0) {
+      setBatchError('Selecione pelo menos uma alteração para editar em lote.');
+      return;
+    }
+
+    const hasHeaderChange =
+      batchApplyHeader &&
+      (batchNomeGuerra.trim() !== '' ||
+        batchQasQms.trim() !== '' ||
+        batchPostoGraduacao.trim() !== '' ||
+        batchNomeCompleto.trim() !== '' ||
+        batchIdentidade.trim() !== '' ||
+        batchSemestre.trim() !== '' ||
+        batchPeriodo.trim() !== '' ||
+        batchGuarnicao.trim() !== '' ||
+        batchGeneroCont !== 'keep');
+
+    if (batchApplyServiceTime && !batchResolvedServiceTime) {
+      setBatchError(
+        batchTimeMode === 'dates'
+          ? 'Informe Data de praça e Data final válidas para o Tempo de Serviço.'
+          : 'Informe o tempo no formato "XX a XX m XX d" (ex.: 08 a 04 m 12 d).'
+      );
+      return;
+    }
+
+    if (batchApplyClosingDate && !batchClosingDatePtBr) {
+      setBatchError('Informe uma data válida para o fecho da 2ª Parte.');
+      return;
+    }
+
+    if (!batchApplyServiceTime && !batchApplyClosingDate && !hasHeaderChange) {
+      setBatchError('Marque e preencha pelo menos uma alteração para aplicar em lote.');
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const patches: BatchAlteracaoDocPatch[] = [];
+      const updatedRecords: AlteracaoArchiveDocRecord[] = [];
+
+      for (const docItem of batchSelectedDocs) {
+        const nextHeader = { ...docItem.header };
+        if (hasHeaderChange) {
+          if (batchNomeGuerra.trim()) nextHeader.nomeGuerra = batchNomeGuerra.trim();
+          if (batchQasQms.trim()) nextHeader.qasQms = batchQasQms.trim();
+          if (batchPostoGraduacao.trim()) nextHeader.postoGraduacao = batchPostoGraduacao.trim();
+          if (batchNomeCompleto.trim()) nextHeader.nomeCompleto = batchNomeCompleto.trim();
+          if (batchIdentidade.trim()) nextHeader.identidade = batchIdentidade.trim();
+          if (batchSemestre.trim()) nextHeader.semestre = batchSemestre.trim();
+          if (batchPeriodo.trim()) nextHeader.periodo = batchPeriodo.trim();
+          if (batchGuarnicao.trim()) nextHeader.guarnicao = batchGuarnicao.trim();
+          if (batchGeneroCont !== 'keep') nextHeader.generoCont = batchGeneroCont;
+        }
+
+        let nextPagesHtml = docItem.pagesHtml;
+        let nextDataPraca = docItem.dataPraca;
+        let nextDataFinal = docItem.dataFinal;
+        let nextStructuredDocJson = docItem.structuredDocJson;
+
+        if (batchApplyServiceTime || batchApplyClosingDate) {
+          const surgical = applyPart2UpdatesSurgicallyToPages({
+            livePagesHtml: docItem.pagesHtml,
+            serviceTimeFormatted: batchApplyServiceTime ? batchResolvedServiceTime : undefined,
+            closingDatePtBr: batchApplyClosingDate ? batchClosingDatePtBr : undefined,
+            guarnicao: nextHeader.guarnicao,
+          });
+          nextPagesHtml = surgical.pagesHtml.map((p) => sanitizeAlteracaoHtml(p));
+
+          if (batchApplyServiceTime && batchTimeMode === 'dates') {
+            if (batchDataPraca) nextDataPraca = batchDataPraca;
+            if (batchDataFinal) nextDataFinal = batchDataFinal;
+          } else if (batchApplyClosingDate && batchClosingDateIso) {
+            nextDataFinal = batchClosingDateIso;
+          }
+        }
+
+        const parsedStructured = parseStructuredDocJson(docItem.structuredDocJson);
+        if (parsedStructured) {
+          const nextStructured = {
+            ...parsedStructured,
+            extractedHeader: {
+              ...parsedStructured.extractedHeader,
+              ...(hasHeaderChange
+                ? {
+                    ...(batchNomeGuerra.trim() ? { nomeGuerra: batchNomeGuerra.trim() } : {}),
+                    ...(batchQasQms.trim() ? { qasQms: batchQasQms.trim() } : {}),
+                    ...(batchPostoGraduacao.trim()
+                      ? { postoGraduacao: batchPostoGraduacao.trim() }
+                      : {}),
+                    ...(batchNomeCompleto.trim()
+                      ? { nomeCompleto: batchNomeCompleto.trim() }
+                      : {}),
+                    ...(batchIdentidade.trim() ? { identidade: batchIdentidade.trim() } : {}),
+                    ...(batchSemestre.trim() ? { semestre: batchSemestre.trim() } : {}),
+                    ...(batchPeriodo.trim() ? { periodo: batchPeriodo.trim() } : {}),
+                    ...(batchGuarnicao.trim() ? { guarnicao: batchGuarnicao.trim() } : {}),
+                  }
+                : {}),
+            },
+            part2Lines:
+              batchApplyServiceTime || batchApplyClosingDate
+                ? applyServiceTimeToPart2Lines(
+                    parsedStructured.part2Lines,
+                    batchApplyServiceTime ? batchResolvedServiceTime : '',
+                    {
+                      datePtBr: batchApplyClosingDate ? batchClosingDatePtBr : undefined,
+                      guarnicao: nextHeader.guarnicao,
+                      updateClosingDate: batchApplyClosingDate,
+                    }
+                  )
+                : parsedStructured.part2Lines,
+          };
+          try {
+            nextStructuredDocJson = JSON.stringify(nextStructured);
+          } catch {
+            // Keep existing JSON if serialization fails
+          }
+        }
+
+        patches.push({
+          id: docItem.id,
+          header: nextHeader,
+          pagesHtml: nextPagesHtml,
+          dataPraca: nextDataPraca,
+          dataFinal: nextDataFinal,
+          structuredDocJson: nextStructuredDocJson,
+        });
+
+        updatedRecords.push({
+          ...docItem,
+          header: nextHeader,
+          pagesHtml: nextPagesHtml,
+          dataPraca: nextDataPraca,
+          dataFinal: nextDataFinal,
+          structuredDocJson: nextStructuredDocJson,
+        });
+      }
+
+      const count = await batchUpdateAlteracaoDocs(uid, patches);
+      setShowBatchModal(false);
+      onBatchUpdatedDocs?.(updatedRecords);
+      onNotify(
+        `${count} alteraç${count === 1 ? 'ão atualizada' : 'ões atualizadas'} em lote com sucesso.`
+      );
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : 'Erro ao aplicar edição em lote.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   if (!uid) return null;
 
   return (
@@ -507,6 +766,16 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
             className="siscom-input h-9 pl-8 pr-2.5 text-xs"
           />
         </div>
+        <button
+          type="button"
+          disabled={isBusy || docs.length === 0}
+          title="Editar várias alterações de uma pasta de uma vez"
+          onClick={() => openBatchEditModal(currentFolderId)}
+          className="siscom-btn siscom-btn-secondary h-9 px-2.5 text-xs shrink-0"
+        >
+          <Layers className="w-3.5 h-3.5 text-[#83B499]" />
+          <span className="hidden sm:inline">Lote</span>
+        </button>
         <button
           type="button"
           disabled={isBusy}
@@ -611,6 +880,14 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
                     </div>
                   </button>
                   <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      title="Editar alterações desta pasta em lote"
+                      onClick={() => openBatchEditModal(folder.id)}
+                      className="h-8 w-8 inline-flex items-center justify-center rounded-md text-[#83B499] hover:text-[#F4E6C4] hover:bg-white/[0.07] transition-colors"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       type="button"
                       title="Renomear pasta"
@@ -1020,6 +1297,333 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
             </div>
           </form>
         )}
+      </SiscomModal>
+
+      {/* Modal: Batch Edit Alterations in Folder */}
+      <SiscomModal
+        open={showBatchModal}
+        onClose={() => !isBusy && setShowBatchModal(false)}
+        title="Editar Alterações em Lote"
+        maxWidthClass="max-w-xl"
+      >
+        <form onSubmit={handleConfirmBatchEdit} className="space-y-4">
+          {batchError && (
+            <SiscomAlert tone="error" onDismiss={() => setBatchError(null)}>
+              {batchError}
+            </SiscomAlert>
+          )}
+
+          {/* Pasta alvo + documentos */}
+          <div className="space-y-2">
+            <label className="siscom-label">Pasta de destino</label>
+            <select
+              value={batchFolderId}
+              onChange={(e) => {
+                setBatchFolderId(e.target.value);
+                setBatchExcludedDocIds(new Set());
+              }}
+              className="siscom-select"
+            >
+              {folderOptions.map((opt) => (
+                <option key={opt.id || 'root'} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <label className="inline-flex items-center gap-2 text-[#C6D4CC] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={batchIncludeSubfolders}
+                  onChange={(e) => {
+                    setBatchIncludeSubfolders(e.target.checked);
+                    setBatchExcludedDocIds(new Set());
+                  }}
+                  className="h-4 w-4 accent-[#C8A461] cursor-pointer"
+                />
+                <span>Incluir subpastas</span>
+              </label>
+              <span className="font-mono text-[11px] text-[#E5C17B]">
+                {batchSelectedDocs.length}/{batchTargetDocs.length} selecionada
+                {batchSelectedDocs.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {batchTargetDocs.length > 0 ? (
+              <details className="rounded-lg border border-white/[0.08] bg-[#0A110E]/45 p-2.5">
+                <summary className="cursor-pointer text-[11px] text-[#B8C6BE] hover:text-white select-none">
+                  Escolher quais alterações incluir ({batchSelectedDocs.length} de{' '}
+                  {batchTargetDocs.length})
+                </summary>
+                <div className="mt-2 max-h-32 overflow-y-auto space-y-1 pr-1">
+                  {batchTargetDocs.map((d) => {
+                    const checked = !batchExcludedDocIds.has(d.id);
+                    return (
+                      <label
+                        key={d.id}
+                        className="flex items-center gap-2 text-xs text-[#D4DFD9] py-0.5 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setBatchExcludedDocIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(d.id)) next.delete(d.id);
+                              else next.add(d.id);
+                              return next;
+                            })
+                          }
+                          className="h-3.5 w-3.5 accent-[#2D5A43] cursor-pointer"
+                        />
+                        <span className="truncate">{d.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </details>
+            ) : (
+              <p className="text-xs text-[#98A89F] rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2">
+                Nenhuma alteração arquivada encontrada nesta pasta.
+              </p>
+            )}
+          </div>
+
+          {/* 1. Tempo de Serviço (2ª Parte) */}
+          <div className="rounded-lg border border-white/[0.09] bg-[#0C1410]/60 p-3 space-y-2.5">
+            <label className="flex items-center justify-between gap-2 cursor-pointer">
+              <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#F4E6C4]">
+                <input
+                  type="checkbox"
+                  checked={batchApplyServiceTime}
+                  onChange={(e) => setBatchApplyServiceTime(e.target.checked)}
+                  className="h-4 w-4 accent-[#C8A461] cursor-pointer"
+                />
+                <Calculator className="w-3.5 h-3.5 text-[#E5C17B]" />
+                <span>Alterar Tempo de Serviço (2ª Parte)</span>
+              </span>
+              {batchApplyServiceTime && batchResolvedServiceTime && (
+                <span className="font-mono text-[11px] font-semibold text-[#E5C17B]">
+                  {batchResolvedServiceTime}
+                </span>
+              )}
+            </label>
+
+            {batchApplyServiceTime && (
+              <div className="space-y-2.5 pt-1">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setBatchTimeMode('dates')}
+                    className={`siscom-btn !min-h-[34px] text-[11px] ${
+                      batchTimeMode === 'dates' ? 'siscom-btn-primary' : 'siscom-btn-secondary'
+                    }`}
+                  >
+                    Calcular por datas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchTimeMode('manual')}
+                    className={`siscom-btn !min-h-[34px] text-[11px] ${
+                      batchTimeMode === 'manual' ? 'siscom-btn-primary' : 'siscom-btn-secondary'
+                    }`}
+                  >
+                    Digitar tempo
+                  </button>
+                </div>
+
+                {batchTimeMode === 'dates' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="block space-y-1">
+                      <span className="block text-[11px] text-[#98A89F]">Data de praça</span>
+                      <input
+                        type="date"
+                        value={batchDataPraca}
+                        onChange={(e) => setBatchDataPraca(e.target.value)}
+                        className="siscom-input !min-h-[36px] text-xs"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="block text-[11px] text-[#98A89F]">Data final</span>
+                      <input
+                        type="date"
+                        value={batchDataFinal}
+                        onChange={(e) => setBatchDataFinal(e.target.value)}
+                        className="siscom-input !min-h-[36px] text-xs"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="block space-y-1">
+                    <span className="block text-[11px] text-[#98A89F]">
+                      Tempo formatado (anos, meses e dias)
+                    </span>
+                    <input
+                      type="text"
+                      value={batchManualTime}
+                      onChange={(e) => setBatchManualTime(e.target.value)}
+                      placeholder="Ex.: 08 a 04 m 12 d"
+                      className="siscom-input !min-h-[36px] font-mono text-xs"
+                    />
+                  </label>
+                )}
+
+                <p className="text-[11px] text-[#8EA196]">
+                  Altera somente as linhas do tempo de serviço na 2ª Parte — todo o texto da 1ª
+                  Parte permanece intacto.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 2. Data do Fecho / Documento na 2ª Parte */}
+          <div className="rounded-lg border border-white/[0.09] bg-[#0C1410]/60 p-3 space-y-2.5">
+            <label className="flex items-center justify-between gap-2 cursor-pointer">
+              <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#F4E6C4]">
+                <input
+                  type="checkbox"
+                  checked={batchApplyClosingDate}
+                  onChange={(e) => setBatchApplyClosingDate(e.target.checked)}
+                  className="h-4 w-4 accent-[#C8A461] cursor-pointer"
+                />
+                <Calendar className="w-3.5 h-3.5 text-[#E5C17B]" />
+                <span>Alterar Data do Fecho (Quartel..., na 2ª Parte)</span>
+              </span>
+            </label>
+
+            {batchApplyClosingDate && (
+              <div className="space-y-1.5 pt-1">
+                <input
+                  type="date"
+                  value={batchClosingDateIso}
+                  onChange={(e) => setBatchClosingDateIso(e.target.value)}
+                  className="siscom-input !min-h-[36px] text-xs"
+                />
+                {batchClosingDatePtBr && (
+                  <p className="text-[11px] text-[#83B499]">
+                    Prévia: Quartel ..., {batchClosingDatePtBr}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 3. Dados do Militar / Cabeçalho */}
+          <div className="rounded-lg border border-white/[0.09] bg-[#0C1410]/60 p-3 space-y-2.5">
+            <label className="flex items-center gap-2 text-xs font-semibold text-[#F4E6C4] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={batchApplyHeader}
+                onChange={(e) => setBatchApplyHeader(e.target.checked)}
+                className="h-4 w-4 accent-[#C8A461] cursor-pointer"
+              />
+              <FileText className="w-3.5 h-3.5 text-[#83B499]" />
+              <span>Alterar Dados do Militar / Cabeçalho</span>
+            </label>
+
+            {batchApplyHeader && (
+              <div className="space-y-2 pt-1">
+                <p className="text-[11px] text-[#8EA196]">
+                  Preencha apenas os campos que deseja atualizar — campos em branco mantêm o valor
+                  atual de cada documento.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={batchNomeGuerra}
+                    onChange={(e) => setBatchNomeGuerra(e.target.value)}
+                    placeholder="Nome de guerra"
+                    className="siscom-input !min-h-[36px] text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={batchQasQms}
+                    onChange={(e) => setBatchQasQms(e.target.value)}
+                    placeholder="QAS / QMS"
+                    className="siscom-input !min-h-[36px] text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={batchPostoGraduacao}
+                    onChange={(e) => setBatchPostoGraduacao(e.target.value)}
+                    placeholder="Posto / Graduação"
+                    className="siscom-input !min-h-[36px] text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={batchIdentidade}
+                    onChange={(e) => setBatchIdentidade(e.target.value)}
+                    placeholder="Identidade"
+                    className="siscom-input !min-h-[36px] font-mono text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={batchNomeCompleto}
+                    onChange={(e) => setBatchNomeCompleto(e.target.value)}
+                    placeholder="Nome completo"
+                    className="siscom-input !min-h-[36px] text-xs sm:col-span-2"
+                  />
+                  <input
+                    type="text"
+                    value={batchSemestre}
+                    onChange={(e) => setBatchSemestre(e.target.value)}
+                    placeholder="Semestre (ex.: 1º SEMESTRE DE 2026)"
+                    className="siscom-input !min-h-[36px] text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={batchPeriodo}
+                    onChange={(e) => setBatchPeriodo(e.target.value)}
+                    placeholder="Período (ex.: 01/01/2026 a 30/06/2026)"
+                    className="siscom-input !min-h-[36px] text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={batchGuarnicao}
+                    onChange={(e) => setBatchGuarnicao(e.target.value)}
+                    placeholder="Guarnição"
+                    className="siscom-input !min-h-[36px] text-xs"
+                  />
+                  <select
+                    value={batchGeneroCont}
+                    onChange={(e) =>
+                      setBatchGeneroCont(e.target.value as 'keep' | 'auto' | 'do' | 'da')
+                    }
+                    className="siscom-select !min-h-[36px] text-xs"
+                  >
+                    <option value="keep">Tratamento: manter atual</option>
+                    <option value="auto">Tratamento: Automático</option>
+                    <option value="do">Tratamento: do (Masculino)</option>
+                    <option value="da">Tratamento: da (Feminino)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => setShowBatchModal(false)}
+              className="siscom-btn siscom-btn-secondary min-h-[40px] px-4 text-xs"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isBusy || batchSelectedDocs.length === 0}
+              className="siscom-btn siscom-btn-primary min-h-[40px] px-4 text-xs"
+            >
+              {isBusy ? <SiscomSpinner className="w-4 h-4" /> : <Layers className="w-3.5 h-3.5" />}
+              <span>
+                Aplicar em {batchSelectedDocs.length} alteraç
+                {batchSelectedDocs.length === 1 ? 'ão' : 'ões'}
+              </span>
+            </button>
+          </div>
+        </form>
       </SiscomModal>
     </div>
   );

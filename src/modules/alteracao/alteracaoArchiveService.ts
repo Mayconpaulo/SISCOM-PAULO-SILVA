@@ -526,3 +526,66 @@ export async function deleteAlteracaoDoc(uid: string, docId: string): Promise<vo
     handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
+
+export interface BatchAlteracaoDocPatch {
+  id: string;
+  header: AlteracaoHeaderData;
+  pagesHtml: string[];
+  dataPraca: string;
+  dataFinal: string;
+  structuredDocJson: string;
+}
+
+export async function batchUpdateAlteracaoDocs(
+  uid: string,
+  patches: BatchAlteracaoDocPatch[]
+): Promise<number> {
+  if (!uid || patches.length === 0) return 0;
+
+  const CHUNK_SIZE = 350;
+  let updatedCount = 0;
+
+  for (let start = 0; start < patches.length; start += CHUNK_SIZE) {
+    const chunk = patches.slice(start, start + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    for (const patch of chunk) {
+      const cleanPages = (
+        Array.isArray(patch.pagesHtml) && patch.pagesHtml.length > 0
+          ? patch.pagesHtml.slice(0, 60)
+          : ['<p><br></p>']
+      ).map((p) => {
+        const sanitized = sanitizeAlteracaoHtml(p);
+        return sanitized.length > 195000 ? sanitized.slice(0, 195000) : sanitized;
+      });
+
+      const pagesBytes = cleanPages.reduce((acc, p) => acc + utf8ByteLength(p), 0);
+      let safeStructuredJson = typeof patch.structuredDocJson === 'string' ? patch.structuredDocJson : '';
+      if (
+        safeStructuredJson.length > 255000 ||
+        pagesBytes + utf8ByteLength(safeStructuredJson) >= 860000
+      ) {
+        safeStructuredJson = '';
+      }
+
+      batch.update(doc(db, 'users', uid, 'alteracao_docs', patch.id), {
+        header: sanitizeHeaderForFirestore(patch.header),
+        pagesHtml: cleanPages,
+        dataPraca: clampStr(patch.dataPraca, 20),
+        dataFinal: clampStr(patch.dataFinal, 20),
+        structuredDocJson: safeStructuredJson,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    try {
+      await batch.commit();
+      updatedCount += chunk.length;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${uid}/alteracao_docs`);
+    }
+  }
+
+  return updatedCount;
+}
+

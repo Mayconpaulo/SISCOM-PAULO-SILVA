@@ -899,7 +899,7 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
     const content = await page.getTextContent();
     const styles = content.styles as Record<string, { fontFamily?: string }> | undefined;
 
-    const chunks: PositionedChunk[] = [];
+    const rawChunks: PositionedChunk[] = [];
     for (const rawItem of content.items) {
       const item = rawItem as PdfTextItemLike;
       if (typeof item.str !== 'string') continue;
@@ -909,7 +909,48 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
       const y = item.transform?.[5] ?? 0;
       const width = item.width ?? text.length * 4;
       const bold = item.fontName ? isFontBold(item.fontName, styles) : false;
-      chunks.push({ text, x, y, width, bold });
+      rawChunks.push({ text, x, y, width, bold });
+    }
+
+    // Deduplicate faux-bold / double-rendered overlapping PDF text chunks at nearly identical (x, y)
+    rawChunks.sort((a, b) => b.y - a.y || a.x - b.x);
+    const chunks: PositionedChunk[] = [];
+    for (const chunk of rawChunks) {
+      const trimmed = chunk.text.trim();
+      let mergedDuplicate = false;
+      // Check recent chunks on virtually the same baseline
+      for (let k = chunks.length - 1; k >= 0; k--) {
+        const prev = chunks[k];
+        if (prev.y - chunk.y > 2.6) break;
+        if (Math.abs(prev.y - chunk.y) <= 2.4 && Math.abs(prev.x - chunk.x) <= 2.8) {
+          const prevTrimmed = prev.text.trim();
+          if (prevTrimmed === trimmed) {
+            // Double-printed at tiny offset = faux-bold; keep single copy
+            prev.bold = true;
+            prev.width = Math.max(prev.width, chunk.width);
+            mergedDuplicate = true;
+            break;
+          }
+          if (
+            prevTrimmed.length >= 2 &&
+            trimmed.length >= 2 &&
+            (prevTrimmed.startsWith(trimmed) || trimmed.startsWith(prevTrimmed)) &&
+            Math.abs(prev.x - chunk.x) <= 1.8 &&
+            Math.abs(prev.y - chunk.y) <= 1.8
+          ) {
+            if (trimmed.length > prevTrimmed.length) {
+              prev.text = chunk.text;
+              prev.width = Math.max(prev.width, chunk.width);
+            }
+            prev.bold = true;
+            mergedDuplicate = true;
+            break;
+          }
+        }
+      }
+      if (!mergedDuplicate) {
+        chunks.push(chunk);
+      }
     }
 
     // 1. Detect vector-ruled tables on this PDF page
@@ -947,10 +988,16 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
       }
 
       // Check if this row sits inside a detected ruled table (never inside 2ª Parte)
+      // Verify both Y and X overlap so margin/outside text is never swallowed or duplicated
       const matchIdx = !inPart2OnPage
-        ? gridMatches.findIndex(
-            (m) => rowY <= m.grid.maxY + 4 && rowY >= m.grid.minY - 4
-          )
+        ? gridMatches.findIndex((m) => {
+            if (rowY > m.grid.maxY + 4 || rowY < m.grid.minY - 4) return false;
+            const rowChunks = rows[rIdx];
+            const insideCount = rowChunks.filter(
+              (c) => c.x >= m.grid.minX - 14 && c.x <= m.grid.maxX + 14
+            ).length;
+            return insideCount / Math.max(1, rowChunks.length) >= 0.6;
+          })
         : -1;
       if (matchIdx !== -1) {
         if (!emittedGrids.has(matchIdx)) {
@@ -1096,10 +1143,18 @@ async function readAlteracaoFromPdf(file: File): Promise<RawAlteracaoLine[]> {
     }
 
     if (next.pageIndex !== curr.pageIndex) {
-      // Across page break: mark hard break if clearly ended short; otherwise leave undefined
-      // so formatter checks against the first body word after continuation headers are stripped.
+      // Across page break: mark crossPageAfter so the formatter inspects the REAL first body line
+      // on the next page (after continuation headers are stripped). Only set hardBreakAfter when
+      // the line clearly ended way short (e.g. short heading or completed sentence well before margin).
+      curr.line.crossPageAfter = true;
+      const lineWidthSpan = Math.max(120, metrics.rightMargin - metrics.leftMargin);
       const remaining = metrics.rightMargin - (curr.line.pdfXEnd ?? metrics.rightMargin);
-      if (remaining > 46) {
+      const endsSentence =
+        /[.;!?]$/.test(curr.line.text.trim()) &&
+        !/\b(n[º°o]|nr|art|par|inc|fl|fls|sgt|ten|cap|maj|cel|sd|cb|subten|st|bi|bol|om|cia|btl|bda|dr|sr|sra|etc|obs|ref|proc|doc|mil|ex|adm|esp|inf|cav|art|eng|com|int|mat|bel|med|vet|dent|farm|aux|es|mec|mtz|pqd|amv|bl|lv|sel|mth|pant)\.$|\d\.$/i.test(
+          curr.line.text.trim()
+        );
+      if ((endsSentence && remaining > 70) || remaining > lineWidthSpan * 0.45) {
         curr.line.hardBreakAfter = true;
       }
       continue;
@@ -1190,8 +1245,21 @@ function extractDocxParagraphRuns(p: Element): Array<{
     }
   };
 
+  const isInsideDeletedRevision = (node: Element): boolean => {
+    let cur: Element | null = node.parentElement;
+    while (cur && cur !== p) {
+      const name = cur.localName || cur.nodeName.replace(/^.*:/, '');
+      if (name === 'del' || name === 'moveFrom') return true;
+      cur = cur.parentElement;
+    }
+    return false;
+  };
+
   const runs = Array.from(p.getElementsByTagNameNS(W_NS, 'r'));
   for (const r of runs) {
+    // Skip Word Track Changes deleted revisions so deleted text never duplicates edited phrases
+    if (isInsideDeletedRevision(r)) continue;
+
     const rPr = directWordChildren(r, 'rPr')[0];
     let runBold = false;
     let runUnderlined = false;
@@ -1210,7 +1278,7 @@ function extractDocxParagraphRuns(p: Element): Array<{
 
     for (const rChild of Array.from(r.children)) {
       const tag = rChild.localName || rChild.nodeName.replace(/^.*:/, '');
-      if (tag === 't' || tag === 'delText') {
+      if (tag === 't') {
         const txt = rChild.textContent || '';
         if (txt) appendTextToCurrent(txt, runBold, runUnderlined);
       } else if (tag === 'tab') {

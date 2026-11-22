@@ -33,6 +33,10 @@ export interface RawAlteracaoLine {
   pdfXEnd?: number;
   pdfRightMargin?: number;
   pdfFirstWordWidth?: number;
+  /** True when this line was the last line on its source page before a page break. */
+  crossPageAfter?: boolean;
+  /** True when a continuation header/footer was stripped immediately before this body line. */
+  skippedHeaderBefore?: boolean;
 }
 
 export interface AlteracaoTableBlockMeta {
@@ -1636,6 +1640,16 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
     }
   }
 
+  const isStandalonePageFooterLine = (lineText: string): boolean => {
+    const clean = cleanInlineWhitespace(lineText);
+    if (!clean || clean.length > 48) return false;
+    return (
+      /^(?:P[ÁA]GINA|P[ÁA]G\.?|FL\.?|FOLHA)\s*\d+\s*(?:DE|\/)\s*\d+\s*$/i.test(clean) ||
+      /^[-–—]?\s*\d{1,3}\s*[-–—]?$/.test(clean) ||
+      /^\d{1,3}\s*\/\s*\d{1,3}$/.test(clean)
+    );
+  };
+
   // Filter skipped lines & track whether a header break happened between elements
   const rawBodyStream: Array<{ line: RawAlteracaoLine; skippedBefore: boolean }> = [];
   let sawSkipped = false;
@@ -1651,7 +1665,8 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
         isFolhaNumberLine(t) ||
         isSemestreLine(t) ||
         isPeriodoLine(t) ||
-        isStandaloneCpLine(t)
+        isStandaloneCpLine(t) ||
+        isStandalonePageFooterLine(t)
       ) {
         sawSkipped = true;
         continue;
@@ -1661,13 +1676,18 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
         continue;
       }
     }
-    rawBodyStream.push({ line: item, skippedBefore: sawSkipped });
+    rawBodyStream.push({
+      line: sawSkipped ? { ...item, skippedHeaderBefore: true } : item,
+      skippedBefore: sawSkipped,
+    });
     sawSkipped = false;
   }
 
   const bodyLines: RawAlteracaoLine[] = [];
   const normalizeRowSig = (row?: string[]) =>
     (row || []).map((c) => stripDiacriticsUpper(cleanInlineWhitespace(c))).join('|');
+  const normalizeLineDedupSig = (t: string) =>
+    stripDiacriticsUpper(cleanInlineWhitespace(t)).replace(/\s+/g, ' ').trim();
 
   for (const entry of rawBodyStream) {
     const { line, skippedBefore } = entry;
@@ -1687,14 +1707,39 @@ export function extractHeaderAndBodyLines(rawLines: RawAlteracaoLine[]): {
         normalizeRowSig(line.tableRows[0]) === normalizeRowSig(prev.tableRows[0]);
 
       if (!differentItemId && (sameItemId || sameHeaderSig || skippedBefore)) {
-        const incomingRows =
+        let incomingRows =
           line.tableRows.length > 1 && sameHeaderSig
             ? line.tableRows.slice(1)
             : line.tableRows;
+        // Guard against a single row duplicated right across a page break
+        if (
+          incomingRows.length > 0 &&
+          prev.tableRows.length > 0 &&
+          normalizeRowSig(incomingRows[0]) ===
+            normalizeRowSig(prev.tableRows[prev.tableRows.length - 1])
+        ) {
+          incomingRows = incomingRows.slice(1);
+        }
         prev.tableRows = [...prev.tableRows, ...incomingRows];
         continue;
       }
     }
+
+    // Deduplicate exact repeated text lines across page breaks or overlapping PDF layers
+    if (!line.tableRows && prev && !prev.tableRows) {
+      const prevSig = normalizeLineDedupSig(prev.text);
+      const currSig = normalizeLineDedupSig(line.text);
+      const crossedPage = Boolean(skippedBefore || prev.crossPageAfter);
+      if (
+        currSig.length > 0 &&
+        currSig === prevSig &&
+        !isSemAlteracaoLine(line.text) &&
+        (crossedPage || currSig.length >= 28)
+      ) {
+        continue;
+      }
+    }
+
     bodyLines.push(line.tableRows ? { ...line, tableRows: [...line.tableRows] } : line);
   }
 
@@ -1779,11 +1824,11 @@ export function calculateServiceTime(
 }
 
 const PART2_TIME_ONLY_RE = /^\s*(\d{1,2})\s*a\s*(\d{1,2})\s*m\s*(\d{1,2})\s*d\s*$/i;
-const PART2_ITEM_WITH_TIME_RE =
+export const PART2_ITEM_WITH_TIME_RE =
   /^([1-5]\.|[a-b]\.)\s*(.+?)\s*(?:[.\s]+)?(\d{1,2}\s*a\s*\d{1,2}\s*m\s*\d{1,2}\s*d)\s*$/i;
-const PART2_ITEM_LABEL_ONLY_RE = /^([1-5]\.|[a-b]\.)\s*(.+?)\s*[.\s]*$/i;
+export const PART2_ITEM_LABEL_ONLY_RE = /^([1-5]\.|[a-b]\.)\s*(.+?)\s*[.\s]*$/i;
 
-function normalizeTimeValueStr(raw: string): string {
+export function normalizeTimeValueStr(raw: string): string {
   const m = raw.match(/(\d{1,2})\s*a\s*(\d{1,2})\s*m\s*(\d{1,2})\s*d/i);
   if (!m) return '00 a 00 m 00 d';
   return `${m[1].padStart(2, '0')} a ${m[2].padStart(2, '0')} m ${m[3].padStart(2, '0')} d`;
@@ -1813,11 +1858,34 @@ export function formatPart2DotRow(labelWithPrefix: string, timeValue: string): s
   return `${cleanLabel}${'.'.repeat(dotCount)}${cleanValue}`;
 }
 
-function isPart2CenteredFooterTrigger(line: string): boolean {
+export function isPart2ClosingDateLine(line: string): boolean {
   const clean = cleanInlineWhitespace(line);
   if (!clean) return false;
   if (/^Quartel\b/i.test(clean)) return true;
-  if (/,\s*\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}\.?$/i.test(clean)) return true;
+  if (/,\s*(?:\d{1,2}|_+)\s+de\s+[a-zçãõéíóú_]+\s+de\s+(?:\d{4}|_+)\.?$/i.test(clean)) {
+    return true;
+  }
+  return false;
+}
+
+export function replaceDateInPart2ClosingLine(line: string, datePtBr: string): string {
+  const clean = cleanInlineWhitespace(line);
+  if (!datePtBr) return clean;
+  const datePattern =
+    /(,\s*)(?:\d{1,2}|_+)\s+de\s+[a-zçãõéíóú_]+\s+de\s+(?:\d{4}|_+)(\.?)$/i;
+  if (datePattern.test(clean)) {
+    return clean.replace(datePattern, `$1${datePtBr}$2`);
+  }
+  if (/^Quartel\b/i.test(clean)) {
+    return `${clean.replace(/[,\s.]+$/, '')}, ${datePtBr}`;
+  }
+  return clean;
+}
+
+export function isPart2CenteredFooterTrigger(line: string): boolean {
+  const clean = cleanInlineWhitespace(line);
+  if (!clean) return false;
+  if (isPart2ClosingDateLine(clean)) return true;
   if (/^[_\-–—]{5,}$/.test(clean)) return true;
   if (/^(CMT|COMANDANTE|SUBCMT|CHEFE|ENC)\b/i.test(clean)) return true;
   return false;
@@ -1893,21 +1961,24 @@ export function applyServiceTimeToPart2Lines(
   options?: {
     datePtBr?: string;
     guarnicao?: string;
+    updateClosingDate?: boolean;
   }
 ): string[] {
   const dateLabel =
     options?.datePtBr || formatPtBrDateLong(new Date().toISOString().slice(0, 10));
+  const hasTimeUpdate = Boolean(serviceTimeFormatted && serviceTimeFormatted.trim());
 
   if (existingPart2Lines.length === 0) {
+    const timeVal = hasTimeUpdate ? serviceTimeFormatted : '00 a 00 m 00 d';
     return [
       '2ª PARTE',
       formatPart2DotRow('1. TEMPO COMPUTADO DE EFETIVO SERVIÇO (TC)', '00 a 06 m 00 d'),
       formatPart2DotRow('a. Arregimentado', '00 a 06 m 00 d'),
       formatPart2DotRow('b. Não Arregimentado', '00 a 00 m 00 d'),
       formatPart2DotRow('2. TEMPO NÃO COMPUTADO (TNC)', '00 a 00 m 00 d'),
-      formatPart2DotRow('3. TEMPO DE SERVIÇO COMPUTÁVEL PARA MEDALHA MILITAR', serviceTimeFormatted),
+      formatPart2DotRow('3. TEMPO DE SERVIÇO COMPUTÁVEL PARA MEDALHA MILITAR', timeVal),
       formatPart2DotRow('4. TEMPO DE SERVIÇO NACIONAL RELEVANTE (TSNR)', '00 a 00 m 00 d'),
-      formatPart2DotRow('5. TEMPO TOTAL DE EFETIVO SERVIÇO (TTES)', serviceTimeFormatted),
+      formatPart2DotRow('5. TEMPO TOTAL DE EFETIVO SERVIÇO (TTES)', timeVal),
       `Quartel da Vila Militar, Rio de Janeiro, RJ, ${dateLabel}`,
       '_________________________________________',
       'ADRIANO CAMPOS NOBRE – 2º Ten',
@@ -1920,6 +1991,10 @@ export function applyServiceTimeToPart2Lines(
   let hasItem5 = false;
 
   const updated = normalized.lines.map((line) => {
+    if (options?.updateClosingDate && options?.datePtBr && isPart2ClosingDateLine(line)) {
+      return replaceDateInPart2ClosingLine(line, options.datePtBr);
+    }
+    if (!hasTimeUpdate) return line;
     const m = line.match(PART2_ITEM_WITH_TIME_RE);
     if (!m) return line;
     const prefix = m[1];
@@ -1939,7 +2014,7 @@ export function applyServiceTimeToPart2Lines(
     return formatPart2DotRow(label, m[3]);
   });
 
-  if (!hasItem3) {
+  if (hasTimeUpdate && !hasItem3) {
     const insertAt = updated.findIndex((l) => /^4\./.test(l));
     const row3 = formatPart2DotRow(
       '3. TEMPO DE SERVIÇO COMPUTÁVEL PARA MEDALHA MILITAR',
@@ -1948,7 +2023,7 @@ export function applyServiceTimeToPart2Lines(
     if (insertAt >= 0) updated.splice(insertAt, 0, row3);
     else updated.push(row3);
   }
-  if (!hasItem5) {
+  if (hasTimeUpdate && !hasItem5) {
     const insertAt = updated.findIndex((l) => isPart2CenteredFooterTrigger(l));
     const row5 = formatPart2DotRow(
       '5. TEMPO TOTAL DE EFETIVO SERVIÇO (TTES)',
@@ -2418,14 +2493,98 @@ export function formatAlteracaoLinesToBlocks(
     return false;
   };
 
+  const KEEP_HYPHEN_PREFIX_RE =
+    /(?:^|[\s(])(sub|ex|vice|p[óo]s|pr[ée]|pr[óo]|anti|auto|contra|extra|infra|inter|intra|macro|micro|mini|multi|neo|pan|proto|pseudo|semi|sobre|super|supra|ultra|bem|mal|rec[ée]m|al[ée]m|aqu[ée]m|guarda|tenente|capit[ãa]o|major|general|sargento|cabo|soldado|primeiro|segundo|terceiro)-$/i;
+
+  const TRAILING_CONNECTOR_RE =
+    /(?:,|\(|\/|\b(?:de|da|do|das|dos|em|no|na|nos|nas|para|por|com|sem|ao|aos|à|às|e|ou|que|o|a|os|as|um|uma|pelo|pela|pelos|pelas|conforme|mediante|referente|relativo|segundo|sobre|sob|entre|at[ée]|ap[óo]s|desde|n[º°o]|nr))$/i;
+
+  const joinContinuationText = (prevText: string, contText: string): string => {
+    const cleanPrev = prevText.trimEnd();
+    const cleanCont = contText.trimStart();
+    if (!cleanPrev) return cleanCont;
+    if (!cleanCont) return cleanPrev;
+    // Rejoin soft-wrapped hyphenated words (e.g. "desig-" + "nação" -> "designação")
+    if (
+      /[A-Za-zÀ-ÿ]-$/.test(cleanPrev) &&
+      /^[a-zà-ÿ]/.test(cleanCont) &&
+      !KEEP_HYPHEN_PREFIX_RE.test(cleanPrev)
+    ) {
+      return `${cleanPrev.slice(0, -1)}${cleanCont}`;
+    }
+    return `${cleanPrev} ${cleanCont}`;
+  };
+
+  const looksLikeMidSentenceContinuation = (
+    prevText: string,
+    currRaw: RawAlteracaoLine,
+    crossedPageBreak: boolean
+  ): boolean => {
+    const prevClean = prevText.trim();
+    const currClean = cleanInlineWhitespace(currRaw.text);
+    if (!prevClean || !currClean) return false;
+    if (
+      isEntryStartLine(currClean) ||
+      normalizeMonthHeading(currClean) ||
+      isPart1Line(currClean) ||
+      isPart2Line(currClean) ||
+      isSemAlteracaoLine(currClean) ||
+      isComportamentoHeadingLine(currClean) ||
+      isKnownMajorSectionTitle(currClean)
+    ) {
+      return false;
+    }
+
+    const prevEndedSentence =
+      /[.;!?]$/.test(prevClean) && !ABBREV_END_RE.test(prevClean) && !/\d\.$/.test(prevClean);
+
+    // 1. Hyphenated word split across line or page break
+    if (/[A-Za-zÀ-ÿ]-$/.test(prevClean) && /^[a-zà-ÿ]/.test(currClean)) {
+      return true;
+    }
+
+    // 2. Next line starts with lowercase or closing punctuation -> almost always continuation
+    if (/^[a-zà-ÿ,;\)\]]/.test(currClean) && !currRaw.isBold) {
+      return true;
+    }
+
+    // 3. Previous line ended with an open connector/preposition/comma/parenthesis
+    if (!prevEndedSentence && TRAILING_CONNECTOR_RE.test(prevClean) && !currRaw.isBold) {
+      return true;
+    }
+
+    // 4. Across a page break: if previous sentence was clearly NOT finished and next line isn't a bold heading
+    if (
+      crossedPageBreak &&
+      !prevEndedSentence &&
+      !/:$/.test(prevClean) &&
+      !currRaw.isBold &&
+      !isUppercaseHeadingCandidate(currClean)
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
   const shouldBreakBeforeLine = (
     prevRaw: RawAlteracaoLine | null,
     currRaw: RawAlteracaoLine,
     prevText: string
   ): boolean => {
+    const crossedPageBreak = Boolean(
+      currRaw.skippedHeaderBefore || prevRaw?.crossPageAfter
+    );
+
+    // Linguistic continuation overrides false hard breaks caused by page boundaries or PDF-to-DOCX splits
+    if (looksLikeMidSentenceContinuation(prevText, currRaw, crossedPageBreak)) {
+      return false;
+    }
+
     if (currRaw.hardBreakBefore === true) return true;
-    if (prevRaw?.hardBreakAfter === true) return true;
+    if (!crossedPageBreak && prevRaw?.hardBreakAfter === true) return true;
     if (prevRaw?.hardBreakAfter === false) return false;
+
     // Cross-page PDF line wrap check after continuation headers were stripped
     if (
       prevRaw &&
@@ -2434,7 +2593,7 @@ export function formatAlteracaoLinesToBlocks(
     ) {
       const remaining = prevRaw.pdfRightMargin - prevRaw.pdfXEnd;
       const nextWordW = currRaw.pdfFirstWordWidth ?? 28;
-      return remaining > Math.max(24, nextWordW + 14);
+      return remaining > Math.max(28, nextWordW + 16);
     }
     return /[.;!?]$/.test(prevText) && !ABBREV_END_RE.test(prevText) && !/\d\.$/.test(prevText);
   };
@@ -2616,18 +2775,40 @@ export function formatAlteracaoLinesToBlocks(
       currentEntryItem && currentEntryItem.paragraphs.length > 0
         ? currentEntryItem.paragraphs[currentEntryItem.paragraphs.length - 1]
         : '';
+    const crossedPageHere = Boolean(
+      raw.skippedHeaderBefore || lastRawLineForEntry?.crossPageAfter
+    );
+
+    // If a continuation page repeats the already-active Title or Subtitle right after a page break,
+    // skip the repeated header WITHOUT breaking or duplicating the ongoing entry!
+    if (crossedPageHere && currentEntryItem && currentEntryItem.paragraphs.length > 0) {
+      const normText = stripDiacriticsUpper(text);
+      const activeTitleNorm = stripDiacriticsUpper(resolveActiveTitle());
+      const activeSubtitleNorm = currentSubtitle ? stripDiacriticsUpper(currentSubtitle) : '';
+      const activeMonthNorm = currentMonthName ? stripDiacriticsUpper(currentMonthName) : '';
+      if (
+        (activeTitleNorm && normText === activeTitleNorm) ||
+        (activeSubtitleNorm && normText === activeSubtitleNorm) ||
+        (activeMonthNorm && (normText === activeMonthNorm || normText === `${activeMonthNorm}:`))
+      ) {
+        continue;
+      }
+    }
+
     const prevParaEndedSentence =
       !lastPara || (/[.;!?]$/.test(lastPara) && !ABBREV_END_RE.test(lastPara));
     const prevParaEndsColon = /:$/.test(lastPara);
     const prevIsBiColon = isBiHeaderColonPrefix(lastPara);
+    const isMidSentenceCont =
+      Boolean(lastPara) && looksLikeMidSentenceContinuation(lastPara, raw, crossedPageHere);
     // Allow starting a new Title/Subtitle whenever we're NOT waiting for BI body text right after
-    // "- a DD, BI Nº XX:", and either there is no open paragraph, the previous line ended a sentence,
-    // or the previous line ended with an intentional hard line break (e.g. "Menção: MB").
+    // "- a DD, BI Nº XX:", and NOT clearly continuing an unfinished sentence across a page/line break.
     const canStartHeading =
       !prevIsBiColon &&
+      !isMidSentenceCont &&
       (!lastPara ||
         prevParaEndedSentence ||
-        lastRawLineForEntry?.hardBreakAfter === true ||
+        (!crossedPageHere && lastRawLineForEntry?.hardBreakAfter === true) ||
         raw.hardBreakBefore === true ||
         (!prevParaEndsColon && Boolean(raw.isBold)));
 
@@ -2901,6 +3082,18 @@ export function formatAlteracaoLinesToBlocks(
       const idx = currentEntryItem.paragraphs.length - 1;
       const prev = currentEntryItem.paragraphs[idx];
       const cleanedCont = text.replace(/([0-9º°ª\)])\s+:(?=\s|$)/g, '$1:');
+
+      // Prevent duplicated tail/line re-emission inside the same paragraph (e.g. overlapping PDF layers across pages)
+      const normPrev = stripDiacriticsUpper(prev);
+      const normCont = stripDiacriticsUpper(cleanedCont);
+      if (
+        normCont.length >= 24 &&
+        (normPrev === normCont || normPrev.endsWith(normCont))
+      ) {
+        lastRawLineForEntry = raw;
+        continue;
+      }
+
       const isIntentionalBreak = shouldBreakBeforeLine(lastRawLineForEntry, raw, prev);
 
       if (/^:\s*/.test(cleanedCont)) {
@@ -2921,8 +3114,8 @@ export function formatAlteracaoLinesToBlocks(
       } else if (/:$/.test(prev)) {
         currentEntryItem.paragraphs[idx] = `${prev.replace(/\s+:$/, ':')} ${cleanedCont}`;
       } else {
-        // Soft wrap (previous line filled to the right margin) -> join cleanly onto same paragraph
-        currentEntryItem.paragraphs[idx] = `${prev} ${cleanedCont}`;
+        // Soft wrap or cross-page sentence continuation -> join cleanly onto same paragraph
+        currentEntryItem.paragraphs[idx] = joinContinuationText(prev, cleanedCont);
       }
       lastRawLineForEntry = raw;
       continue;

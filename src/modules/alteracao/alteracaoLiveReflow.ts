@@ -1,11 +1,18 @@
 import {
   AlteracaoHtmlBlock,
+  PART2_ITEM_LABEL_ONLY_RE,
+  PART2_ITEM_WITH_TIME_RE,
   ParsedAlteracaoSectionItem,
   StructuredAlteracaoDoc,
+  applyServiceTimeToPart2Lines,
   buildAlteracaoTableHtml,
+  formatPart2DotRow,
   isAnyComportamentoLine,
   isComportamentoHeadingLine,
+  isPart2CenteredFooterTrigger,
+  isPart2ClosingDateLine,
   renderItemBlocksForInsertion,
+  replaceDateInPart2ClosingLine,
 } from './alteracaoFormatter';
 import { PaginateOptions, paginateAlteracaoBlocksInDom } from './alteracaoFileReader';
 
@@ -1402,4 +1409,495 @@ export function tryHandleLinkedBoundaryKey(params: {
   const { pagesHtml, caret } = extractCaretBookmarkAndCleanHtml(reflowed);
   return { handled: true, pagesHtml, caret };
 }
+
+function escapeHtmlTextLocal(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function isPart2HeadingText(text: string): boolean {
+  const clean = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^2\s*[ª°oA]?\s*PARTE\b/i.test(clean);
+}
+
+function setElementTextPreservingSingleInlineWrapper(el: HTMLElement, nextText: string) {
+  const trimmedChildren = Array.from(el.childNodes).filter(
+    (n) =>
+      n.nodeType === Node.ELEMENT_NODE ||
+      (n.nodeType === Node.TEXT_NODE && (n.textContent || '').trim().length > 0)
+  );
+  if (
+    trimmedChildren.length === 1 &&
+    trimmedChildren[0].nodeType === Node.ELEMENT_NODE &&
+    /^(STRONG|B|SPAN|EM|I|U)$/i.test((trimmedChildren[0] as HTMLElement).tagName)
+  ) {
+    (trimmedChildren[0] as HTMLElement).textContent = nextText;
+    return;
+  }
+  el.textContent = nextText;
+}
+
+function buildPart2HtmlBlocksFromLines(lines: string[]): AlteracaoHtmlBlock[] {
+  const blocks: AlteracaoHtmlBlock[] = [];
+  let inCenteredFooter = false;
+  let insertedFooterSpacer = false;
+
+  lines.forEach((line, idx) => {
+    const clean = line.replace(/\s+/g, ' ').trim();
+    if (!clean) return;
+    if (idx === 0 && isPart2HeadingText(clean)) {
+      blocks.push({
+        html: '<p data-alt-part2="1" style="text-align:center;"><strong>2ª PARTE</strong></p>',
+        keepWithNext: true,
+        atomicGroupId: 'part2-item-1',
+      });
+      return;
+    }
+
+    if (!inCenteredFooter && isPart2CenteredFooterTrigger(clean)) {
+      inCenteredFooter = true;
+    }
+
+    if (inCenteredFooter) {
+      if (!insertedFooterSpacer) {
+        blocks.push({
+          html: '<p data-alt-part2="1"><br></p>',
+          isSpacer: true,
+          preserveIfSpacer: true,
+          atomicGroupId: 'part2-signature',
+        });
+        insertedFooterSpacer = true;
+      }
+      if (/^[_\-–—]{5,}$/.test(clean)) {
+        blocks.push({
+          html: '<p data-alt-part2="1"><br></p>',
+          isSpacer: true,
+          preserveIfSpacer: true,
+          atomicGroupId: 'part2-signature',
+        });
+      }
+      blocks.push({
+        html: `<p data-alt-part2="1" style="text-align:center;">${escapeHtmlTextLocal(clean)}</p>`,
+        atomicGroupId: 'part2-signature',
+      });
+      return;
+    }
+
+    const isItem1Cluster = /^(?:1\.|a\.|b\.)\s*/i.test(clean);
+    blocks.push({
+      html: `<p data-alt-part2="1" style="text-align:left;">${escapeHtmlTextLocal(clean)}</p>`,
+      atomicGroupId: isItem1Cluster ? 'part2-item-1' : undefined,
+    });
+  });
+
+  return blocks;
+}
+
+export interface SurgicalPart2UpdateParams {
+  livePagesHtml: string[];
+  /** Formatted service time string (e.g. "08 a 04 m 12 d"). Leave empty to keep existing time values untouched. */
+  serviceTimeFormatted?: string;
+  /** Formatted Portuguese long date (e.g. "30 de junho de 2026"). Leave empty to keep existing closing date untouched. */
+  closingDatePtBr?: string;
+  /** Optional guarnição used only when appending a brand-new 2ª PARTE. */
+  guarnicao?: string;
+  /** Optional pagination options used only when appending a brand-new 2ª PARTE so overflow flows cleanly. */
+  paginateOptions?: PaginateOptions;
+}
+
+export interface SurgicalPart2UpdateResult {
+  pagesHtml: string[];
+  part2PageIndex: number;
+  foundExistingPart2: boolean;
+  changed: boolean;
+}
+
+/**
+ * Isolated surgical updater for 2ª PARTE (service time rows & closing date line).
+ * NEVER rebuilds the document from structuredDoc and NEVER touches 1ª PARTE or any manual edits above 2ª PARTE.
+ */
+export function applyPart2UpdatesSurgicallyToPages(
+  params: SurgicalPart2UpdateParams
+): SurgicalPart2UpdateResult {
+  const { livePagesHtml, serviceTimeFormatted, closingDatePtBr, guarnicao, paginateOptions } =
+    params;
+  const safePages = livePagesHtml.length > 0 ? livePagesHtml : ['<p><br></p>'];
+  const hasTimeUpdate = Boolean(serviceTimeFormatted && serviceTimeFormatted.trim());
+  const hasDateUpdate = Boolean(closingDatePtBr && closingDatePtBr.trim());
+
+  if (!hasTimeUpdate && !hasDateUpdate) {
+    return {
+      pagesHtml: safePages,
+      part2PageIndex: -1,
+      foundExistingPart2: false,
+      changed: false,
+    };
+  }
+
+  // Locate where 2ª PARTE starts across pages
+  let startPageIdx = -1;
+  let startElIdx = -1;
+  const parsedFromStart = new Map<number, HTMLElement[]>();
+
+  for (let p = 0; p < safePages.length; p++) {
+    const els = parsePageElements(safePages[p]);
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i];
+      const txt = (el.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+      if (el.hasAttribute('data-alt-part2') || isPart2HeadingText(txt)) {
+        startPageIdx = p;
+        startElIdx = i;
+        parsedFromStart.set(p, els);
+        break;
+      }
+    }
+    if (startPageIdx !== -1) break;
+  }
+
+  // Case A: Existing 2ª PARTE found -> update ONLY matching lines inside 2ª PARTE in place
+  if (startPageIdx !== -1) {
+    for (let p = startPageIdx + 1; p < safePages.length; p++) {
+      parsedFromStart.set(p, parsePageElements(safePages[p]));
+    }
+
+    let hasItem3 = false;
+    let hasItem5 = false;
+    let updatedAny = false;
+    let item4Location: { pageIdx: number; elIdx: number } | null = null;
+    let footerLocation: { pageIdx: number; elIdx: number } | null = null;
+
+    for (let p = startPageIdx; p < safePages.length; p++) {
+      const els = parsedFromStart.get(p) || [];
+      const fromIdx = p === startPageIdx ? startElIdx : 0;
+
+      for (let i = fromIdx; i < els.length; i++) {
+        const el = els[i];
+        const tag = el.tagName.toUpperCase();
+
+        // Handle legacy table-based 2ª PARTE rows if present
+        if (tag === 'TABLE') {
+          const rows = Array.from(el.querySelectorAll('tr'));
+          for (const tr of rows) {
+            const cells = Array.from(tr.querySelectorAll('td, th')) as HTMLElement[];
+            if (cells.length === 0) continue;
+            const joined = cells
+              .map((c) => (c.textContent || '').replace(/\u00a0/g, ' ').trim())
+              .filter(Boolean)
+              .join(' ');
+            if (hasDateUpdate && closingDatePtBr && isPart2ClosingDateLine(joined)) {
+              const targetCell = cells.find((c) =>
+                isPart2ClosingDateLine(c.textContent || '')
+              );
+              if (targetCell) {
+                const updatedDateText = replaceDateInPart2ClosingLine(
+                  targetCell.textContent || '',
+                  closingDatePtBr
+                );
+                setElementTextPreservingSingleInlineWrapper(targetCell, updatedDateText);
+                updatedAny = true;
+              }
+              continue;
+            }
+            if (!hasTimeUpdate || !serviceTimeFormatted) continue;
+            const m = joined.match(PART2_ITEM_WITH_TIME_RE);
+            if (!m) continue;
+            const prefix = m[1];
+            const lastCell = cells[cells.length - 1];
+            if (prefix === '1.' || prefix.toLowerCase() === 'a.') {
+              if (cells.length >= 2) {
+                setElementTextPreservingSingleInlineWrapper(lastCell, '00 a 06 m 00 d');
+              } else {
+                const label = `${prefix} ${m[2].replace(/[.\s]+$/, '')}`;
+                setElementTextPreservingSingleInlineWrapper(
+                  lastCell,
+                  formatPart2DotRow(label, '00 a 06 m 00 d')
+                );
+              }
+              updatedAny = true;
+            } else if (prefix === '3.' || prefix === '5.') {
+              if (prefix === '3.') hasItem3 = true;
+              if (prefix === '5.') hasItem5 = true;
+              if (cells.length >= 2) {
+                setElementTextPreservingSingleInlineWrapper(lastCell, serviceTimeFormatted);
+              } else {
+                const label = `${prefix} ${m[2].replace(/[.\s]+$/, '')}`;
+                setElementTextPreservingSingleInlineWrapper(
+                  lastCell,
+                  formatPart2DotRow(label, serviceTimeFormatted)
+                );
+              }
+              updatedAny = true;
+            }
+          }
+          continue;
+        }
+
+        const clean = (el.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!clean) continue;
+
+        if (!item4Location && /^4\./.test(clean)) {
+          item4Location = { pageIdx: p, elIdx: i };
+        }
+        if (!footerLocation && isPart2CenteredFooterTrigger(clean)) {
+          footerLocation = { pageIdx: p, elIdx: i };
+        }
+
+        if (hasDateUpdate && closingDatePtBr && isPart2ClosingDateLine(clean)) {
+          const nextLine = replaceDateInPart2ClosingLine(clean, closingDatePtBr);
+          if (nextLine !== clean) {
+            setElementTextPreservingSingleInlineWrapper(el, nextLine);
+            updatedAny = true;
+          }
+          continue;
+        }
+
+        if (!hasTimeUpdate || !serviceTimeFormatted) continue;
+
+        const mWithTime = clean.match(PART2_ITEM_WITH_TIME_RE);
+        const mLabelOnly = !mWithTime ? clean.match(PART2_ITEM_LABEL_ONLY_RE) : null;
+        const match = mWithTime || mLabelOnly;
+        if (!match) continue;
+
+        const prefix = match[1];
+        const rawLabel = match[2].replace(/[.\s]+$/, '');
+        const label = `${prefix} ${rawLabel}`;
+
+        if (prefix === '1.' || prefix.toLowerCase() === 'a.') {
+          const nextRow = formatPart2DotRow(label, '00 a 06 m 00 d');
+          if (nextRow !== clean) {
+            setElementTextPreservingSingleInlineWrapper(el, nextRow);
+            updatedAny = true;
+          }
+        } else if (prefix === '3.') {
+          hasItem3 = true;
+          const nextRow = formatPart2DotRow(label, serviceTimeFormatted);
+          if (nextRow !== clean) {
+            setElementTextPreservingSingleInlineWrapper(el, nextRow);
+            updatedAny = true;
+          }
+        } else if (prefix === '5.') {
+          hasItem5 = true;
+          const nextRow = formatPart2DotRow(label, serviceTimeFormatted);
+          if (nextRow !== clean) {
+            setElementTextPreservingSingleInlineWrapper(el, nextRow);
+            updatedAny = true;
+          }
+        }
+      }
+    }
+
+    // Insert item 3 or item 5 ONLY if completely missing inside an existing 2ª PARTE
+    if (hasTimeUpdate && serviceTimeFormatted && !hasItem3) {
+      const targetPage = item4Location?.pageIdx ?? footerLocation?.pageIdx ?? safePages.length - 1;
+      const targetEls = parsedFromStart.get(targetPage) || [];
+      const rowEl = document.createElement('p');
+      rowEl.setAttribute('data-alt-part2', '1');
+      rowEl.style.textAlign = 'left';
+      rowEl.textContent = formatPart2DotRow(
+        '3. TEMPO DE SERVIÇO COMPUTÁVEL PARA MEDALHA MILITAR',
+        serviceTimeFormatted
+      );
+      if (item4Location && item4Location.pageIdx === targetPage) {
+        targetEls.splice(item4Location.elIdx, 0, rowEl);
+        if (footerLocation && footerLocation.pageIdx === targetPage && footerLocation.elIdx >= item4Location.elIdx) {
+          footerLocation.elIdx += 1;
+        }
+      } else if (footerLocation && footerLocation.pageIdx === targetPage) {
+        targetEls.splice(footerLocation.elIdx, 0, rowEl);
+        footerLocation.elIdx += 1;
+      } else {
+        targetEls.push(rowEl);
+      }
+      parsedFromStart.set(targetPage, targetEls);
+      updatedAny = true;
+    }
+
+    if (hasTimeUpdate && serviceTimeFormatted && !hasItem5) {
+      const targetPage = footerLocation?.pageIdx ?? safePages.length - 1;
+      const targetEls = parsedFromStart.get(targetPage) || [];
+      const rowEl = document.createElement('p');
+      rowEl.setAttribute('data-alt-part2', '1');
+      rowEl.style.textAlign = 'left';
+      rowEl.textContent = formatPart2DotRow(
+        '5. TEMPO TOTAL DE EFETIVO SERVIÇO (TTES)',
+        serviceTimeFormatted
+      );
+      if (footerLocation && footerLocation.pageIdx === targetPage) {
+        targetEls.splice(footerLocation.elIdx, 0, rowEl);
+      } else {
+        targetEls.push(rowEl);
+      }
+      parsedFromStart.set(targetPage, targetEls);
+      updatedAny = true;
+    }
+
+    // Pages strictly before startPageIdx are returned VERBATIM untouched!
+    const nextPages = safePages.map((origHtml, pIdx) => {
+      if (pIdx < startPageIdx) return origHtml;
+      const els = parsedFromStart.get(pIdx);
+      if (!els) return origHtml;
+      return els.map((e) => e.outerHTML).join('\n') || '<p><br></p>';
+    });
+
+    return {
+      pagesHtml: nextPages,
+      part2PageIndex: startPageIdx,
+      foundExistingPart2: true,
+      changed: updatedAny,
+    };
+  }
+
+  // Case B: No 2ª PARTE exists yet -> append cleanly at the end of the last page WITHOUT touching 1ª PARTE
+  const part2Lines = applyServiceTimeToPart2Lines([], serviceTimeFormatted || '00 a 00 m 00 d', {
+    datePtBr: closingDatePtBr,
+    guarnicao,
+    updateClosingDate: hasDateUpdate,
+  });
+  const part2Blocks: AlteracaoHtmlBlock[] = [
+    { html: '<p><br></p>', isSpacer: true, preserveIfSpacer: true },
+    ...buildPart2HtmlBlocksFromLines(part2Lines),
+  ];
+
+  const lastIdx = safePages.length - 1;
+  const lockedPagesBefore = safePages.slice(0, lastIdx);
+  const lastPageEls = parsePageElements(safePages[lastIdx]).filter((el, idx, arr) => {
+    // Strip trailing blank spacers only at the very end so we add one clean spacer before 2ª PARTE
+    if (idx === arr.length - 1 && isSpacerElement(el)) return false;
+    return true;
+  });
+  const lockedLastPageHtmls = lastPageEls.map((e) => e.outerHTML);
+
+  if (paginateOptions && typeof document !== 'undefined') {
+    const tailPages = paginateAlteracaoBlocksInDom(part2Blocks, {
+      ...paginateOptions,
+      lockedPrefixHtmls: lockedLastPageHtmls,
+      startOnContinuationPage: lastIdx > 0,
+      preserveTrailingSpacers: true,
+    });
+    const combined = [...lockedPagesBefore, ...tailPages];
+    return {
+      pagesHtml: combined,
+      part2PageIndex: Math.max(0, combined.length - 1),
+      foundExistingPart2: false,
+      changed: true,
+    };
+  }
+
+  const appendedLast = [
+    ...lockedLastPageHtmls,
+    ...part2Blocks.map((b) => b.html),
+  ].join('\n');
+  const nextPages = [...lockedPagesBefore, appendedLast];
+  return {
+    pagesHtml: nextPages,
+    part2PageIndex: lastIdx,
+    foundExistingPart2: false,
+    changed: true,
+  };
+}
+
+/**
+ * Inspects the live edited A4 sheets and returns the ordered list of structuredDoc item IDs
+ * that still have visible, non-empty content on at least one sheet.
+ * When the user deletes all text/table of a subtopic or entire topic directly in the sheet,
+ * its ID disappears from this list so the sidebar checkboxes automatically uncheck in sync.
+ */
+export function detectLivePresentItemIds(
+  livePagesHtml: string[],
+  structuredDoc: StructuredAlteracaoDoc
+): string[] {
+  if (!structuredDoc || structuredDoc.items.length === 0) return [];
+  if (typeof DOMParser === 'undefined') {
+    return structuredDoc.items.map((i) => i.id);
+  }
+
+  const presentTaggedIds = new Set<string>();
+  let sawAnyAltDataAttr = false;
+  let totalNonEmptyTextLen = 0;
+  let totalTables = 0;
+  const allBlocksText: string[] = [];
+  const allTablesText: string[] = [];
+
+  for (const pageHtml of livePagesHtml) {
+    const doc = new DOMParser().parseFromString(pageHtml || '', 'text/html');
+    if (
+      !sawAnyAltDataAttr &&
+      doc.body.querySelector('[data-alt-item], [data-alt-group], [data-alt-month], [data-alt-part2]')
+    ) {
+      sawAnyAltDataAttr = true;
+    }
+
+    const taggedEls = Array.from(doc.body.querySelectorAll<HTMLElement>('[data-alt-item]'));
+    for (const el of taggedEls) {
+      const id = el.getAttribute('data-alt-item');
+      if (!id) continue;
+      if (el.tagName.toUpperCase() === 'TABLE') {
+        const hasCellText = Array.from(el.querySelectorAll('td, th')).some(
+          (cell) => (cell.textContent || '').replace(/\u00a0/g, ' ').trim().length > 0
+        );
+        if (hasCellText) {
+          presentTaggedIds.add(id);
+        }
+      } else {
+        const txt = (el.textContent || '').replace(/\u00a0/g, ' ').trim();
+        if (txt.length > 0) {
+          presentTaggedIds.add(id);
+        }
+      }
+    }
+
+    const bodyText = (doc.body.textContent || '').replace(/\u00a0/g, ' ').trim();
+    totalNonEmptyTextLen += bodyText.length;
+
+    const tables = Array.from(doc.body.querySelectorAll('table'));
+    totalTables += tables.length;
+    if (!sawAnyAltDataAttr) {
+      for (const tbl of tables) {
+        allTablesText.push(normalizeKey(tbl.textContent || ''));
+      }
+      for (const node of Array.from(doc.body.querySelectorAll('p, div, li'))) {
+        const norm = normalizeKey(node.textContent || '');
+        if (norm) allBlocksText.push(norm);
+      }
+    }
+  }
+
+  // If the entire sheet stack was cleared by the user, everything is unchecked
+  if (totalNonEmptyTextLen === 0 && totalTables === 0) {
+    return [];
+  }
+
+  if (sawAnyAltDataAttr) {
+    return structuredDoc.items
+      .filter((item) => presentTaggedIds.has(item.id))
+      .map((item) => item.id);
+  }
+
+  // Legacy fallback for documents archived before data-alt-* tags existed
+  return structuredDoc.items
+    .filter((item) => {
+      if (item.kind === 'table' && item.tableRows?.length) {
+        const firstCell = normalizeKey(
+          item.tableRows.flat().find((c) => c.trim().length > 0) || ''
+        );
+        return firstCell
+          ? allTablesText.some((t) => t.includes(firstCell))
+          : allTablesText.length > 0;
+      }
+      const wantedSub = item.subtitle ? normalizeKey(item.subtitle) : '';
+      const wantedPara = item.paragraphs[0]
+        ? normalizeKey(item.paragraphs[0].slice(0, 44))
+        : '';
+      return allBlocksText.some(
+        (txt) =>
+          (wantedSub && txt === wantedSub) ||
+          (wantedPara && txt.includes(wantedPara))
+      );
+    })
+    .map((item) => item.id);
+}
+
 
