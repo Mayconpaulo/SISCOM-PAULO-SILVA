@@ -540,47 +540,114 @@ interface RawAiChunkResponse {
   discardedHomonyms?: Partial<BiDiscardedHomonymServer>[];
 }
 
+function normalizeOpenAiModelName(raw: string | undefined): string {
+  if (!raw) return '';
+  const cleaned = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-');
+  if (!cleaned) return '';
+  if (cleaned === 'gpt4o' || cleaned === 'gpt-4o') return 'gpt-4o';
+  if (cleaned === 'gpt4o-mini' || cleaned === 'gpt-4o-mini') return 'gpt-4o-mini';
+  if (cleaned === 'gpt4.1' || cleaned === 'gpt-4.1') return 'gpt-4.1';
+  if (cleaned === 'gpt4.1-mini' || cleaned === 'gpt-4.1-mini') return 'gpt-4.1-mini';
+  if (cleaned === 'gpt4.1-nano' || cleaned === 'gpt-4.1-nano') return 'gpt-4.1-nano';
+  return cleaned;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientAiError(statusOrMsg: number | string): boolean {
+  if (typeof statusOrMsg === 'number') {
+    return statusOrMsg === 429 || statusOrMsg === 500 || statusOrMsg === 502 || statusOrMsg === 503 || statusOrMsg === 504;
+  }
+  return /\b(?:429|500|502|503|504)\b|RESOURCE_EXHAUSTED|UNAVAILABLE|overloaded|rate limit|timeout|ECONNRESET|fetch failed/i.test(
+    statusOrMsg
+  );
+}
+
 async function callOpenAiExtract(
   apiKey: string,
   systemInstruction: string,
   userPrompt: string
 ): Promise<{ raw: RawAiChunkResponse; modelUsed: string }> {
-  const model = (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim() || 'gpt-4o-mini';
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: OPENAI_JSON_SCHEMA,
-      },
-    }),
-  });
+  const configuredModel = normalizeOpenAiModelName(process.env.OPENAI_MODEL);
+  const candidateModels = Array.from(
+    new Set([configuredModel, 'gpt-4o-mini', 'gpt-4o'].filter(Boolean))
+  );
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    throw new Error(`OpenAI HTTP ${response.status}: ${errText.slice(0, 300)}`);
+  let lastErr: unknown = null;
+
+  for (const model of candidateModels) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          signal: AbortSignal.timeout(90_000),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: userPrompt },
+            ],
+            response_format: {
+              type: 'json_schema',
+              json_schema: OPENAI_JSON_SCHEMA,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          const err = new Error(`OpenAI HTTP ${response.status}: ${errText.slice(0, 300)}`);
+          lastErr = err;
+
+          // Retry once on transient rate-limit / server errors
+          if (attempt === 0 && isTransientAiError(response.status)) {
+            await sleep(900);
+            continue;
+          }
+          // Try next candidate model if this model alias is unavailable/not found
+          if (response.status === 404 || /model_not_found|does not exist|unsupported model/i.test(errText)) {
+            break;
+          }
+          throw err;
+        }
+
+        const data = (await response.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) {
+          throw new Error(`OpenAI (${model}) retornou resposta vazia.`);
+        }
+
+        const parsed = JSON.parse(content) as RawAiChunkResponse;
+        return { raw: parsed, modelUsed: model };
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (attempt === 0 && isTransientAiError(msg)) {
+          await sleep(900);
+          continue;
+        }
+        if (/HTTP 404|model_not_found|does not exist|unsupported model/i.test(msg)) {
+          break;
+        }
+        throw err;
+      }
+    }
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('OpenAI retornou resposta vazia.');
-  }
-
-  const parsed = JSON.parse(content) as RawAiChunkResponse;
-  return { raw: parsed, modelUsed: model };
+  throw lastErr instanceof Error ? lastErr : new Error('Falha ao consultar API OpenAI.');
 }
 
 async function callGeminiExtract(
@@ -588,38 +655,68 @@ async function callGeminiExtract(
   systemInstruction: string,
   userPrompt: string
 ): Promise<{ raw: RawAiChunkResponse; modelUsed: string }> {
-  const ai = new GoogleGenAI({ apiKey });
-  const candidateModels = [
-    (process.env.GEMINI_BI_MODEL || '').trim(),
-    'gemini-4-hydrogen',
-    'gemini-3-flash-preview',
-    'gemini-2.5-flash',
-  ].filter(Boolean);
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      timeout: 90_000,
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+
+  const candidateModels = Array.from(
+    new Set(
+      [
+        (process.env.GEMINI_BI_MODEL || '').trim(),
+        'gemini-4-hydrogen',
+        'gemini-3.1-flash-lite',
+      ].filter(Boolean)
+    )
+  );
 
   let lastErr: unknown = null;
   for (const model of candidateModels) {
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: userPrompt,
-        config: {
+    const isGemini4 = /^gemini-4-/i.test(model);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const config: {
+          systemInstruction: string;
+          responseMimeType: string;
+          responseSchema: Schema;
+          temperature?: number;
+        } = {
           systemInstruction,
-          temperature: 0,
           responseMimeType: 'application/json',
           responseSchema: GEMINI_RESPONSE_SCHEMA,
-        },
-      });
-      const text = response.text;
-      if (!text) {
-        throw new Error(`Modelo ${model} retornou resposta vazia.`);
-      }
-      const parsed = JSON.parse(text) as RawAiChunkResponse;
-      return { raw: parsed, modelUsed: model };
-    } catch (err) {
-      lastErr = err;
-      const msg = err instanceof Error ? err.message : String(err);
-      // Only fall through to next model alias when model name is unsupported/not found
-      if (!/not found|404|unsupported|invalid model|deprecated/i.test(msg)) {
+        };
+        // Gemini 4 models prohibit deprecated sampling parameters (temperature, topP, topK)
+        if (!isGemini4) {
+          config.temperature = 0;
+        }
+
+        const response = await ai.models.generateContent({
+          model,
+          contents: userPrompt,
+          config,
+        });
+        const text = response.text;
+        if (!text) {
+          throw new Error(`Modelo ${model} retornou resposta vazia.`);
+        }
+        const parsed = JSON.parse(text) as RawAiChunkResponse;
+        return { raw: parsed, modelUsed: model };
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (attempt === 0 && isTransientAiError(msg)) {
+          await sleep(1000);
+          continue;
+        }
+        // Fall through to next model alias only when model name is unsupported/not found
+        if (/not found|404|unsupported|invalid model|deprecated/i.test(msg)) {
+          break;
+        }
         throw err;
       }
     }
@@ -859,7 +956,7 @@ export async function extractAlterationsFromBulletin(
     );
   }
 
-  const providerUsed: 'openai' | 'gemini' = openaiKey ? 'openai' : 'gemini';
+  let providerUsed: 'openai' | 'gemini' = openaiKey ? 'openai' : 'gemini';
   const includeFirstPart = Boolean(payload.options?.includeFirstPart);
   const systemInstruction = buildSystemInstruction(includeFirstPart);
   const headerHints = detectBulletinHeaderHints(payload.bulletin.fileName, payload.bulletin.pages);
@@ -877,10 +974,25 @@ export async function extractAlterationsFromBulletin(
       chunks.length > 1 ? { index: i + 1, total: chunks.length } : undefined
     );
 
-    const res =
-      providerUsed === 'openai' && openaiKey
-        ? await callOpenAiExtract(openaiKey, systemInstruction, prompt)
-        : await callGeminiExtract(geminiKey!, systemInstruction, prompt);
+    let res: { raw: RawAiChunkResponse; modelUsed: string };
+    if (providerUsed === 'openai' && openaiKey) {
+      try {
+        res = await callOpenAiExtract(openaiKey, systemInstruction, prompt);
+      } catch (openAiErr) {
+        if (geminiKey) {
+          const reason = openAiErr instanceof Error ? openAiErr.message : String(openAiErr);
+          console.warn(
+            `[BI Extract] OpenAI indisponível (${reason.slice(0, 160)}). Alternando automaticamente para Gemini.`
+          );
+          providerUsed = 'gemini';
+          res = await callGeminiExtract(geminiKey, systemInstruction, prompt);
+        } else {
+          throw openAiErr;
+        }
+      }
+    } else {
+      res = await callGeminiExtract(geminiKey!, systemInstruction, prompt);
+    }
 
     modelUsed = res.modelUsed;
     chunkOutputs.push(res.raw);

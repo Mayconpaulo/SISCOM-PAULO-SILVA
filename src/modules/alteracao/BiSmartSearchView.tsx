@@ -152,6 +152,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const semesterTouchedRef = useRef(false);
 
   // Load military profile suggestions quietly from the user's own already-archived Alterações
   useEffect(() => {
@@ -296,6 +297,19 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
       }
       return [...prev, ...additions];
     });
+    if (!semesterTouchedRef.current) {
+      for (const file of incoming) {
+        const m = file.name.match(/\b(20\d{2})-(\d{2})-\d{2}\b/);
+        if (m) {
+          const year = parseInt(m[1], 10);
+          const month = parseInt(m[2], 10);
+          if (year >= 2000 && year <= 2100 && month >= 1 && month <= 12) {
+            setSemester({ half: month <= 6 ? '1' : '2', year });
+            break;
+          }
+        }
+      }
+    }
     setNotice(null);
   };
 
@@ -479,6 +493,11 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         };
 
         if (!response.ok) {
+          if (response.status === 404 && !payload.error) {
+            throw new Error(
+              'Serviço de análise indisponível nesta versão em cache (HTTP 404). Recarregue a página e tente novamente.'
+            );
+          }
           throw new Error(payload.error || `Falha na análise (HTTP ${response.status}).`);
         }
 
@@ -531,6 +550,17 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         collectedHomonyms.push(...fileHomonyms);
         setOccurrences([...collectedOccurrences]);
         setDiscardedHomonyms([...collectedHomonyms]);
+
+        if (!semesterTouchedRef.current && payload.bulletinMeta?.bulletinDateIso) {
+          const m = payload.bulletinMeta.bulletinDateIso.match(/^(\d{4})-(\d{2})-\d{2}$/);
+          if (m) {
+            const year = parseInt(m[1], 10);
+            const month = parseInt(m[2], 10);
+            if (year >= 2000 && year <= 2100 && month >= 1 && month <= 12) {
+              setSemester({ half: month <= 6 ? '1' : '2', year });
+            }
+          }
+        }
 
         successFiles++;
         setQueuedFiles((prev) =>
@@ -1103,12 +1133,13 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                   <select
                     id="bi-semestre"
                     value={semester.half}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      semesterTouchedRef.current = true;
                       setSemester((prev) => ({
                         ...prev,
                         half: e.target.value === '2' ? '2' : '1',
-                      }))
-                    }
+                      }));
+                    }}
                     className="siscom-input w-full !min-h-[36px] !px-2.5 text-xs"
                   >
                     <option value="1">1º Semestre (Jan–Jun)</option>
@@ -1125,12 +1156,13 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                     min={2000}
                     max={2100}
                     value={semester.year}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      semesterTouchedRef.current = true;
                       setSemester((prev) => ({
                         ...prev,
                         year: Math.max(2000, Math.min(2100, Number(e.target.value) || prev.year)),
-                      }))
-                    }
+                      }));
+                    }}
                     className="siscom-input w-full !min-h-[36px] !px-2.5 font-mono text-xs"
                   />
                 </div>

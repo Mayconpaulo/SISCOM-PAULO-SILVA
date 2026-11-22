@@ -9,7 +9,7 @@ import {
   getBiAiProviderStatus,
   type BiBulletinPageInput,
   type BiExtractRequestPayload,
-} from './server/biExtractionService';
+} from './server/biExtractionService.ts';
 
 const PORT = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -456,6 +456,11 @@ async function startServer() {
     req.on('close', () => {
       sseClients.delete(res);
     });
+  });
+
+  app.use('/api', (_req, res) => {
+    setNoStoreHeaders(res);
+    res.status(404).json({ error: 'Rota de API não encontrada neste servidor.' });
   });
 
   if (!isProduction) {
