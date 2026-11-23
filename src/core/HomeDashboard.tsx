@@ -8,7 +8,6 @@ import {
   useTransform,
 } from 'motion/react';
 import {
-  ArrowRight,
   CornerDownLeft,
   ExternalLink,
   ListTodo,
@@ -24,6 +23,7 @@ import { signOutCurrentUser } from './auth/authService';
 import { PWAInstallButton } from './pwa/PWAComponents';
 import { HomeAgendaPreview } from '../modules/agenda/HomeAgendaPreview';
 import { useDemandas } from '../modules/demandas/DemandasContext';
+import { DemandasNotificationBell } from '../modules/demandas/DemandasNotificationBell';
 import { HomeDemandasWidgets } from '../modules/demandas/HomeDemandasWidgets';
 import {
   ActiveScreen,
@@ -226,8 +226,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </div>
           </div>
 
-          {/* Right: Install + User name + Admin + Sign out */}
+          {/* Right: Notifications bell + Install + User name + Admin + Sign out */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            <DemandasNotificationBell />
             <PWAInstallButton compact />
 
             <div className="hidden md:flex items-center gap-1.5 px-2 text-xs text-[#C6D4CC] whitespace-nowrap">
@@ -380,7 +381,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     ease: SISCOM_EASE,
                   },
                   className:
-                    'siscom-home-card group rounded-xl p-4 sm:p-4 lg:p-5 flex flex-col justify-between items-start text-left cursor-pointer min-h-[96px] sm:min-h-[108px] lg:min-h-[116px] will-change-transform no-underline',
+                    'relative siscom-home-card group rounded-xl p-4 sm:p-5 flex flex-col items-center justify-center text-center gap-2.5 sm:gap-3 cursor-pointer min-h-[108px] sm:min-h-[118px] lg:min-h-[126px] will-change-transform no-underline',
                 };
 
                 const cardInner = (
@@ -391,32 +392,28 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       className="absolute inset-0 rounded-xl pointer-events-none"
                     />
 
-                    <div className="relative z-10 w-full flex items-start justify-between gap-2">
-                      <motion.div
-                        layoutId={`module-icon-${card.id}`}
-                        transition={MODULE_LOCKUP_TRANSITION}
-                        className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center text-[#D8B467] group-hover:text-[#F0D18A] transition-colors duration-150"
-                      >
-                        {card.renderIcon('w-7 h-7 sm:w-8 sm:h-8')}
-                      </motion.div>
-
+                    {card.externalUrl && (
                       <span
                         aria-hidden="true"
-                        className="text-[#78887E] group-hover:text-[#DFBC75] transition-colors duration-150 mt-0.5"
+                        className="absolute top-2.5 right-2.5 z-10 text-[#78887E] group-hover:text-[#DFBC75] transition-colors duration-150"
                       >
-                        {card.externalUrl ? (
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        ) : (
-                          <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-150" />
-                        )}
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </span>
-                    </div>
+                    )}
 
-                    <div className="relative z-10 w-full min-w-0 pt-3">
+                    <motion.div
+                      layoutId={`module-icon-${card.id}`}
+                      transition={MODULE_LOCKUP_TRANSITION}
+                      className="relative z-10 w-9 h-9 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center text-[#D8B467] group-hover:text-[#F0D18A] transition-colors duration-150"
+                    >
+                      {card.renderIcon('w-7 h-7 sm:w-8 sm:h-8')}
+                    </motion.div>
+
+                    <div className="relative z-10 w-full min-w-0 px-1">
                       <motion.span
                         layoutId={`module-title-${card.id}`}
                         transition={MODULE_LOCKUP_TRANSITION}
-                        className="block font-display text-[15px] sm:text-[16px] lg:text-[18px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] transition-colors duration-150 truncate"
+                        className="block font-display text-[14.5px] sm:text-[16px] lg:text-[17px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] transition-colors duration-150 leading-snug text-center"
                       >
                         {card.title}
                       </motion.span>
@@ -458,19 +455,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18, ease: SISCOM_EASE }}
-                  className="siscom-home-card group rounded-xl p-4 sm:p-4 lg:p-5 flex flex-col justify-between items-start text-left cursor-pointer min-h-[96px] sm:min-h-[108px] lg:min-h-[116px] will-change-transform"
+                  className="relative siscom-home-card group rounded-xl p-4 sm:p-5 flex flex-col items-center justify-center text-center gap-2.5 sm:gap-3 cursor-pointer min-h-[108px] sm:min-h-[118px] lg:min-h-[126px] will-change-transform"
                 >
-                  <div className="relative z-10 w-full flex items-start justify-between gap-2">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center text-[#D8B467] group-hover:text-[#F0D18A]">
-                      <ListTodo className="w-6 h-6 sm:w-7 sm:h-7" />
-                    </div>
-                    <ArrowRight
-                      aria-hidden="true"
-                      className="w-3.5 h-3.5 text-[#78887E] group-hover:text-[#DFBC75] mt-0.5"
-                    />
+                  <div className="relative z-10 w-9 h-9 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center text-[#D8B467] group-hover:text-[#F0D18A]">
+                    <ListTodo className="w-7 h-7 sm:w-8 sm:h-8" />
                   </div>
-                  <div className="relative z-10 w-full min-w-0 pt-3">
-                    <span className="block font-display text-[15px] sm:text-[16px] lg:text-[18px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] truncate">
+                  <div className="relative z-10 w-full min-w-0 px-1">
+                    <span className="block font-display text-[14.5px] sm:text-[16px] lg:text-[17px] font-semibold tracking-tight text-[#F1F5F2] group-hover:text-[#F7E9C8] leading-snug text-center">
                       Demandas
                     </span>
                   </div>

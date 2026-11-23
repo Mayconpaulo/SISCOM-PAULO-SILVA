@@ -5,6 +5,7 @@ import {
   StructuredAlteracaoDoc,
   applyServiceTimeToPart2Lines,
   formatPtBrDateLong,
+  singularizeMilitaryGroupText,
 } from './alteracaoFormatter';
 
 export interface BiSearchMilitaryProfile {
@@ -51,6 +52,7 @@ export interface BiOccurrenceItem {
   bulletinMonth: string;
   bulletinYear: number | null;
   contentText: string;
+  contentAfterTable: string;
   personnelListText: string;
   emConsequenciaText: string;
   tableRows: string[][];
@@ -170,7 +172,7 @@ export function normalizeBiOccurrenceHeading(
 }
 
 /**
- * Formats the BI reference prefix in the exact Folha 26.1 standard:
+ * Formats the BI reference prefix in the exact Folha 26.1 / Formatar Alteração standard:
  * "- a 5, BI Nº 2:" or "- a 30, BI Nº 20:"
  */
 export function formatBiReferencePrefix(
@@ -202,63 +204,96 @@ function splitVerbatimParagraphs(text: string): string[] {
 }
 
 /**
- * Builds the exact paragraph array for one occurrence (verbatim, no rewording).
+ * Builds the exact paragraph segments for one occurrence:
+ * - beforeTable: opening paragraphs (with "- a DD, BI Nº NN:" inline on line 1, matching Formatar Alteração)
+ * - afterTable: paragraphs that appear AFTER the table (e.g. DCEM Observações + Adt da DCEM) + optional lists
+ * Applies Formatar Alteração's singularization when personnelList is excluded so individual Folhas read naturally.
  */
-export function buildOccurrenceParagraphs(occ: BiOccurrenceItem): string[] {
+export function buildOccurrenceParagraphSegments(occ: BiOccurrenceItem): {
+  beforeTable: string[];
+  afterTable: string[];
+} {
   const prefix = formatBiReferencePrefix(occ.bulletinDay, occ.bulletinNumber);
-  const contentParas = splitVerbatimParagraphs(occ.contentText);
+  const shouldSingularize = !occ.includePersonnelList;
+  const formatPara = (p: string) => (shouldSingularize ? singularizeMilitaryGroupText(p) : p);
 
-  const result: string[] = [];
-  if (contentParas.length > 0) {
-    const first = contentParas[0];
-    // Avoid doubling prefix if user manually typed "- a 5, BI Nº 2:" inside contentText
+  const rawBefore = splitVerbatimParagraphs(occ.contentText);
+  const beforeTable: string[] = [];
+
+  if (rawBefore.length > 0) {
+    const first = rawBefore[0];
     if (/^[-–—]\s*(?:a\s+\d{1,2}\s*,?\s*)?BI\s*N[º°o]/i.test(first)) {
-      result.push(first);
+      beforeTable.push(formatPara(first));
     } else {
-      result.push(`${prefix} ${first}`);
+      beforeTable.push(formatPara(`${prefix} ${first}`));
     }
-    for (let i = 1; i < contentParas.length; i++) {
-      result.push(contentParas[i]);
+    for (let i = 1; i < rawBefore.length; i++) {
+      beforeTable.push(formatPara(rawBefore[i]));
     }
-  } else if (occ.tableRows.length > 0) {
-    result.push(prefix);
+  } else if (occ.tableRows.length > 0 || occ.contentAfterTable.trim()) {
+    beforeTable.push(prefix);
+  }
+
+  const afterTable: string[] = [];
+  const hasVisibleTable = occ.includeTable && occ.tableRows.length > 0;
+  const rawAfter = splitVerbatimParagraphs(occ.contentAfterTable || '');
+
+  // If there is a visible table, keep post-table text right AFTER the table (exact Army Folha layout).
+  // If table is hidden/absent, append post-table paragraphs seamlessly to beforeTable.
+  const targetForAfter = hasVisibleTable ? afterTable : beforeTable;
+
+  for (const line of rawAfter) {
+    targetForAfter.push(formatPara(line));
   }
 
   if (occ.includePersonnelList && occ.personnelListText.trim()) {
     const listLines = splitVerbatimParagraphs(occ.personnelListText);
     for (const line of listLines) {
-      result.push(line);
+      targetForAfter.push(line);
     }
   }
 
   if (occ.includeEmConsequencia && occ.emConsequenciaText.trim()) {
     const emcLines = splitVerbatimParagraphs(occ.emConsequenciaText);
     for (const line of emcLines) {
-      result.push(line);
+      targetForAfter.push(line);
     }
   }
 
-  return result;
+  return { beforeTable, afterTable };
 }
 
 /**
- * Formats a single occurrence into copyable plain text matching Folha 26.1 structure.
+ * Legacy helper returning all paragraphs concatenated (for quick previews).
+ */
+export function buildOccurrenceParagraphs(occ: BiOccurrenceItem): string[] {
+  const { beforeTable, afterTable } = buildOccurrenceParagraphSegments(occ);
+  return [...beforeTable, ...afterTable];
+}
+
+/**
+ * Formats a single occurrence into copyable plain text matching Folha 26.1 / Army structure
+ * (preserving exact before-table -> table -> after-table order).
  */
 export function formatSingleOccurrencePlainText(occ: BiOccurrenceItem): string {
   const { title, subtitle } = normalizeBiOccurrenceHeading(occ.title, occ.subtitle);
+  const { beforeTable, afterTable } = buildOccurrenceParagraphSegments(occ);
   const lines: string[] = [];
   if (title) lines.push(title);
   if (subtitle) lines.push(subtitle);
-  const paragraphs = buildOccurrenceParagraphs(occ);
-  if (paragraphs.length > 0) {
+  if (beforeTable.length > 0) {
     lines.push('');
-    lines.push(...paragraphs);
+    lines.push(...beforeTable);
   }
   if (occ.includeTable && occ.tableRows.length > 0) {
     lines.push('');
     for (const row of occ.tableRows) {
       lines.push(row.join(' | '));
     }
+  }
+  if (afterTable.length > 0) {
+    lines.push('');
+    lines.push(...afterTable);
   }
   return lines.join('\n');
 }
@@ -335,14 +370,19 @@ export function formatAllSelectedPlainText(
     for (const grp of byTitle.values()) {
       out.push(grp.displayTitle);
       for (const { occ, subtitle } of grp.items) {
+        const { beforeTable, afterTable } = buildOccurrenceParagraphSegments(occ);
         if (subtitle) out.push(subtitle);
         out.push('');
-        out.push(...buildOccurrenceParagraphs(occ));
+        out.push(...beforeTable);
         if (occ.includeTable && occ.tableRows.length > 0) {
           out.push('');
           for (const row of occ.tableRows) {
             out.push(row.join(' | '));
           }
+        }
+        if (afterTable.length > 0) {
+          out.push('');
+          out.push(...afterTable);
         }
         out.push('');
       }
@@ -360,7 +400,8 @@ export function formatAllSelectedPlainText(
 /**
  * Converts approved BI occurrences into a full StructuredAlteracaoDoc ready for
  * renderBlocksFromStructuredDoc() and the live A4 editor — 100% aligned with
- * the Formatar Alteração standard (1ª PARTE, all 6 months with Sem Alteração, and standard 2ª PARTE).
+ * the Formatar Alteração standard (1ª PARTE, all 6 months with Sem Alteração,
+ * inline "- a X, BI Nº Y:", singularization, in-place tables + post-table notes, and standard 2ª PARTE).
  */
 export function buildStructuredAlteracaoFromBiOccurrences(params: {
   military: BiSearchMilitaryProfile;
@@ -396,17 +437,17 @@ export function buildStructuredAlteracaoFromBiOccurrences(params: {
       occ.subtitle,
       military.postoGraduacao
     );
-    const paragraphs = buildOccurrenceParagraphs(occ);
+    const { beforeTable, afterTable } = buildOccurrenceParagraphSegments(occ);
 
-    if (paragraphs.length > 0) {
+    if (beforeTable.length > 0) {
       items.push({
         id: `bi-item-${seq++}`,
         kind: 'entry',
         month,
         title,
         subtitle,
-        previewLabel: subtitle || paragraphs[0].slice(0, 70),
-        paragraphs,
+        previewLabel: subtitle || beforeTable[0].slice(0, 70),
+        paragraphs: beforeTable,
       });
     }
 
@@ -426,6 +467,19 @@ export function buildStructuredAlteracaoFromBiOccurrences(params: {
         previewLabel: `Tabela (${occ.tableRows.length}×${cols}): ${firstCellPreview}`.slice(0, 80),
         paragraphs: [],
         tableRows: occ.tableRows,
+      });
+    }
+
+    if (afterTable.length > 0) {
+      items.push({
+        id: `bi-after-${seq++}`,
+        kind: 'entry',
+        month,
+        title,
+        subtitle,
+        previewLabel: afterTable[0].slice(0, 70),
+        paragraphs: afterTable,
+        continueWithoutSubtitle: true,
       });
     }
   }

@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { SiscomModal, SiscomSpinner } from '../../shared/ui';
 import { useDemandas } from './DemandasContext';
-import { sendTestDemandaNotification } from './demandaNotifications';
 import {
   DEMANDA_PRIORITY_LABELS,
   DemandaItem,
@@ -43,6 +42,7 @@ export const DemandasPanelModal: React.FC = () => {
     setEditingDemanda,
     notificationPermission,
     enableBrowserNotifications,
+    sendTestNotification,
     addDemanda,
     editDemanda,
     toggleComplete,
@@ -157,21 +157,21 @@ export const DemandasPanelModal: React.FC = () => {
 
   const handleEnableOrTestNotifications = async () => {
     if (notificationPermission === 'granted') {
-      const ok = await sendTestDemandaNotification();
+      const ok = await sendTestNotification();
       setNotice(
         ok
-          ? 'Notificação de teste enviada.'
-          : 'O navegador bloqueou a notificação de teste; os avisos internos continuam ativos.'
+          ? 'Notificação de teste enviada ao dispositivo.'
+          : 'O navegador bloqueou a notificação de teste; o sininho de notificações continua ativo.'
       );
       return;
     }
     const result = await enableBrowserNotifications();
     if (result === 'granted') {
-      await sendTestDemandaNotification();
-      setNotice('Notificações do navegador ativadas!');
+      await sendTestNotification();
+      setNotice('Notificações em segundo plano ativadas!');
     } else if (result === 'denied') {
       setNotice(
-        'Permissão negada no navegador. Você continuará recebendo alertas visuais dentro do SISCOM.'
+        'Permissão bloqueada no navegador. Libere nas configurações do site para receber alertas com o app fechado.'
       );
     }
   };

@@ -12,6 +12,13 @@ import {
   extractAlterationsFromBulletin,
   getBiAiProviderStatus,
 } from './server/biExtractionService.ts';
+import {
+  getPublicPushConfig,
+  runPushReminderSweep,
+  sendTestPushForUser,
+  syncUserPushState,
+  verifyCronAuthorization,
+} from './server/pushService.ts';
 
 const PORT = Number(process.env.PORT || 3000);
 const isProduction =
@@ -25,8 +32,12 @@ const apiHits = new Map<string, number[]>();
 const API_WINDOW_MS = 60_000;
 const API_MAX_REQ = 240;
 
+interface AuthenticatedRequest extends Request {
+  verifiedUid?: string;
+}
+
 async function verifyFirebaseAuthMiddleware(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> {
@@ -36,6 +47,7 @@ async function verifyFirebaseAuthMiddleware(
     res.status(authResult.status).json({ error: authResult.error });
     return;
   }
+  req.verifiedUid = authResult.uid;
   next();
 }
 
@@ -291,6 +303,61 @@ async function startServer() {
     }
   );
 
+  app.get('/api/push/config', (_req, res) => {
+    setNoStoreHeaders(res);
+    res.json(getPublicPushConfig());
+  });
+
+  app.post('/api/push/sync', verifyFirebaseAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+    setNoStoreHeaders(res);
+    try {
+      const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+      const result = await syncUserPushState({
+        uid: req.verifiedUid || '',
+        subscription: body.subscription,
+        removeEndpoint: typeof body.removeEndpoint === 'string' ? body.removeEndpoint : undefined,
+        demandas: body.demandas,
+        tzOffsetMinutes: body.tzOffsetMinutes,
+        notifiedKeys: body.notifiedKeys,
+      });
+      res.json(result);
+    } catch (err) {
+      console.error('[Push Sync Error]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: 'Não foi possível sincronizar as notificações em segundo plano.' });
+    }
+  });
+
+  app.post('/api/push/test', verifyFirebaseAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+    setNoStoreHeaders(res);
+    try {
+      const result = await sendTestPushForUser(req.verifiedUid || '');
+      res.status(result.ok ? 200 : 400).json(result);
+    } catch (err) {
+      console.error('[Push Test Error]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: 'Falha ao disparar notificação push de teste.' });
+    }
+  });
+
+  app.all('/api/push/cron', async (req, res) => {
+    setNoStoreHeaders(res);
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      res.setHeader('Allow', 'GET, POST');
+      res.status(405).json({ error: 'Método não permitido.' });
+      return;
+    }
+    if (!verifyCronAuthorization(req.headers.authorization)) {
+      res.status(401).json({ error: 'Acesso não autorizado ao agendador de notificações.' });
+      return;
+    }
+    try {
+      const result = await runPushReminderSweep();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      console.error('[Push Cron Error]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: 'Erro ao executar varredura de notificações.' });
+    }
+  });
+
   app.get('/api/version', (_req, res) => {
     setNoStoreHeaders(res);
     res.json({
@@ -371,6 +438,14 @@ async function startServer() {
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`SISCOM server running on http://0.0.0.0:${PORT}`);
+    // Background Web Push reminder sweep every 5 minutes when VAPID keys are configured
+    if (getPublicPushConfig().pushConfigured) {
+      setInterval(() => {
+        void runPushReminderSweep().catch((err) => {
+          console.error('[Push Sweep Error]', err instanceof Error ? err.message : err);
+        });
+      }, 5 * 60_000);
+    }
   });
 }
 

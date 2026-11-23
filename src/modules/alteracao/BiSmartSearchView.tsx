@@ -459,7 +459,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         const rawBodyText = await response.text().catch(() => '');
         let payload: {
           error?: string;
-          providerUsed?: 'openai' | 'gemini';
+          providerUsed?: 'sisbol' | 'openai' | 'gemini';
           modelUsed?: string;
           bulletinMeta?: {
             bulletinNumber?: string;
@@ -476,6 +476,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
             bulletinMonth: string;
             bulletinYear: number | null;
             contentText: string;
+            contentAfterTable?: string;
             personnelListText: string;
             emConsequenciaText: string;
             tableRows: string[][];
@@ -514,7 +515,12 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         }
 
         if (payload.providerUsed) {
-          lastProviderLabel = payload.providerUsed === 'openai' ? 'OpenAI' : 'Gemini';
+          lastProviderLabel =
+            payload.providerUsed === 'sisbol'
+              ? 'Motor SisBol'
+              : payload.providerUsed === 'openai'
+                ? 'OpenAI'
+                : 'Gemini';
         }
 
         const fileOccurrences: BiOccurrenceItem[] = (payload.occurrences || []).map((occ) => ({
@@ -530,6 +536,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
           bulletinMonth: occ.bulletinMonth || payload.bulletinMeta?.bulletinMonth || '',
           bulletinYear: occ.bulletinYear ?? null,
           contentText: occ.contentText || '',
+          contentAfterTable: occ.contentAfterTable || '',
           personnelListText: occ.personnelListText || '',
           emConsequenciaText: occ.emConsequenciaText || '',
           tableRows: Array.isArray(occ.tableRows) ? occ.tableRows : [],
@@ -1005,6 +1012,24 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* Editable Verbatim Post-Table Content (e.g. DCEM Observações + Adt da DCEM) */}
+        {occ.contentAfterTable && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-[10px] uppercase tracking-wider text-[#98A89F]">
+                Observações / Texto após a tabela
+              </label>
+              <span className="text-[10px] text-[#7D9186]">Posição preservada após a tabela</span>
+            </div>
+            <textarea
+              value={occ.contentAfterTable}
+              onChange={(e) => updateOccurrence(occ.id, { contentAfterTable: e.target.value })}
+              rows={Math.min(10, Math.max(3, Math.ceil(occ.contentAfterTable.length / 95) + 1))}
+              className="siscom-input w-full !py-2 !px-3 text-xs leading-relaxed resize-y font-serif"
+            />
           </div>
         )}
       </div>

@@ -64,6 +64,8 @@ export interface ParsedAlteracaoSectionItem {
   previewLabel: string;
   paragraphs: string[];
   tableRows?: string[][];
+  /** When true, continues immediately below the previous item (e.g., Observações after a DCEM table) without re-printing the bold subtitle. */
+  continueWithoutSubtitle?: boolean;
 }
 
 export interface ComportamentoDocLine {
@@ -2175,10 +2177,9 @@ export function renderBlocksFromStructuredDoc(
         const effectiveSubtitle = cleanSubtitleAgainstTitle(grp.displayTitle, item.subtitle);
         const subKey = stripDiacriticsUpper(effectiveSubtitle);
         const sameSubtitleAsPrevTableContinuation =
-          item.kind === 'table' &&
           itemIdx > 0 &&
-          subKey !== '' &&
-          subKey === lastRenderedSubtitleKey;
+          (Boolean(item.continueWithoutSubtitle) ||
+            (item.kind === 'table' && subKey !== '' && subKey === lastRenderedSubtitleKey));
 
         const itemAttr = ` data-alt-item="${escapeAlteracaoHtml(item.id)}"`;
         // Bind Subtitle + Table atomically, while text BI paragraphs flow smoothly line-by-line
@@ -2383,10 +2384,9 @@ export function renderItemBlocksForInsertion(
     const effectiveSubtitle = cleanSubtitleAgainstTitle(displayTitle, item.subtitle);
     const subKey = stripDiacriticsUpper(effectiveSubtitle);
     const sameSubtitleAsPrevTableContinuation =
-      item.kind === 'table' &&
       !isFirst &&
-      subKey !== '' &&
-      subKey === lastRenderedSubtitleKey;
+      (Boolean(item.continueWithoutSubtitle) ||
+        (item.kind === 'table' && subKey !== '' && subKey === lastRenderedSubtitleKey));
 
     const itemAttr = ` data-alt-item="${escapeAlteracaoHtml(item.id)}"`;
     const subAtomicId = item.kind === 'table' ? item.id : undefined;

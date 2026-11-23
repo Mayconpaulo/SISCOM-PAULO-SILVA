@@ -6,109 +6,15 @@ import type { BiBulletinPage } from './biSearchTypes';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-interface PdfTextItemLike {
-  str: string;
-  transform: number[];
-  width?: number;
-}
+import {
+  normalizeInlineSpaces,
+  reconstructPdfPageText,
+  type PdfOperatorListLike,
+  type PdfOpsConstantsLike,
+  type PdfTextItemLike,
+} from './pdfPageReconstructor';
 
-interface PositionedSpan {
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-}
-
-function normalizeInlineSpaces(value: string): string {
-  return value
-    .replace(/[\u00a0\u2000-\u200f\u202f\u205f\u3000]/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
-}
-
-/**
- * Reconstructs readable line-by-line text from a single PDF page preserving columns/tables
- * with tab-like spacing and removing faux-bold overlapping duplicate glyphs.
- */
-function reconstructPdfPageText(items: unknown[]): string {
-  const rawSpans: PositionedSpan[] = [];
-
-  for (const raw of items) {
-    const item = raw as PdfTextItemLike;
-    if (typeof item.str !== 'string') continue;
-    const text = item.str.replace(/\u00a0/g, ' ');
-    if (!text.trim()) continue;
-    const x = item.transform?.[4] ?? 0;
-    const y = item.transform?.[5] ?? 0;
-    const width = item.width ?? text.length * 4;
-    rawSpans.push({ text, x, y, width });
-  }
-
-  if (rawSpans.length === 0) return '';
-
-  // Sort top-to-bottom (descending Y), left-to-right (ascending X)
-  rawSpans.sort((a, b) => b.y - a.y || a.x - b.x);
-
-  // Deduplicate faux-bold double-printed glyphs at nearly identical (x, y)
-  const spans: PositionedSpan[] = [];
-  for (const span of rawSpans) {
-    const trimmed = span.text.trim();
-    let isDup = false;
-    for (let k = spans.length - 1; k >= 0; k--) {
-      const prev = spans[k];
-      if (prev.y - span.y > 2.6) break;
-      if (
-        Math.abs(prev.y - span.y) <= 2.2 &&
-        Math.abs(prev.x - span.x) <= 2.4 &&
-        prev.text.trim() === trimmed
-      ) {
-        prev.width = Math.max(prev.width, span.width);
-        isDup = true;
-        break;
-      }
-    }
-    if (!isDup) spans.push(span);
-  }
-
-  // Group into horizontal lines by Y proximity
-  const rows: PositionedSpan[][] = [];
-  for (const span of spans) {
-    const lastRow = rows[rows.length - 1];
-    if (!lastRow || Math.abs(lastRow[0].y - span.y) > 3.5) {
-      rows.push([span]);
-    } else {
-      lastRow.push(span);
-    }
-  }
-
-  const lines: string[] = [];
-  for (const row of rows) {
-    row.sort((a, b) => a.x - b.x);
-    let line = '';
-    for (let i = 0; i < row.length; i++) {
-      const curr = row[i];
-      if (i > 0) {
-        const prev = row[i - 1];
-        const gap = curr.x - (prev.x + prev.width);
-        if (gap > 22) {
-          // Preserve wide columnar separation (tables / lists) using a pipe-safe spacing hint
-          line += '   |   ';
-        } else if (gap > 1.6 && !line.endsWith(' ') && !curr.text.startsWith(' ')) {
-          line += ' ';
-        }
-      }
-      line += curr.text;
-    }
-    const cleaned = line
-      .replace(/[\u00a0\u2000-\u200f\u202f\u205f\u3000]/g, ' ')
-      .replace(/\s+\|\s+/g, ' | ')
-      .replace(/[ \t]{2,}/g, ' ')
-      .trim();
-    if (cleaned) lines.push(cleaned);
-  }
-
-  return lines.join('\n');
-}
+export { reconstructPdfPageText, type PdfOperatorListLike, type PdfOpsConstantsLike, type PdfTextItemLike };
 
 async function readPdfBulletinPages(
   file: File,
@@ -124,7 +30,13 @@ async function readPdfBulletinPages(
     onProgress?.('reading', `Lendo pág. ${p}/${pdf.numPages}`);
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
-    const text = reconstructPdfPageText(content.items);
+    let ops: PdfOperatorListLike | null = null;
+    try {
+      ops = (await page.getOperatorList()) as unknown as PdfOperatorListLike;
+    } catch {
+      ops = null;
+    }
+    const text = reconstructPdfPageText(content.items, ops, pdfjsLib.OPS as unknown as PdfOpsConstantsLike);
     const meaningfulChars = text.replace(/\s+/g, '').length;
 
     pages.push({ pageNumber: p, text, usedOcr: false });
@@ -192,19 +104,23 @@ async function readDocxBulletinPages(file: File): Promise<BiBulletinPage[]> {
       if (joined) lines.push(joined);
     } else if (localName === 'tbl') {
       const rows = Array.from(child.getElementsByTagNameNS(W_NS, 'tr'));
+      const tableRowStrings: string[] = [];
       for (const tr of rows) {
         const cells = Array.from(tr.getElementsByTagNameNS(W_NS, 'tc')).map((tc) => {
           const tNodes = Array.from(tc.getElementsByTagNameNS(W_NS, 't'));
           return normalizeInlineSpaces(tNodes.map((n) => n.textContent || '').join(' '));
         });
         if (cells.some((c) => c.length > 0)) {
-          lines.push(cells.join(' | '));
+          tableRowStrings.push(cells.join(' | '));
         }
+      }
+      if (tableRowStrings.length > 0) {
+        lines.push('[[TABELA_INICIO]]', ...tableRowStrings, '[[TABELA_FIM]]');
       }
     }
   }
 
-  // Paginate large DOCX into ~50-line logical pages for easy inspection
+  // Paginate large DOCX into ~55-line logical pages for easy inspection
   const fullLines = lines.length > 0 ? lines : [''];
   const pages: BiBulletinPage[] = [];
   const linesPerPage = 55;

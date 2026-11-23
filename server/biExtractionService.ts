@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type, type Schema } from '@google/genai';
+import { parseSisbolBulletin } from './sisbolParser.js';
 
 export interface BiMilitaryTargetInput {
   nomeCompleto: string;
@@ -45,6 +46,7 @@ export interface BiExtractedOccurrenceServer {
   bulletinMonth: string;
   bulletinYear: number | null;
   contentText: string;
+  contentAfterTable: string;
   personnelListText: string;
   emConsequenciaText: string;
   tableRows: string[][];
@@ -63,7 +65,7 @@ export interface BiDiscardedHomonymServer {
 }
 
 export interface BiExtractServiceResult {
-  providerUsed: 'openai' | 'gemini';
+  providerUsed: 'sisbol' | 'openai' | 'gemini';
   modelUsed: string;
   bulletinMeta: BiBulletinMetadata;
   occurrences: BiExtractedOccurrenceServer[];
@@ -274,38 +276,42 @@ function buildSystemInstruction(includeFirstPart: boolean): string {
     'Sua tarefa é analisar o texto integral paginado de um Boletim Interno (BI) e localizar TODAS as alterações referentes EXCLUSIVAMENTE ao militar pesquisado, retornando JSON estrito conforme o schema fornecido.',
     '',
     'REGRAS OBRIGATÓRIAS E INEGOCIÁVEIS:',
-    '1. FIDELIDADE INTEGRAL AO TEXTO ORIGINAL (VERBATIM):',
-    '   - Preserve integralmente o texto original da alteração: NÃO resuma, NÃO reescreva, NÃO corrija ortografia ou gramática (ex.: se o BI escrever "Tranporte", mantenha "Tranporte"), NÃO invente datas, números ou palavras ausentes.',
-    '   - Se a alteração atravessar uma quebra de página (ex.: fim da página 3 continuando no topo da página 4), REMOVA APENAS o cabeçalho/rodapé repetitivo de continuação do boletim (ex.: "(Continuação do BI Nr 20, de 30/01/2026, do(a) ... Pag nº 172)") e una perfeitamente a frase partida sem cortar nem duplicar nenhuma palavra.',
-    '   - Se houver notas entre parênteses como "(Por não ter sido publicado em época oportuna)." ou referências a outros boletins/aditamentos como "(Adt da DCEM 4K ao Bol do DGP nº 041, de 10 ABR 26)" ou "Observações:", PRESERVE-AS integralmente no contentText.',
+    '1. FIDELIDADE INTEGRAL AO TEXTO ORIGINAL (PADRÃO SISBOL — VERBATIM):',
+    '   - Preserve integralmente o texto original da alteração: NÃO resuma, NÃO reescreva, NÃO corrija ortografia ou gramática (ex.: se o BI escrever "Tranporte" ou "suícidio", mantenha literalmente), NÃO invente datas, números ou palavras ausentes.',
+    '   - Se a alteração atravessar uma quebra de página (ex.: fim da página 3 continuando no topo da página 4, ou subtítulo no rodapé da página 4 com corpo no topo da página 5), REMOVA APENAS o cabeçalho/rodapé repetitivo de continuação do boletim (ex.: "(Continuação do BI Nr 20, de 30/01/2026, do(a) ... Pag nº 172)") e una perfeitamente a frase partida sem cortar nem duplicar nenhuma palavra.',
+    '   - Se houver notas entre parênteses como "(Por não ter sido publicado em época oportuna)." (mesmo quando aparecem após a lista de militares e antes de "Em consequência") ou "(Adt da DCEM 4K ao Bol do DGP nº 041, de 10 ABR 26)", PRESERVE-AS integralmente.',
     '',
-    '2. TÍTULO E SUBTÍTULO (SEM CONFUNDIR E SEM PREFIXO NUMERADO):',
-    '   - Identifique a estrutura real da seção do BI sem depender de um layout rígido (os BIs variam entre OMs: podem ter ou não numeração, podem ter ou não tabelas, podem citar outros boletins).',
-    '   - title: Título principal da seção EM MAIÚSCULAS, removendo prefixos de enumeração (ex.: "2. ALTERAÇÕES DE SUBTENENTES E SARGENTOS" -> "ALTERAÇÕES DE SUBTENENTES E SARGENTOS"; "INSTRUÇÃO" -> "INSTRUÇÃO"; "3. SERVIÇO DE SAÚDE" -> "SERVIÇO DE SAÚDE").',
-    '   - subtitle: Assunto/subtítulo específico daquela matéria, removendo prefixos de letra/número (ex.: "b. Férias - Apresentação por Término" -> "Férias - Apresentação por Término"; "1. Instrução de Quadros" -> "Instrução de Quadros"; "a. Aditamento da DCEM - Transcrição" -> "Aditamento da DCEM - Transcrição"). Se não houver subtítulo distinto, deixe "".',
+    '2. ISOLAMENTO DE SUB-NOTAS SOB O MESMO SUBTÍTULO (REGRA CRÍTICA DO SISBOL):',
+    '   - Em BIs do Exército, um único subtítulo (ex.: "2. Aditamento da DCEM - Transcrição", "3. ATIVIDADES DE ÉTICA E LIDERANÇA", "a./b./c. Exame Pré-TAF - Resultado") frequentemente contém VÁRIAS sub-notas independentes, cada uma encerrada pela sua própria lista de militares vinculados + "Em consequência...".',
+    '   - Extraia EXCLUSIVAMENTE a sub-nota onde o militar pesquisado aparece. NUNCA misture texto, tabelas ou observações de sub-notas vizinhas destinadas a outros militares ou cursos.',
+    '',
+    '3. TÍTULO E SUBTÍTULO (SEM CONFUNDIR E SEM PREFIXO NUMERADO):',
+    '   - title: Título principal da seção EM MAIÚSCULAS, removendo prefixos de enumeração (ex.: "2. ALTERAÇÕES DE SUBTENENTES E SARGENTOS" -> "ALTERAÇÕES DE SUBTENENTES E SARGENTOS"; "2ª Parte / INSTRUÇÃO" -> "INSTRUÇÃO"; "3. SERVIÇO DE SAÚDE" -> "SERVIÇO DE SAÚDE").',
+    '   - subtitle: Assunto/subtítulo específico daquela matéria, removendo prefixos de letra/número e PRESERVANDO exatamente maiúsculas/minúsculas originais do BI (ex.: "b. Férias - Apresentação por Término" -> "Férias - Apresentação por Término"; "4. Instrução de quadros" -> "Instrução de quadros"; "3. INSTRUÇÃO DE LIDERANÇA" -> "INSTRUÇÃO DE LIDERANÇA"). Se não houver subtítulo distinto, deixe "".',
     '   - REGRA DE FÉRIAS: "Férias" NUNCA é title isolado — é SEMPRE subtitle (ex.: title="ALTERAÇÕES DE SUBTENENTES E SARGENTOS", subtitle="Férias - Apresentação por Término").',
     '   - NUNCA coloque o subtítulo dentro do title nem repita o title dentro do subtitle.',
     '',
-    '3. SEPARAÇÃO ENTRE TEXTO PRINCIPAL, LISTA LONGA DE MILITARES, "EM CONSEQUÊNCIA" E TABELAS:',
-    '   - contentText: O texto integral da matéria (narrativa principal + notas/observações + transcrições de boletins externos). NÃO inclua aqui a linha isolada contendo apenas o nome do militar quando o texto já disser "O militar nominado a seguir..." (a menos que o nome faça parte da própria frase corrida). NÃO inclua aqui uma lista extensa de vários militares nem o fecho administrativo "Em consequência...", pois esses vão nos campos dedicados abaixo.',
-    '   - personnelListText: Quando o assunto listar múltiplos militares (ex.: lista de participantes de uma instrução, ordem de missão, turma), copie aqui a LISTA COMPLETA VERBATIM (uma linha por militar ou exatamente como aparece no BI). Se o assunto citar apenas o militar pesquisado isoladamente (1 militar) ou não houver lista de nomes, deixe "".',
-    '   - emConsequenciaText: Quando a matéria terminar com o bloco administrativo "Em consequência..." / "Em consequência: a) ... b) ...", copie-o integralmente aqui. Se não houver, deixe "".',
-    '   - tableRows: Quando a matéria contiver uma tabela estruturada (ex.: Aditamento da DCEM, resultado de TAF/inspeção em colunas), preencha tableRows como matriz 2D [cabeçalho, ...linhas referentes ao militar pesquisado] preservando literalmente as células. Caso contrário, retorne [].',
+    '4. SEPARAÇÃO ENTRE TEXTO ANTES DA TABELA, TABELA, TEXTO APÓS A TABELA, LISTA E "EM CONSEQUÊNCIA":',
+    '   - contentText: Texto integral da matéria que aparece ANTES de eventual tabela (ex.: "- RELACIONAMENTO INICIAL\n- Curso de Aperfeiçoamento..."). Quando NÃO houver tabela, coloque aqui todo o texto da matéria (incluindo "(Por não ter sido publicado em época oportuna)."). NÃO inclua a linha isolada com o nome do militar vinculado, nem a lista extensa de militares, nem "Em consequência...".',
+    '   - tableRows: Quando a matéria contiver uma tabela estruturada (ex.: bloco [[TABELA_INICIO]]...[[TABELA_FIM]], Aditamento da DCEM, resultado de TAF/inspeção), preencha tableRows como matriz 2D [cabeçalho, ...linhas referentes ao militar pesquisado] preservando literalmente as células. Caso contrário, retorne [].',
+    '   - contentAfterTable: Quando houver tabela, coloque aqui TODO o texto/observações que aparece DEPOIS da tabela naquela mesma sub-nota (ex.: "Observações:\n41 - ...\n1187 - ...\n(Adt da DCEM 4K ao Bol do DGP nº 041, de 10 ABR 26)"). Se não houver tabela ou texto após a tabela, retorne "".',
+    '   - personnelListText: Quando a nota listar múltiplos militares vinculados, copie aqui a lista completa verbatim (uma linha por militar). Se citar apenas 1 militar ou não houver lista, deixe "".',
+    '   - emConsequenciaText: Quando a matéria terminar com "Em consequência...", copie-o integralmente aqui. Se não houver, deixe "".',
     '',
-    '4. IDENTIFICAÇÃO RIGOROSA E FILTRO ANTI-HOMÔNIMO:',
+    '5. IDENTIFICAÇÃO RIGOROSA E FILTRO ANTI-HOMÔNIMO:',
     '   - NUNCA misture alterações de militares diferentes.',
     '   - Compare Nome Completo, Posto/Graduação, Nome de Guerra, Subunidade/Cia e Identidade (quando fornecidos).',
-    '   - matchConfidence = "confirmada": quando houver identificação inequívoca do militar pesquisado (ex.: nome completo coincide, ou posto/graduação + nome de guerra + subunidade coincidem sem conflito).',
-    '   - matchConfidence = "conferir": quando houver DÚVIDA real (ex.: o BI cita apenas "Sgt CARDOSO" sem nome completo ou sem subunidade, podendo ser o pesquisado ou outro sargento de mesmo nome de guerra). Nesses casos, inclua em occurrences com matchConfidence="conferir" e explique o motivo em matchReason.',
-    '   - discardedHomonyms: Quando aparecer claramente OUTRO militar com sobrenome/nome de guerra parecido (ex.: pesquisando "2º Sgt EDSON DA SILVA CARDOSO", aparecem "Sd CARDOSO", "Cb FELIPHE CARDOSO CORDEIRO PEREIRA", "3º Sgt ADEMIR CARDOSO FERREIRA JUNIOR"), NÃO inclua em occurrences; registre-os em discardedHomonyms com nome, posto, página e motivo do descarte.',
+    '   - matchConfidence = "confirmada": quando houver vinculação inequívoca do militar pesquisado na nota.',
+    '   - matchConfidence = "conferir": quando houver DÚVIDA real (ex.: apenas "Sgt CARDOSO" sem nome completo, OU militar citado apenas dentro de uma tabela sem vinculação individual no rodapé da nota). Explique o motivo em matchReason.',
+    '   - discardedHomonyms: Quando aparecer claramente OUTRO militar com sobrenome/nome de guerra parecido, NÃO inclua em occurrences; registre em discardedHomonyms com nome, posto, página e motivo do descarte.',
     '',
     includeFirstPart
-      ? '5. PARTES DO BOLETIM: Analise todas as partes do BI (1ª, 2ª, 3ª e 4ª Partes), incluindo 1ª Parte (Serviços Diários) conforme solicitado.'
-      : '5. PARTES DO BOLETIM: Analise prioritariamente 2ª Parte (Instrução), 3ª Parte (Assuntos Gerais e Administrativos) e 4ª Parte (Justiça e Disciplina). IGNORE a 1ª Parte (Serviços Diários / Escala de Serviço), pois escalas de serviço diário não integram Folhas de Alterações (se o sobrenome aparecer na 1ª Parte como outro militar ou escala, pode apenas ignorar ou registrar em discardedHomonyms se for homônimo).',
+      ? '6. PARTES DO BOLETIM: Analise todas as partes do BI (1ª, 2ª, 3ª e 4ª Partes), incluindo 1ª Parte (Serviços Diários) conforme solicitado.'
+      : '6. PARTES DO BOLETIM: Analise 2ª Parte (Instrução), 3ª Parte (Assuntos Gerais e Administrativos) e 4ª Parte (Justiça e Disciplina). IGNORE a 1ª Parte (Serviços Diários / Escala de Serviço).',
     '',
-    '6. SEQUÊNCIA E PÁGINAS DE ORIGEM:',
+    '7. SEQUÊNCIA E PÁGINAS DE ORIGEM:',
     '   - Preserve a ordem exata em que as alterações aparecem no boletim.',
-    '   - Informe em sourcePages TODOS os números de página (inteiros 1-indexados conforme marcadores [[PAGINA N]]) em que aquela ocorrência aparece (incluindo início do texto, continuação e lista de nomes).',
+    '   - Informe em sourcePages TODOS os números de página (inteiros 1-indexados conforme [[PAGINA N]]) em que aquela ocorrência aparece.',
     '   - Se o militar pesquisado não tiver nenhuma ocorrência válida neste BI, retorne occurrences: [].',
   ].join('\n');
 }
@@ -376,6 +382,7 @@ const GEMINI_RESPONSE_SCHEMA: Schema = {
           bulletinMonth: { type: Type.STRING },
           bulletinYear: { type: Type.INTEGER, nullable: true },
           contentText: { type: Type.STRING },
+          contentAfterTable: { type: Type.STRING },
           personnelListText: { type: Type.STRING },
           emConsequenciaText: { type: Type.STRING },
           tableRows: {
@@ -404,6 +411,7 @@ const GEMINI_RESPONSE_SCHEMA: Schema = {
           'bulletinDateIso',
           'bulletinMonth',
           'contentText',
+          'contentAfterTable',
           'personnelListText',
           'emConsequenciaText',
           'tableRows',
@@ -474,6 +482,7 @@ const OPENAI_JSON_SCHEMA = {
             bulletinMonth: { type: 'string' },
             bulletinYear: { type: ['integer', 'null'] },
             contentText: { type: 'string' },
+            contentAfterTable: { type: 'string' },
             personnelListText: { type: 'string' },
             emConsequenciaText: { type: 'string' },
             tableRows: {
@@ -504,6 +513,7 @@ const OPENAI_JSON_SCHEMA = {
             'bulletinMonth',
             'bulletinYear',
             'contentText',
+            'contentAfterTable',
             'personnelListText',
             'emConsequenciaText',
             'tableRows',
@@ -838,12 +848,13 @@ function normalizeAndMergeResults(
   for (const out of chunkOutputs) {
     for (const rawOcc of out.occurrences || []) {
       const contentText = (rawOcc.contentText || '').trim();
+      const contentAfterTable = (rawOcc.contentAfterTable || '').trim();
       const tableRows = Array.isArray(rawOcc.tableRows)
         ? rawOcc.tableRows
             .filter((row) => Array.isArray(row) && row.some((c) => typeof c === 'string' && c.trim().length > 0))
             .map((row) => row.map((c) => (typeof c === 'string' ? c.trim() : '')))
         : [];
-      if (!contentText && tableRows.length === 0) continue;
+      if (!contentText && !contentAfterTable && tableRows.length === 0) continue;
 
       let rawTitle = cleanHeadingPrefix(rawOcc.title || '').toUpperCase();
       let rawSubtitle = cleanHeadingPrefix(rawOcc.subtitle || '');
@@ -907,6 +918,7 @@ function normalizeAndMergeResults(
         bulletinMonth: VALID_MONTHS.has(occMonth) ? occMonth : '',
         bulletinYear: occYear,
         contentText,
+        contentAfterTable,
         personnelListText: (rawOcc.personnelListText || '').trim(),
         emConsequenciaText: (rawOcc.emConsequenciaText || '').trim(),
         tableRows,
@@ -948,20 +960,65 @@ function normalizeAndMergeResults(
 export async function extractAlterationsFromBulletin(
   payload: BiExtractRequestPayload
 ): Promise<BiExtractServiceResult> {
+  const includeFirstPart = Boolean(payload.options?.includeFirstPart);
+  const headerHints = detectBulletinHeaderHints(payload.bulletin.fileName, payload.bulletin.pages);
+
+  // 1. Primary Engine: Deterministic Army SisBol Extractor (exact verbatim fidelity, zero hallucinations)
+  const sisbolResult = parseSisbolBulletin({
+    military: payload.military,
+    fileName: payload.bulletin.fileName,
+    pages: payload.bulletin.pages,
+    includeFirstPart,
+    headerHints,
+  });
+
+  const hasOcrPages = payload.bulletin.pages.some((p) => Boolean(p.usedOcr));
+  if (sisbolResult.isSisbol && sisbolResult.totalNotasScanned > 0 && !hasOcrPages) {
+    const maxPageNumber = Math.max(1, ...payload.bulletin.pages.map((p) => p.pageNumber));
+    const merged = normalizeAndMergeResults(
+      [
+        {
+          bulletinMeta: sisbolResult.bulletinMeta,
+          occurrences: sisbolResult.occurrences,
+          discardedHomonyms: sisbolResult.discardedHomonyms,
+        },
+      ],
+      headerHints,
+      maxPageNumber,
+      payload.military.postoGraduacao
+    );
+
+    return {
+      providerUsed: 'sisbol',
+      modelUsed: 'sisbol-eb-v1',
+      bulletinMeta: merged.bulletinMeta,
+      occurrences: merged.occurrences,
+      discardedHomonyms: merged.discardedHomonyms,
+    };
+  }
+
+  // 2. Fallback Engine: AI Semantic Extractor (for OCR scans or non-SisBol OM formats)
   const openaiKey = isUsableSecret(process.env.OPENAI_API_KEY);
   const geminiKey =
     isUsableSecret(process.env.GEMINI_API_KEY) || isUsableSecret(process.env.API_KEY);
 
   if (!openaiKey && !geminiKey) {
+    if (sisbolResult.isSisbol) {
+      return {
+        providerUsed: 'sisbol',
+        modelUsed: 'sisbol-eb-v1',
+        bulletinMeta: sisbolResult.bulletinMeta,
+        occurrences: sisbolResult.occurrences,
+        discardedHomonyms: sisbolResult.discardedHomonyms,
+      };
+    }
     throw new Error(
-      'Nenhuma chave de IA configurada no servidor. Configure OPENAI_API_KEY ou GEMINI_API_KEY nas variáveis de ambiente (Secrets) do projeto.'
+      'Este boletim não está no formato padrão SisBol e nenhuma chave de IA está configurada no servidor (OPENAI_API_KEY ou GEMINI_API_KEY).'
     );
   }
 
   let providerUsed: 'openai' | 'gemini' = openaiKey ? 'openai' : 'gemini';
-  const includeFirstPart = Boolean(payload.options?.includeFirstPart);
   const systemInstruction = buildSystemInstruction(includeFirstPart);
-  const headerHints = detectBulletinHeaderHints(payload.bulletin.fileName, payload.bulletin.pages);
   const chunks = splitPagesIntoChunks(payload.bulletin.pages);
 
   const chunkOutputs: RawAiChunkResponse[] = [];

@@ -23,7 +23,7 @@ import {
 } from './modules/registry';
 import { DemandasProvider } from './modules/demandas/DemandasContext';
 import { DemandasFloatingQuickAdd } from './modules/demandas/DemandasFloatingQuickAdd';
-import { DemandasNotificationToasts } from './modules/demandas/DemandasNotificationToasts';
+import { DemandasNotificationBell } from './modules/demandas/DemandasNotificationBell';
 import { DemandasPanelModal } from './modules/demandas/DemandasPanelModal';
 import {
   CREST_LAYOUT_TRANSITION,
@@ -426,7 +426,9 @@ function WorkspaceShell() {
             </motion.h1>
           </div>
 
-          <div className="flex items-center justify-end" />
+          <div className="flex items-center justify-end">
+            <DemandasNotificationBell />
+          </div>
         </header>
       )}
 
@@ -479,7 +481,6 @@ function WorkspaceShell() {
 
       {!shieldLocked && (
         <>
-          <DemandasNotificationToasts />
           <DemandasFloatingQuickAdd
             activeScreen={activeScreen}
             canAccessAgenda={hasModuleAccess('agenda')}
