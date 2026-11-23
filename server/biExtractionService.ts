@@ -569,6 +569,8 @@ function isTransientAiError(statusOrMsg: number | string): boolean {
   );
 }
 
+const AI_REQUEST_TIMEOUT_MS = process.env.VERCEL ? 50_000 : 90_000;
+
 async function callOpenAiExtract(
   apiKey: string,
   systemInstruction: string,
@@ -586,7 +588,7 @@ async function callOpenAiExtract(
       try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
-          signal: AbortSignal.timeout(90_000),
+          signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiKey}`,
@@ -658,7 +660,7 @@ async function callGeminiExtract(
   const ai = new GoogleGenAI({
     apiKey,
     httpOptions: {
-      timeout: 90_000,
+      timeout: AI_REQUEST_TIMEOUT_MS,
       headers: {
         'User-Agent': 'aistudio-build',
       },
