@@ -4,5 +4,20 @@ dist/
 coverage/
 .DS_Store
 *.log
+
+# Environment & local configuration
+.env
 .env*
 !.env.example
+*.local
+.vercel
+
+# Private keys, certificates & service account credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*service-account*.json
+*serviceAccount*.json
+secrets/

@@ -25,19 +25,49 @@ import {
   parseRemindersJson,
 } from './agendaTypes';
 
+import firebaseConfig from '../../../firebase-applet-config.json';
+
 /**
  * Isolated OAuth app for Google Calendar, Contacts, and Drive integration.
  * Runs alongside (never replacing) SISCOM's primary Firebase Auth session
  * so military users signed in with @siscom.app credentials remain signed in.
+ * Uses optional VITE_GOOGLE_CALENDAR_FIREBASE_* environment variables when configured,
+ * falling back to the app's managed firebase-applet-config.json.
  */
-const GOOGLE_CALENDAR_OAUTH_CONFIG = {
-  projectId: 'gen-lang-client-0187607531',
-  appId: '1:209099306810:web:9618e2a652e7877d560203',
-  apiKey: 'AIzaSyBUO0BLFYradXpJJbtH2gwpYM3Gxb0xTzk',
-  authDomain: 'gen-lang-client-0187607531.firebaseapp.com',
-  storageBucket: 'gen-lang-client-0187607531.firebasestorage.app',
-  messagingSenderId: '209099306810',
-};
+function resolveGoogleCalendarOAuthConfig() {
+  const envApiKey = (import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_API_KEY || '').trim();
+  const envProjectId = (import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_PROJECT_ID || '').trim();
+  const envAppId = (import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_APP_ID || '').trim();
+  const envAuthDomain = (import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_AUTH_DOMAIN || '').trim();
+  const envStorageBucket = (
+    import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_STORAGE_BUCKET || ''
+  ).trim();
+  const envMessagingSenderId = (
+    import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_MESSAGING_SENDER_ID || ''
+  ).trim();
+
+  if (envApiKey && envProjectId && envAppId && envAuthDomain) {
+    return {
+      projectId: envProjectId,
+      appId: envAppId,
+      apiKey: envApiKey,
+      authDomain: envAuthDomain,
+      storageBucket: envStorageBucket || `${envProjectId}.firebasestorage.app`,
+      messagingSenderId: envMessagingSenderId,
+    };
+  }
+
+  return {
+    projectId: firebaseConfig.projectId,
+    appId: firebaseConfig.appId,
+    apiKey: firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain,
+    storageBucket: firebaseConfig.storageBucket,
+    messagingSenderId: firebaseConfig.messagingSenderId,
+  };
+}
+
+const GOOGLE_CALENDAR_OAUTH_CONFIG = resolveGoogleCalendarOAuthConfig();
 
 const CALENDAR_APP_NAME = 'siscom-google-calendar';
 

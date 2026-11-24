@@ -295,13 +295,13 @@ export const DemandasPanelModal: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="siscom-field-label !text-[11px]">O que precisa fazer?</label>
+              <label className="siscom-field-label !text-[11px]">Demanda</label>
               <input
                 type="text"
                 maxLength={160}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex.: Enviar nota para o BI, conferir crachás da formatura..."
+                placeholder="Título"
                 className="siscom-input !min-h-[42px] text-sm"
                 autoFocus
               />
@@ -309,7 +309,7 @@ export const DemandasPanelModal: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="siscom-field-label !text-[11px]">Para quando (data)</label>
+                <label className="siscom-field-label !text-[11px]">Data</label>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="date"
@@ -335,7 +335,7 @@ export const DemandasPanelModal: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="siscom-field-label !text-[11px]">Horário (opcional)</label>
+                <label className="siscom-field-label !text-[11px]">Horário</label>
                 <input
                   type="time"
                   value={dueTime}
@@ -348,7 +348,7 @@ export const DemandasPanelModal: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="siscom-field-label !text-[11px]">
-                  Notificar antes até chegar no dia
+                  Lembrete
                 </label>
                 <select
                   value={remindBeforeDays}
@@ -378,13 +378,13 @@ export const DemandasPanelModal: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="siscom-field-label !text-[11px]">Observações (opcional)</label>
+              <label className="siscom-field-label !text-[11px]">Observações</label>
               <textarea
                 rows={2}
                 maxLength={1000}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Detalhes, contatos ou referência do documento..."
+                placeholder="Observações"
                 className="siscom-input py-2 text-xs resize-none"
               />
             </div>
@@ -445,14 +445,11 @@ export const DemandasPanelModal: React.FC = () => {
         {/* Demandas List */}
         <div className="max-h-[48vh] overflow-y-auto pr-1 divide-y divide-white/[0.06]">
           {filteredItems.length === 0 ? (
-            <div className="py-10 text-center space-y-1.5">
+            <div className="py-10 text-center">
               <p className="text-sm text-[#C6D4CC]">
                 {demandas.length === 0
-                  ? 'Nenhuma demanda cadastrada ainda.'
-                  : 'Nenhuma demanda encontrada neste filtro.'}
-              </p>
-              <p className="text-xs text-[#8FA197]">
-                Cadastre suas tarefas com prazo para receber avisos automáticos antes do vencimento.
+                  ? 'Nenhuma demanda cadastrada.'
+                  : 'Nenhuma demanda encontrada.'}
               </p>
             </div>
           ) : (

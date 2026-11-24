@@ -383,10 +383,8 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
               {/* Submit button */}
               <div className="flex items-center justify-between gap-2 pt-0.5">
                 <span className="text-[11px] text-[#8FA197] truncate">
-                  {savedFeedback ? (
+                  {savedFeedback && (
                     <span className="text-[#83B499] font-medium">Demanda salva!</span>
-                  ) : (
-                    'Avisos automáticos até o prazo'
                   )}
                 </span>
 

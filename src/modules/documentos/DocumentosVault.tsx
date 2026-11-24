@@ -33,6 +33,7 @@ import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/priva
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
+import { logActivity } from '../../core/audit/activityLogger';
 
 const STORAGE_KEY = 'siscom_documentos_vault_v1';
 
@@ -214,6 +215,11 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       a.click();
       URL.revokeObjectURL(url);
       setNotice('PDF gerado.');
+      void logActivity({
+        module: 'documentos',
+        action: 'export_pdf',
+        summary: `Exportou PDF do documento: ${activeDoc.title}`,
+      });
     } catch {
       setNotice('Erro ao gerar PDF.');
     } finally {
@@ -242,6 +248,11 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       a.click();
       URL.revokeObjectURL(url);
       setNotice('Word (.doc) exportado.');
+      void logActivity({
+        module: 'documentos',
+        action: 'export_word',
+        summary: `Exportou Word do documento: ${activeDoc.title}`,
+      });
     } catch {
       setNotice('Erro ao gerar .doc.');
     } finally {
@@ -262,6 +273,11 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       a.click();
       URL.revokeObjectURL(url);
       setNotice('CSV exportado.');
+      void logActivity({
+        module: 'documentos',
+        action: 'export_csv',
+        summary: `Exportou CSV do documento: ${activeDoc.title}`,
+      });
     } finally {
       setExporting(null);
     }
@@ -399,14 +415,9 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
             <div className="w-10 h-10 rounded-lg bg-[#2D5A43]/22 border border-[#83B499]/25 flex items-center justify-center text-[#83B499] shrink-0">
               <FolderOpen className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="font-display text-base sm:text-lg font-semibold text-[#E8EEEA]">
-                Arquivos
-              </h2>
-              <p className="text-[11px] text-[#98A89F]">
-                Importe PDF, Word, Excel, CSV, TXT, ODT ou foto — sem limite de tamanho
-              </p>
-            </div>
+            <h2 className="font-display text-base sm:text-lg font-semibold text-[#E8EEEA]">
+              Arquivos
+            </h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -425,7 +436,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
               type="button"
               disabled={isImporting}
               onClick={() => fileInputRef.current?.click()}
-              title="Importar documento (PDF, Word, Excel, CSV, TXT ou foto)"
+              title="Subir documento"
               className="siscom-btn siscom-btn-gold min-h-[40px] px-3.5 text-xs"
             >
               {isImporting ? (
@@ -633,7 +644,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
               updateActiveDoc((d) => ({ ...d, rowCount: clamped }));
               setRowCountDraft(String(clamped));
             }}
-            placeholder="Digite a quantidade de linhas (1 a 100)"
+            placeholder="1 a 100"
             className="siscom-input w-full min-h-[40px] px-3 font-mono text-sm"
           />
 
@@ -747,7 +758,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
                     onChange={(e) =>
                       handleUpdateColumn(col.id, { defaultCellText: e.target.value })
                     }
-                    placeholder="Texto padrão (| divide)"
+                    placeholder="Texto padrão"
                     className="siscom-input w-full min-h-[34px] px-2.5 text-[11px]"
                   />
                 )}

@@ -91,6 +91,23 @@ service cloud.firestore {
         );
     }
 
+    function canAccessOwnRelatorios(userId) {
+      return isOwner(userId)
+        && isValidId(userId)
+        && (
+          isBootstrappedAdmin()
+          || (
+            exists(/databases/$(database)/documents/users/$(userId))
+            && get(/databases/$(database)/documents/users/$(userId)).data.active == true
+            && (
+              get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin'
+              || !('permRelatorio' in get(/databases/$(database)/documents/users/$(userId)).data)
+              || get(/databases/$(database)/documents/users/$(userId)).data.permRelatorio == true
+            )
+          )
+        );
+    }
+
     function canAccessAgenda() {
       return isBootstrappedAdmin()
         || (
@@ -118,6 +135,15 @@ service cloud.firestore {
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
             || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permArquivo == true
           )
+        );
+    }
+
+    function canCreateActivityLog() {
+      return isBootstrappedAdmin()
+        || (
+          isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
         );
     }
 
@@ -370,6 +396,107 @@ service cloud.firestore {
         && data.status in ['pendente', 'concluida']
         && data.remindBeforeDays is int && data.remindBeforeDays >= 0 && data.remindBeforeDays <= 30
         && data.completedAt is string && data.completedAt.size() <= 40
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRelatorioVtrMap(vtr) {
+      return vtr is map
+        && vtr.keys().hasAll([
+          'om',
+          'motocicletasExistente',
+          'motocicletasDisponivel',
+          'vtrOpExistente',
+          'vtrOpDisponivel',
+          'vtrAdmExistente',
+          'vtrAdmDisponivel',
+          'vtrBldExistente',
+          'vtrBldDisponivel',
+          'obusMrtExistente',
+          'obusMrtDisponivel'
+        ])
+        && vtr.keys().hasOnly([
+          'om',
+          'motocicletasExistente',
+          'motocicletasDisponivel',
+          'vtrOpExistente',
+          'vtrOpDisponivel',
+          'vtrAdmExistente',
+          'vtrAdmDisponivel',
+          'vtrBldExistente',
+          'vtrBldDisponivel',
+          'obusMrtExistente',
+          'obusMrtDisponivel'
+        ])
+        && vtr.om is string && vtr.om.size() <= 60
+        && vtr.motocicletasExistente is string && vtr.motocicletasExistente.size() <= 24
+        && vtr.motocicletasDisponivel is string && vtr.motocicletasDisponivel.size() <= 24
+        && vtr.vtrOpExistente is string && vtr.vtrOpExistente.size() <= 24
+        && vtr.vtrOpDisponivel is string && vtr.vtrOpDisponivel.size() <= 24
+        && vtr.vtrAdmExistente is string && vtr.vtrAdmExistente.size() <= 24
+        && vtr.vtrAdmDisponivel is string && vtr.vtrAdmDisponivel.size() <= 24
+        && vtr.vtrBldExistente is string && vtr.vtrBldExistente.size() <= 24
+        && vtr.vtrBldDisponivel is string && vtr.vtrBldDisponivel.size() <= 24
+        && vtr.obusMrtExistente is string && vtr.obusMrtExistente.size() <= 24
+        && vtr.obusMrtDisponivel is string && vtr.obusMrtDisponivel.size() <= 24;
+    }
+
+    function isValidRelatorioDoc(data, userId, relatorioId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerUid',
+          'title',
+          'periodoCabecalho',
+          'preparoEmprego',
+          'estadoSanitario',
+          'problemasDisciplinares',
+          'generosAlimenticios',
+          'vtrDisponibilidade',
+          'marcaModeloRows',
+          'execucaoFinanceiraRows',
+          'diversosEventos',
+          'clientUpdatedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerUid',
+          'title',
+          'periodoCabecalho',
+          'preparoEmprego',
+          'estadoSanitario',
+          'problemasDisciplinares',
+          'generosAlimenticios',
+          'vtrDisponibilidade',
+          'marcaModeloRows',
+          'execucaoFinanceiraRows',
+          'diversosEventos',
+          'clientUpdatedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.id == relatorioId
+        && isValidId(data.ownerUid)
+        && data.ownerUid == userId
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.periodoCabecalho is string && data.periodoCabecalho.size() <= 120
+        && data.preparoEmprego is string && data.preparoEmprego.size() <= 400
+        && data.estadoSanitario is string && data.estadoSanitario.size() <= 400
+        && data.problemasDisciplinares is string && data.problemasDisciplinares.size() <= 400
+        && data.generosAlimenticios is string && data.generosAlimenticios.size() <= 400
+        && isValidRelatorioVtrMap(data.vtrDisponibilidade)
+        && data.marcaModeloRows is list
+        && data.marcaModeloRows.size() <= 40
+        && (data.marcaModeloRows.size() == 0 || data.marcaModeloRows[0] is map)
+        && data.execucaoFinanceiraRows is list
+        && data.execucaoFinanceiraRows.size() <= 40
+        && (data.execucaoFinanceiraRows.size() == 0 || data.execucaoFinanceiraRows[0] is map)
+        && data.diversosEventos is list
+        && data.diversosEventos.size() <= 200
+        && (data.diversosEventos.size() == 0 || data.diversosEventos[0] is map)
+        && data.clientUpdatedAt is string && data.clientUpdatedAt.size() <= 40
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -759,6 +886,70 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
+    function isValidActivityLog(data, logId) {
+      return data.keys().hasAll([
+          'id',
+          'actorUid',
+          'actorUsername',
+          'actorDisplayName',
+          'actorRole',
+          'module',
+          'action',
+          'summary',
+          'detail',
+          'sectionScope',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'actorUid',
+          'actorUsername',
+          'actorDisplayName',
+          'actorRole',
+          'module',
+          'action',
+          'summary',
+          'detail',
+          'sectionScope',
+          'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.id == logId
+        && isValidId(data.actorUid)
+        && data.actorUsername is string
+        && data.actorUsername.size() >= 1
+        && data.actorUsername.size() <= 60
+        && data.actorDisplayName is string
+        && data.actorDisplayName.size() >= 1
+        && data.actorDisplayName.size() <= 80
+        && data.actorRole in ['admin', 'user']
+        && data.module in [
+          'auth',
+          'admin',
+          'prismas',
+          'crachas',
+          'alteracao',
+          'documentos',
+          'cartoes',
+          'relatorio',
+          'agenda',
+          'arquivo',
+          'demandas',
+          'sistema'
+        ]
+        && data.action is string
+        && data.action.size() >= 1
+        && data.action.size() <= 60
+        && data.action.matches('^[a-z0-9_]+$')
+        && data.summary is string
+        && data.summary.size() >= 1
+        && data.summary.size() <= 240
+        && data.detail is string
+        && data.detail.size() <= 300
+        && data.sectionScope == 'siscom'
+        && data.createdAt is timestamp;
+    }
+
     match /admins/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if false;
@@ -937,6 +1128,44 @@ service cloud.firestore {
           ]);
         allow delete: if canAccessOwnDemandas(userId) && isValidId(demandaId);
       }
+
+      match /relatorios/{relatorioId} {
+        allow get: if canAccessOwnRelatorios(userId) && isValidId(relatorioId);
+        allow list: if isOwner(userId)
+          && isValidId(userId)
+          && resource.data.ownerUid == request.auth.uid;
+        allow create: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(relatorioId)
+          && isValidRelatorioDoc(incoming(), userId, relatorioId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && canAccessOwnRelatorios(userId);
+        allow update: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(relatorioId)
+          && isValidRelatorioDoc(incoming(), userId, relatorioId)
+          && incoming().id == existing().id
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title',
+            'periodoCabecalho',
+            'preparoEmprego',
+            'estadoSanitario',
+            'problemasDisciplinares',
+            'generosAlimenticios',
+            'vtrDisponibilidade',
+            'marcaModeloRows',
+            'execucaoFinanceiraRows',
+            'diversosEventos',
+            'clientUpdatedAt',
+            'updatedAt'
+          ])
+          && canAccessOwnRelatorios(userId);
+        allow delete: if canAccessOwnRelatorios(userId) && isValidId(relatorioId);
+      }
     }
 
     match /agenda_events/{eventId} {
@@ -1073,6 +1302,19 @@ service cloud.firestore {
         && isValidDriveAuditLog(incoming(), logId)
         && incoming().actorUid == request.auth.uid
         && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /activity_logs/{logId} {
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin() && resource.data.sectionScope == 'siscom';
+      allow create: if isSignedIn()
+        && isValidId(logId)
+        && isValidActivityLog(incoming(), logId)
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && canCreateActivityLog();
       allow update: if false;
       allow delete: if false;
     }

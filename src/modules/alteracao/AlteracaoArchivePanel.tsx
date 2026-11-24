@@ -835,19 +835,14 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
             <span>Sincronizando arquivo...</span>
           </div>
         ) : visibleFolders.length === 0 && visibleDocs.length === 0 ? (
-          <div className="px-3 py-5 text-center space-y-1">
+          <div className="px-3 py-5 text-center">
             <p className="text-xs text-[#98A89F]">
               {normalizedSearch
-                ? 'Nenhuma pasta ou alteração encontrada.'
+                ? 'Nenhum resultado.'
                 : currentFolderId
                   ? 'Pasta vazia.'
-                  : 'Nenhuma pasta ou alteração arquivada.'}
+                  : 'Nenhuma alteração arquivada.'}
             </p>
-            {!normalizedSearch && (
-              <p className="text-[11px] text-[#6E7F76]">
-                Crie pastas/subpastas ou clique em Arquivar para sincronizar na sua conta.
-              </p>
-            )}
           </div>
         ) : (
           <>
@@ -1469,10 +1464,6 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
                   </label>
                 )}
 
-                <p className="text-[11px] text-[#8EA196]">
-                  Altera somente as linhas do tempo de serviço na 2ª Parte — todo o texto da 1ª
-                  Parte permanece intacto.
-                </p>
               </div>
             )}
           </div>
@@ -1488,7 +1479,7 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
                   className="h-4 w-4 accent-[#C8A461] cursor-pointer"
                 />
                 <Calendar className="w-3.5 h-3.5 text-[#E5C17B]" />
-                <span>Alterar Data do Fecho (Quartel..., na 2ª Parte)</span>
+                <span>Data do Fecho (2ª Parte)</span>
               </span>
             </label>
 
@@ -1524,10 +1515,6 @@ export const AlteracaoArchivePanel: React.FC<AlteracaoArchivePanelProps> = ({
 
             {batchApplyHeader && (
               <div className="space-y-2 pt-1">
-                <p className="text-[11px] text-[#8EA196]">
-                  Preencha apenas os campos que deseja atualizar — campos em branco mantêm o valor
-                  atual de cada documento.
-                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"

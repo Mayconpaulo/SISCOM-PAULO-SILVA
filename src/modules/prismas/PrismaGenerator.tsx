@@ -24,6 +24,7 @@ import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
+import { logActivity } from '../../core/audit/activityLogger';
 
 const DEFAULT_PRISMAS: [PrismaData, PrismaData] = [
   { nome: 'TEN NETO', funcao: 'CHEFE COMSOC' },
@@ -298,6 +299,11 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
       a.click();
       URL.revokeObjectURL(url);
       setNotice('PDF gerado.');
+      void logActivity({
+        module: 'prismas',
+        action: 'export_pdf',
+        summary: `Exportou PDF de ${count} prisma(s)`,
+      });
     } catch {
       setNotice('Erro ao gerar PDF.');
     } finally {
@@ -324,6 +330,11 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
       a.click();
       URL.revokeObjectURL(url);
       setNotice('PNG gerado.');
+      void logActivity({
+        module: 'prismas',
+        action: 'export_png',
+        summary: `Exportou PNG de ${count} prisma(s)`,
+      });
     } catch {
       setNotice('Erro ao gerar PNG.');
     } finally {
@@ -333,6 +344,11 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
 
   const handlePrint = () => {
     setNotice(null);
+    void logActivity({
+      module: 'prismas',
+      action: 'print',
+      summary: `Imprimiu ${count} prisma(s)`,
+    });
     window.print();
   };
 

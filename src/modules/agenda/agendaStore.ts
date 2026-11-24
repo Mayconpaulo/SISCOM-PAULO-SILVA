@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { OperationType, db, handleFirestoreError } from '../../core/auth/firebase';
+import { logActivity } from '../../core/audit/activityLogger';
 import type { UserAccount } from '../../core/auth/authService';
 import type {
   AgendaAuditAction,
@@ -103,7 +104,11 @@ export function subscribeAgendaEvents(
       if (onError) {
         onError(err instanceof Error ? err : new Error(String(err)));
       } else {
-        handleFirestoreError(err, OperationType.LIST, EVENTS_COLLECTION);
+        try {
+          handleFirestoreError(err, OperationType.LIST, EVENTS_COLLECTION);
+        } catch {
+          // Logged via handleFirestoreError
+        }
       }
     }
   );
@@ -135,7 +140,11 @@ export function subscribeAgendaAudit(
       if (onError) {
         onError(err instanceof Error ? err : new Error(String(err)));
       } else {
-        handleFirestoreError(err, OperationType.LIST, AUDIT_COLLECTION);
+        try {
+          handleFirestoreError(err, OperationType.LIST, AUDIT_COLLECTION);
+        } catch {
+          // Logged via handleFirestoreError
+        }
       }
     }
   );
@@ -158,11 +167,15 @@ export function subscribeAgendaGoogleConfig(
       if (onError) {
         onError(err instanceof Error ? err : new Error(String(err)));
       } else {
-        handleFirestoreError(
-          err,
-          OperationType.GET,
-          `${CONFIG_COLLECTION}/${GOOGLE_CONFIG_DOC_ID}`
-        );
+        try {
+          handleFirestoreError(
+            err,
+            OperationType.GET,
+            `${CONFIG_COLLECTION}/${GOOGLE_CONFIG_DOC_ID}`
+          );
+        } catch {
+          // Logged via handleFirestoreError
+        }
       }
     }
   );
@@ -192,6 +205,17 @@ export async function recordAgendaAudit(params: {
       actorName: safeActorName,
       sectionScope: 'comsoc',
       createdAt: serverTimestamp(),
+    });
+    void logActivity({
+      module: 'agenda',
+      action: params.action,
+      summary: safeSummary,
+      actorOverride: {
+        uid: params.actor.uid,
+        username: params.actor.username,
+        displayName: params.actor.displayName,
+        role: params.actor.role,
+      },
     });
   } catch (err) {
     console.warn('Falha ao gravar auditoria da Agenda:', err);

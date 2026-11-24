@@ -1,6 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { ExternalLink, KeyRound, Shield, Trash2, UserPlus, Users } from 'lucide-react';
+import {
+  Clock,
+  ExternalLink,
+  History,
+  KeyRound,
+  Search,
+  Shield,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../../core/auth/AuthContext';
 import {
   ALL_MODULE_KEYS,
@@ -17,9 +28,51 @@ import {
   toggleUserModulePermission,
   updateOwnAdminProfile,
 } from '../../core/auth/authService';
+import {
+  ACTIVITY_MODULE_LABELS,
+  ActivityLogRecord,
+  ActivityModule,
+  subscribeActivityLogs,
+} from '../../core/audit/activityLogger';
 import { FIREBASE_PROJECT_ID } from '../../core/auth/firebase';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
-import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
+import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
+
+type AdminMainTab = 'contas' | 'historico';
+
+const HISTORY_MODULES: ActivityModule[] = [
+  'auth',
+  'admin',
+  'relatorio',
+  'crachas',
+  'prismas',
+  'cartoes',
+  'alteracao',
+  'documentos',
+  'agenda',
+  'arquivo',
+  'demandas',
+];
+
+function formatActivityTimestamp(log: ActivityLogRecord): string {
+  const date = log.createdAt?.toDate?.();
+  if (!date) return 'Agora';
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function normalizeSearchText(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
 
 const DEFAULT_NEW_USER_PERMS: ModulePermissions = {
   permPrismas: true,
@@ -61,6 +114,15 @@ export function AdminPanel() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [needsEmailSetup, setNeedsEmailSetup] = useState(false);
 
+  // Admin main tab & real-time activity history
+  const [activeTab, setActiveTab] = useState<AdminMainTab>('contas');
+  const [activityLogs, setActivityLogs] = useState<ActivityLogRecord[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [filterAccount, setFilterAccount] = useState<string>('all');
+  const [filterModule, setFilterModule] = useState<string>('all');
+  const [historySearch, setHistorySearch] = useState<string>('');
+
   useEffect(() => {
     if (!account) return;
     if (!isGoogleAdminSession) {
@@ -68,6 +130,76 @@ export function AdminPanel() {
     }
     setOwnDisplayName(account.displayName);
   }, [account, isGoogleAdminSession]);
+
+  useEffect(() => {
+    if (!firebaseUser || account?.role !== 'admin') {
+      setActivityLogs([]);
+      setLoadingLogs(false);
+      return;
+    }
+
+    setLoadingLogs(true);
+    setLogsError(null);
+    const unsub = subscribeActivityLogs(
+      (logs) => {
+        setActivityLogs(logs);
+        setLoadingLogs(false);
+      },
+      () => {
+        setLogsError('Não foi possível carregar o histórico de ações.');
+        setLoadingLogs(false);
+      },
+      300
+    );
+
+    return () => unsub();
+  }, [firebaseUser, account?.role]);
+
+  const accountFilterOptions = useMemo(() => {
+    const map = new Map<string, { uid: string; label: string; username: string }>();
+    for (const u of managedUsers) {
+      map.set(u.uid, {
+        uid: u.uid,
+        label: u.displayName || u.username,
+        username: u.username,
+      });
+    }
+    for (const log of activityLogs) {
+      if (!map.has(log.actorUid)) {
+        map.set(log.actorUid, {
+          uid: log.actorUid,
+          label: log.actorDisplayName || log.actorUsername,
+          username: log.actorUsername,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [managedUsers, activityLogs]);
+
+  const filteredLogs = useMemo(() => {
+    const q = normalizeSearchText(historySearch);
+    const myUid = firebaseUser?.uid || '';
+    return activityLogs.filter((log) => {
+      if (filterAccount === 'others' && log.actorUid === myUid) return false;
+      if (filterAccount !== 'all' && filterAccount !== 'others' && log.actorUid !== filterAccount) {
+        return false;
+      }
+      if (filterModule !== 'all' && log.module !== filterModule) return false;
+      if (q) {
+        const hay = normalizeSearchText(
+          [
+            log.actorDisplayName,
+            log.actorUsername,
+            ACTIVITY_MODULE_LABELS[log.module] || log.module,
+            log.summary,
+            log.detail,
+          ].join(' ')
+        );
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [activityLogs, filterAccount, filterModule, historySearch, firebaseUser?.uid]);
 
   if (!firebaseUser || !account || account.role !== 'admin') {
     return null;
@@ -403,112 +535,247 @@ export function AdminPanel() {
           )}
         </AnimatePresence>
 
-        {/* Lista em Tempo Real com Checkboxes */}
-        <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-3">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-[#E5C17B]" />
-            <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
-              Logins e Permissões
-            </h2>
-          </div>
-          <span className="text-[11px] font-mono text-[#98A89F]">
-            {managedUsers.length} conta{managedUsers.length === 1 ? '' : 's'}
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SiscomSegmentedTabs
+            layoutId="admin-panel-tabs"
+            ariaLabel="Seções do painel administrativo"
+            options={[
+              { value: 'contas', label: `Contas (${managedUsers.length})` },
+              { value: 'historico', label: `Histórico (${activityLogs.length})` },
+            ]}
+            value={activeTab}
+            onChange={(val) => setActiveTab(val as AdminMainTab)}
+          />
         </div>
 
-        <div className="overflow-x-auto -mx-2 px-2">
-          <table className="w-full text-left border-collapse min-w-[680px]">
-            <thead>
-              <tr className="border-b border-white/8 text-[11px] text-[#98A89F]">
-                <th className="py-2.5 pr-3 font-medium">Usuário</th>
-                <th className="py-2.5 px-2 font-medium text-center">Ativo</th>
-                {ALL_MODULE_KEYS.map((mod) => (
-                  <th key={mod} className="py-2.5 px-2 font-medium text-center">
-                    {MODULE_LABELS[mod]}
-                  </th>
+        {activeTab === 'contas' ? (
+          /* Lista em Tempo Real com Checkboxes */
+          <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#E5C17B]" />
+              <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
+                Logins e Permissões
+              </h2>
+            </div>
+            <span className="text-[11px] font-mono text-[#98A89F]">
+              {managedUsers.length} conta{managedUsers.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto -mx-2 px-2">
+            <table className="w-full text-left border-collapse min-w-[680px]">
+              <thead>
+                <tr className="border-b border-white/8 text-[11px] text-[#98A89F]">
+                  <th className="py-2.5 pr-3 font-medium">Usuário</th>
+                  <th className="py-2.5 px-2 font-medium text-center">Ativo</th>
+                  {ALL_MODULE_KEYS.map((mod) => (
+                    <th key={mod} className="py-2.5 px-2 font-medium text-center">
+                      {MODULE_LABELS[mod]}
+                    </th>
+                  ))}
+                  <th className="py-2.5 pl-2 font-medium text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/6 text-xs">
+                {managedUsers.map((u) => {
+                  const isSelf = u.uid === firebaseUser.uid;
+                  return (
+                    <tr key={u.uid} className="transition-colors hover:bg-white/[0.025]">
+                      <td className="py-3 pr-3">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="font-semibold text-[#E4EAE6]">{u.displayName}</span>
+                          {u.role === 'admin' && (
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5C17B]">
+                              · Admin
+                            </span>
+                          )}
+                          {(u.mustChangePassword === true || u.securityQuestionSetup === false) && (
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-[#98A89F]">
+                              · 1º acesso
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-mono text-[#98A89F] mt-0.5">
+                          @{u.username}
+                        </div>
+                      </td>
+
+                      <td className="py-2 px-2 text-center">
+                        <label className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={u.active}
+                            disabled={isSelf}
+                            aria-label={`Ativo para ${u.username}`}
+                            onChange={() => handleToggleActive(u)}
+                            className="h-4 w-4 accent-[#C29B56] cursor-pointer disabled:opacity-40"
+                          />
+                        </label>
+                      </td>
+
+                      {ALL_MODULE_KEYS.map((mod) => {
+                        const field = MODULE_PERM_FIELD[mod];
+                        const checked =
+                          u[field] === undefined
+                            ? mod === 'relatorio' || u.role === 'admin'
+                            : Boolean(u[field]);
+                        return (
+                          <td key={mod} className="py-2 px-2 text-center">
+                            <label className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                aria-label={`${MODULE_LABELS[mod]} para ${u.username}`}
+                                onChange={(e) => handleTogglePerm(u, mod, e.target.checked)}
+                                className="h-4 w-4 accent-[#2D5A43] cursor-pointer"
+                              />
+                            </label>
+                          </td>
+                        );
+                      })}
+
+                      <td className="py-2 pl-2 text-right">
+                        {!isSelf && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u)}
+                            title={`Remover ${u.username}`}
+                            aria-label={`Remover ${u.username}`}
+                            className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-lg text-[#98A89F] hover:text-red-300 hover:bg-red-950/40 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          </section>
+        ) : (
+          /* Histórico de Ações das Contas */
+          <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 pb-3">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-[#E5C17B]" />
+                <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
+                  Histórico de Ações
+                </h2>
+              </div>
+              <span className="text-[11px] font-mono text-[#98A89F]">
+                {filteredLogs.length} registro{filteredLogs.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <select
+                aria-label="Filtrar por conta"
+                value={filterAccount}
+                onChange={(e) => setFilterAccount(e.target.value)}
+                className="siscom-input !min-h-[38px] text-xs"
+              >
+                <option value="all">Todas as contas</option>
+                <option value="others">Outras contas</option>
+                {accountFilterOptions.map((opt) => (
+                  <option key={opt.uid} value={opt.uid}>
+                    {opt.label} (@{opt.username})
+                  </option>
                 ))}
-                <th className="py-2.5 pl-2 font-medium text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/6 text-xs">
-              {managedUsers.map((u) => {
-                const isSelf = u.uid === firebaseUser.uid;
-                return (
-                  <tr key={u.uid} className="transition-colors hover:bg-white/[0.025]">
-                    <td className="py-3 pr-3">
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="font-semibold text-[#E4EAE6]">{u.displayName}</span>
-                        {u.role === 'admin' && (
+              </select>
+
+              <select
+                aria-label="Filtrar por módulo"
+                value={filterModule}
+                onChange={(e) => setFilterModule(e.target.value)}
+                className="siscom-input !min-h-[38px] text-xs"
+              >
+                <option value="all">Todos os módulos</option>
+                {HISTORY_MODULES.map((mod) => (
+                  <option key={mod} value={mod}>
+                    {ACTIVITY_MODULE_LABELS[mod]}
+                  </option>
+                ))}
+              </select>
+
+              <div className="relative flex items-center">
+                <Search className="w-3.5 h-3.5 text-[#83B499] absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="Pesquisar..."
+                  aria-label="Pesquisar no histórico de ações"
+                  className="siscom-input w-full !min-h-[38px] !pl-8 !pr-8 text-xs"
+                />
+                {historySearch.trim() !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearch('')}
+                    aria-label="Limpar busca"
+                    className="absolute right-1.5 h-6 w-6 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-white hover:bg-white/[0.08] transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {logsError && <SiscomAlert tone="error">{logsError}</SiscomAlert>}
+
+            {loadingLogs ? (
+              <div className="py-10 flex items-center justify-center gap-2 text-xs text-[#98A89F]">
+                <SiscomSpinner className="w-4 h-4" tone="gold" />
+                <span>Carregando...</span>
+              </div>
+            ) : filteredLogs.length === 0 ? (
+              <div className="py-10 text-center text-xs text-[#98A89F]">
+                Nenhuma ação registrada.
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.07] max-h-[60vh] overflow-y-auto pr-1">
+                {filteredLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-[#E4EAE6]">
+                          {log.actorDisplayName}
+                        </span>
+                        <span className="text-[11px] font-mono text-[#98A89F]">
+                          @{log.actorUsername}
+                        </span>
+                        {log.actorRole === 'admin' && (
                           <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5C17B]">
                             · Admin
                           </span>
                         )}
-                        {(u.mustChangePassword === true || u.securityQuestionSetup === false) && (
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-[#98A89F]">
-                            · 1º acesso
-                          </span>
-                        )}
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-[#83B499]">
+                          · {ACTIVITY_MODULE_LABELS[log.module] || log.module}
+                        </span>
                       </div>
-                      <div className="text-[11px] font-mono text-[#98A89F] mt-0.5">
-                        @{u.username}
-                      </div>
-                    </td>
-
-                    <td className="py-2 px-2 text-center">
-                      <label className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={u.active}
-                          disabled={isSelf}
-                          aria-label={`Ativo para ${u.username}`}
-                          onChange={() => handleToggleActive(u)}
-                          className="h-4 w-4 accent-[#C29B56] cursor-pointer disabled:opacity-40"
-                        />
-                      </label>
-                    </td>
-
-                    {ALL_MODULE_KEYS.map((mod) => {
-                      const field = MODULE_PERM_FIELD[mod];
-                      const checked =
-                        u[field] === undefined
-                          ? mod === 'relatorio' || u.role === 'admin'
-                          : Boolean(u[field]);
-                      return (
-                        <td key={mod} className="py-2 px-2 text-center">
-                          <label className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              aria-label={`${MODULE_LABELS[mod]} para ${u.username}`}
-                              onChange={(e) => handleTogglePerm(u, mod, e.target.checked)}
-                              className="h-4 w-4 accent-[#2D5A43] cursor-pointer"
-                            />
-                          </label>
-                        </td>
-                      );
-                    })}
-
-                    <td className="py-2 pl-2 text-right">
-                      {!isSelf && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(u)}
-                          title={`Remover ${u.username}`}
-                          aria-label={`Remover ${u.username}`}
-                          className="min-h-[38px] min-w-[38px] inline-flex items-center justify-center rounded-lg text-[#98A89F] hover:text-red-300 hover:bg-red-950/40 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <p className="text-xs text-[#C6D4CC] break-words">{log.summary}</p>
+                      {log.detail && (
+                        <p className="text-[11px] font-mono text-[#8A9A91] break-words">
+                          {log.detail}
+                        </p>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        </section>
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[#8A9A91] shrink-0">
+                      <Clock className="w-3 h-3 text-[#83B499]" />
+                      <span>{formatActivityTimestamp(log)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </WorkspaceSplitLayout>
   );

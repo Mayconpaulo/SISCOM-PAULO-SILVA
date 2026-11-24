@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { logActivity } from '../../../core/audit/activityLogger';
 import {
   Download,
   Minus,
@@ -359,6 +360,11 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
         .replace(/(^-|-$)/g, '')
         .slice(0, 60);
       triggerBlobDownload(blob, `cartao-pesames-${slug || 'militar'}.png`);
+      void logActivity({
+        module: 'cartoes',
+        action: 'export_pesames_png',
+        summary: `Exportou cartão de pêsames: ${recipientLine || 'Militar'}`,
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao exportar PNG.');
     } finally {
@@ -476,7 +482,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="inline-flex items-center gap-1.5 text-[#C6D4CC] font-medium">
                         <Move className="w-3.5 h-3.5 text-[#83B499]" />
-                        <span>Ajustar foto no círculo</span>
+                        <span>Ajustar foto</span>
                       </span>
                       <button
                         type="button"
@@ -556,9 +562,6 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                           }}
                         />
                       </div>
-                      <span className="text-[11px] text-[#98A89F]">
-                        Arraste para posicionar dentro do círculo
-                      </span>
                     </div>
 
                     {/* Size / Zoom Controls */}

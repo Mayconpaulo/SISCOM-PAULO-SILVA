@@ -102,7 +102,6 @@ interface WizardCardDef {
   id: number;
   short: string;
   title: string;
-  subtitle: string;
 }
 
 const WIZARD_CARDS: readonly WizardCardDef[] = [
@@ -110,37 +109,31 @@ const WIZARD_CARDS: readonly WizardCardDef[] = [
     id: 0,
     short: '1. Essencial',
     title: 'Identificação e Cor',
-    subtitle: 'Título, classificação COMSOC, categoria e cor no Google Calendar.',
   },
   {
     id: 1,
     short: '2. Data',
     title: 'Data, Horário e Repetição',
-    subtitle: 'Defina início, término, dia inteiro e regras de recorrência.',
   },
   {
     id: 2,
     short: '3. Local/Meet',
     title: 'Localização e Google Meet',
-    subtitle: 'Endereço integrado ao Google Maps e sala de videoconferência.',
   },
   {
     id: 3,
     short: '4. Pessoas',
-    title: 'Pessoas, Convidados e Equipe',
-    subtitle: 'Digite para buscar contatos da conta Google e configure permissões.',
+    title: 'Pessoas e Equipe',
   },
   {
     id: 4,
     short: '5. Anexos',
-    title: 'Anexos, Imagens e Descrição',
-    subtitle: 'Envie imagens/arquivos para o Google Drive e detalhe a pauta.',
+    title: 'Descrição e Anexos',
   },
   {
     id: 5,
     short: '6. Avisos',
-    title: 'Notificações e Visibilidade',
-    subtitle: 'Múltiplos lembretes, disponibilidade (ocupado/livre) e privacidade.',
+    title: 'Lembretes e Visibilidade',
   },
 ];
 
@@ -454,7 +447,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
       open={open}
       onClose={saving ? undefined : onClose}
       dismissible={!saving}
-      title={editingEvent ? 'Editar atividade — Cards completos' : 'Nova atividade — Cards completos'}
+      title={editingEvent ? 'Editar atividade' : 'Nova atividade'}
       maxWidthClass="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -503,13 +496,9 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
               className="space-y-4"
             >
               <div className="border-b border-white/8 pb-2.5">
-                <p className="text-[10px] font-mono uppercase tracking-wider text-[#C8A461]">
-                  Card {step + 1} de {WIZARD_CARDS.length}
-                </p>
                 <h3 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4]">
                   {currentCard.title}
                 </h3>
-                <p className="text-[11px] text-[#98A89F]">{currentCard.subtitle}</p>
               </div>
 
               {/* CARD 1: Identificação, Destino & Cor */}
@@ -517,7 +506,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label htmlFor="agenda-title" className="siscom-field-label">
-                      Título do evento *
+                      Título *
                     </label>
                     <input
                       id="agenda-title"
@@ -526,7 +515,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                       maxLength={140}
                       value={form.title}
                       onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                      placeholder="Ex: Formatura do Dia do Soldado / Cobertura Fotográfica"
+                      placeholder="Título da atividade"
                       className="siscom-input"
                     />
                   </div>
@@ -595,7 +584,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
 
                   {/* Google Calendar Color Swatches */}
                   <div className="space-y-2">
-                    <span className="siscom-field-label">Cor do evento no Google Calendar</span>
+                    <span className="siscom-field-label">Cor</span>
                     <div className="flex flex-wrap items-center gap-2">
                       {GOOGLE_EVENT_COLORS.map((color) => {
                         const selected = form.colorId === color.id;
@@ -706,7 +695,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                   <div className="space-y-1.5">
                     <label htmlFor="agenda-recurrence" className="siscom-field-label inline-flex items-center gap-1.5">
                       <Repeat className="w-3.5 h-3.5 text-[#C8A461]" />
-                      <span>Repetição (Recorrência no Google Calendar)</span>
+                      <span>Repetição</span>
                     </label>
                     <select
                       id="agenda-recurrence"
@@ -730,7 +719,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                   <div className="space-y-1.5 relative">
                     <label htmlFor="agenda-location" className="siscom-field-label inline-flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-[#C8A461]" />
-                      <span>Localização (sincronizada com o Google Calendar e Maps)</span>
+                      <span>Localização</span>
                     </label>
                     <input
                       id="agenda-location"
@@ -740,7 +729,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                       onFocus={() => setShowLocationSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 160)}
                       onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                      placeholder="Ex: 1º BI Mec (Es) — Pátio de Formaturas / Endereço completo"
+                      placeholder="Local ou endereço"
                       className="siscom-input"
                     />
 
@@ -783,16 +772,11 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                   {/* Google Meet */}
                   <div className="siscom-liquid-subcard rounded-xl p-4 space-y-2.5">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-2.5">
-                        <Video className="w-4 h-4 text-[#93B7D8] shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-semibold text-[#F4E6C4]">
-                            Videoconferência do Google Meet
-                          </p>
-                          <p className="text-[11px] text-[#98A89F]">
-                            Gera automaticamente uma sala oficial do Google Meet ao sincronizar com o Google Calendar.
-                          </p>
-                        </div>
+                      <div className="flex items-center gap-2.5">
+                        <Video className="w-4 h-4 text-[#93B7D8] shrink-0" />
+                        <p className="text-xs font-semibold text-[#F4E6C4]">
+                          Google Meet
+                        </p>
                       </div>
                       <input
                         type="checkbox"
@@ -827,7 +811,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                   <div className="space-y-1.5 relative">
                     <label htmlFor="agenda-guest-search" className="siscom-field-label inline-flex items-center gap-1.5">
                       <UserPlus className="w-3.5 h-3.5 text-[#E5C17B]" />
-                      <span>Adicionar convidados (sugestões da conta Google)</span>
+                      <span>Convidados</span>
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -846,7 +830,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                             addAttendee(guestQuery);
                           }
                         }}
-                        placeholder="Digite nome ou e-mail para buscar nos contatos do Google..."
+                        placeholder="Nome ou e-mail"
                         className="siscom-input text-xs"
                       />
                       <button
@@ -902,12 +886,6 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                           )}
                       </div>
                     )}
-
-                    <p className="text-[11px] text-[#697870]">
-                      {contactSuggestions.length > 0
-                        ? `${contactSuggestions.length} contato(s) sincronizado(s) da conta institucional disponíveis para sugestão.`
-                        : 'Assim que o administrador sincronizar com a conta Google, os contatos aparecerão aqui automaticamente.'}
-                    </p>
                   </div>
 
                   {/* Added Attendees Chips */}
@@ -1007,7 +985,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
 
                   <div className="space-y-1.5">
                     <label htmlFor="agenda-responsibles" className="siscom-field-label">
-                      Responsáveis internos da COMSOC
+                      Responsáveis
                     </label>
                     <input
                       id="agenda-responsibles"
@@ -1015,7 +993,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                       maxLength={240}
                       value={form.responsibles}
                       onChange={(e) => setForm((p) => ({ ...p, responsibles: e.target.value }))}
-                      placeholder="Ex: 3º Sgt Silva, Cb Oliveira (Foto/Vídeo)"
+                      placeholder="Responsáveis"
                       className="siscom-input text-xs"
                     />
                   </div>
@@ -1027,7 +1005,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label htmlFor="agenda-description" className="siscom-field-label">
-                      Descrição, pauta e orientações
+                      Descrição
                     </label>
                     <textarea
                       id="agenda-description"
@@ -1035,7 +1013,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                       maxLength={2000}
                       value={form.description}
                       onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                      placeholder="Detalhes da cobertura, uniforme, equipamentos, horários de chegada..."
+                      placeholder="Descrição"
                       className="siscom-input !min-h-[82px] text-xs resize-y"
                     />
                   </div>
@@ -1045,7 +1023,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-semibold text-[#F4E6C4] inline-flex items-center gap-1.5">
                         <Paperclip className="w-3.5 h-3.5 text-[#E5C17B]" />
-                        Anexos e Imagens (Google Drive + Calendar)
+                        Anexos
                       </span>
 
                       <div>
@@ -1070,18 +1048,12 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                           )}
                           <span>
                             {uploadingDrive
-                              ? 'Enviando ao Drive...'
-                              : 'Enviar imagem / arquivo ao Drive'}
+                              ? 'Enviando...'
+                              : 'Enviar arquivo'}
                           </span>
                         </button>
                       </div>
                     </div>
-
-                    {!googleConnected && (
-                      <p className="text-[11px] text-[#98A89F]">
-                        Para enviar arquivos direto ao Google Drive, a sessão Google do administrador precisa estar ativa. Você ainda pode anexar links do Google Drive abaixo.
-                      </p>
-                    )}
 
                     {uploadError && (
                       <SiscomAlert tone="error" onDismiss={() => setUploadError(null)}>
@@ -1102,7 +1074,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                         type="url"
                         value={manualLinkUrl}
                         onChange={(e) => setManualLinkUrl(e.target.value)}
-                        placeholder="Link do Google Drive ou documento..."
+                        placeholder="URL"
                         className="siscom-input !min-h-[36px] text-xs"
                       />
                       <button
@@ -1169,7 +1141,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="siscom-field-label inline-flex items-center gap-1.5">
                         <Bell className="w-3.5 h-3.5 text-[#E5C17B]" />
-                        Notificações / Lembretes (até 5)
+                        Lembretes
                       </span>
                       <button
                         type="button"
@@ -1177,13 +1149,13 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                         onClick={addReminder}
                         className="text-[11px] text-[#E5C17B] hover:underline disabled:opacity-40 cursor-pointer"
                       >
-                        + Adicionar notificação
+                        + Adicionar
                       </button>
                     </div>
 
                     {form.reminders.length === 0 ? (
                       <p className="text-[11px] text-[#697870]">
-                        Nenhuma notificação personalizada (usará o padrão do Google Calendar).
+                        Nenhum lembrete.
                       </p>
                     ) : (
                       <div className="space-y-2">
@@ -1232,7 +1204,7 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <label htmlFor="agenda-transparency" className="siscom-field-label">
-                        Disponibilidade no Google
+                        Disponibilidade
                       </label>
                       <select
                         id="agenda-transparency"
@@ -1275,24 +1247,17 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
 
                   {/* Google Sync Status */}
                   <div className="siscom-liquid-subcard rounded-xl !border-[#C29B56]/30 p-3.5">
-                    <label className="inline-flex items-start gap-2.5 text-xs text-[#E4EAE6] cursor-pointer">
+                    <label className="inline-flex items-center gap-2.5 text-xs text-[#E4EAE6] cursor-pointer">
                       <input
                         type="checkbox"
                         checked={form.syncWithGoogle}
                         onChange={(e) =>
                           setForm((p) => ({ ...p, syncWithGoogle: e.target.checked }))
                         }
-                        className="mt-0.5 h-4 w-4 accent-[#C29B56] cursor-pointer"
+                        className="h-4 w-4 accent-[#C29B56] cursor-pointer"
                       />
-                      <span className="space-y-0.5">
-                        <span className="block font-medium">
-                          Sincronizar com o calendário institucional ({linkedCalendarLabel})
-                        </span>
-                        <span className="block text-[11px] text-[#98A89F]">
-                          {googleConnected
-                            ? 'Será enviado ao Google Calendar imediatamente após sua confirmação.'
-                            : 'Será salvo agora no SISCOM e enviado ao Google Calendar assim que o administrador sincronizar.'}
-                        </span>
+                      <span className="font-medium">
+                        Sincronizar com Google Calendar ({linkedCalendarLabel})
                       </span>
                     </label>
                   </div>
@@ -1323,11 +1288,11 @@ export const AgendaEventModal: React.FC<AgendaEventModalProps> = ({
                 onClick={() => setStep((s) => Math.min(WIZARD_CARDS.length - 1, s + 1))}
                 className="siscom-btn siscom-btn-gold !min-h-[36px] !px-3 text-xs"
               >
-                <span>Próximo card</span>
+                <span>Próximo</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             ) : (
-              <span className="text-[11px] text-[#83B499] font-medium">Último card ✓</span>
+              <span />
             )}
           </div>
         </div>

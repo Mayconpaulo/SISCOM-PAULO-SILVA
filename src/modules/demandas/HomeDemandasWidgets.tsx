@@ -272,7 +272,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
               <p className="text-xs text-[#B8B3A6] py-1">{error}</p>
             ) : visibleItems.length === 0 ? (
               <p className="text-xs text-[#B8B3A6] py-1">
-                Nenhuma demanda pendente. Use o botão “+” para anotar rápido.
+                Nenhuma demanda pendente.
               </p>
             ) : (
               <ul className="divide-y divide-white/[0.06]">
@@ -380,7 +380,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
               </div>
             ) : (
               <p className="text-[11px] text-[#9AA8A0] leading-snug">
-                Tudo em dia por enquanto.
+                Em dia.
               </p>
             )}
           </div>

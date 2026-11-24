@@ -10,6 +10,7 @@
 7. Administradores desativados (`active == false`) perdem imediatamente o status de `isAdmin()`, e administradores secundários só gerenciam contas vinculadas à própria cadeia (`adminUids`/`createdBy`), sem acesso para alterar ou excluir o administrador principal (`admin-google`) ou administradores não vinculados.
 8. As subcoleções pessoais `/users/{userId}/alteracao_folders/{folderId}` e `/users/{userId}/alteracao_docs/{docId}` são estritamente privadas ao próprio titular autenticado e ativo com acesso ao módulo Alteração (`isOwner(userId)`), com `ownerUid` imutável, carimbos `request.time`, limites de tamanho em strings/listas e bloqueio de auto-parentesco em pastas (`parentId != folderId`).
 9. As coleções `/agenda_events/{eventId}`, `/agenda_audit/{logId}` e `/agenda_config/google_calendar` exigem usuário autenticado, ativo e com acesso ao módulo Agenda (`role == 'admin'` ou `permAgenda == true`), validação estrita de esquema e limites de tamanho, imutabilidade de autoria/criação, registros de auditoria somente-leitura após criação e proibição absoluta de armazenar tokens OAuth no Firestore.
+10. A coleção `/activity_logs/{logId}` registra ações imutáveis (`update`/`delete` proibidos) com `actorUid == request.auth.uid` e `createdAt == request.time`, criação restrita a contas ativas e leitura (`get`/`list`) restrita exclusivamente a contas administradoras (`isAdmin()`).
 
 ## 2. "Dirty Dozen" — Payloads Maliciosos Testados
 1. **Unauthenticated User Read**: `get(/users/uid1)` sem `request.auth` -> `PERMISSION_DENIED`.
@@ -35,6 +36,10 @@
 21. **Agenda Token Injection in Config**: Tentativa de gravar `accessToken` ou campo extra em `/agenda_config/google_calendar` -> `PERMISSION_DENIED`.
 22. **Agenda Spoofed Creator**: Usuário tentando criar evento em `/agenda_events` com `createdByUid != request.auth.uid` -> `PERMISSION_DENIED`.
 23. **Non-Admin Calendar Binding Tampering**: Usuário comum (mesmo com `permAgenda == true`) tentando alterar `/agenda_config/google_calendar` para trocar o calendário institucional -> `PERMISSION_DENIED`.
+24. **Non-Admin Activity Log Read/List**: Usuário comum tentando ler ou listar `/activity_logs` -> `PERMISSION_DENIED`.
+25. **Spoofed Activity Log Actor**: Usuário tentando gravar `/activity_logs/{logId}` com `actorUid != request.auth.uid` -> `PERMISSION_DENIED`.
+26. **Activity Log Tampering/Deletion**: Qualquer conta (mesmo admin) tentando atualizar ou excluir um registro em `/activity_logs/{logId}` -> `PERMISSION_DENIED`.
+27. **Activity Log Shadow Field / Client Timestamp**: Tentativa de enviar campo extra ou `createdAt != request.time` em `/activity_logs/{logId}` -> `PERMISSION_DENIED`.
 
 
 

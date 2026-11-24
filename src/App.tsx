@@ -7,12 +7,12 @@ import { AuthProvider, useAuth } from './core/auth/AuthContext';
 import { FirstLoginOnboarding } from './core/auth/FirstLoginOnboarding';
 import { LoginScreen } from './core/auth/LoginScreen';
 import { isBootstrappedGoogleUser } from './core/auth/authService';
-import { PrivacyShieldModal } from './core/privacy/PrivacyShieldModal';
 import {
   hydratePrivacyVaultForUser,
   purgeAllSensitiveLocalData,
 } from './core/privacy/privacyVault';
 import { OfflineIndicator } from './core/pwa/PWAComponents';
+import { type ActivityModule, logActivity } from './core/audit/activityLogger';
 import {
   ActiveScreen,
   FEATURE_MODULES,
@@ -75,33 +75,28 @@ function WorkspaceShell() {
   const [greeting, setGreeting] = useState<string>(() => getTimeGreeting());
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
   const [vaultHydratedUid, setVaultHydratedUid] = useState<string | null>(null);
-  const [shieldLocked, setShieldLocked] = useState<boolean>(false);
-  const [shieldReason, setShieldReason] = useState<'manual' | 'idle'>('manual');
-  const [idleMinutes] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('siscom_pref_autolock_min');
-      if (saved !== null) {
-        const parsed = Number(saved);
-        if (parsed === 0 || parsed === 5 || parsed === 15 || parsed === 30) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Ignore storage errors
-    }
-    return 15;
-  });
 
   // Track if the user came directly from Login (to spin the crest only on subsequent logins -> Home)
   const wasOnLoginRef = useRef(false);
 
-  // Hydrate encrypted local vault strictly for authenticated & active user; purge immediately on sign-out or deactivation
+  // Remove legacy auto-lock preference if present from older versions
   useEffect(() => {
+    try {
+      localStorage.removeItem('siscom_pref_autolock_min');
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Hydrate encrypted local vault strictly for authenticated & active user;
+  // only purge sensitive local data once auth/profile state has settled as signed-out or deactivated.
+  useEffect(() => {
+    if (booting || loadingProfile) return;
+
     let cancelled = false;
     if (!firebaseUser || !account || !account.active || unauthorizedReason) {
       purgeAllSensitiveLocalData();
       setVaultHydratedUid(null);
-      setShieldLocked(false);
       return;
     }
 
@@ -117,61 +112,7 @@ function WorkspaceShell() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, account, unauthorizedReason, vaultHydratedUid]);
-
-  // Global keyboard shortcut (Ctrl+Shift+L) to instantly shield classified screens
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
-        if (firebaseUser && account && account.active && !unauthorizedReason) {
-          e.preventDefault();
-          setShieldReason('manual');
-          setShieldLocked(true);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [firebaseUser, account, unauthorizedReason]);
-
-  // Idle auto-lock timer
-  useEffect(() => {
-    if (
-      !firebaseUser ||
-      !account ||
-      !account.active ||
-      unauthorizedReason ||
-      idleMinutes <= 0 ||
-      shieldLocked
-    ) {
-      return;
-    }
-
-    let timerId = 0;
-    const timeoutMs = idleMinutes * 60_000;
-    const resetTimer = () => {
-      window.clearTimeout(timerId);
-      timerId = window.setTimeout(() => {
-        setShieldReason('idle');
-        setShieldLocked(true);
-      }, timeoutMs);
-    };
-
-    resetTimer();
-    const events: (keyof WindowEventMap)[] = [
-      'mousemove',
-      'mousedown',
-      'keydown',
-      'touchstart',
-      'scroll',
-    ];
-    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
-
-    return () => {
-      window.clearTimeout(timerId);
-      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
-    };
-  }, [firebaseUser, account, unauthorizedReason, idleMinutes, shieldLocked]);
+  }, [booting, loadingProfile, firebaseUser, account, unauthorizedReason, vaultHydratedUid]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -326,6 +267,14 @@ function WorkspaceShell() {
       `${getBaseUrlWithoutHash()}#${target}`
     );
     setActiveScreen(target);
+    void logActivity(
+      {
+        module: target as ActivityModule,
+        action: 'open_module',
+        summary: `Acessou ${getScreenTitle(target)}`,
+      },
+      { dedupeKey: `nav:${target}`, cooldownMs: 5000 }
+    );
   };
 
   if (currentView === 'boot') {
@@ -479,27 +428,13 @@ function WorkspaceShell() {
         <OfflineIndicator />
       </div>
 
-      {!shieldLocked && (
-        <>
-          <DemandasFloatingQuickAdd
-            activeScreen={activeScreen}
-            canAccessAgenda={hasModuleAccess('agenda')}
-            canAccessCrachas={hasModuleAccess('crachas')}
-            onNavigate={navigateToScreen}
-          />
-          <DemandasPanelModal />
-        </>
-      )}
-
-      {firebaseUser && (
-        <PrivacyShieldModal
-          open={shieldLocked}
-          reason={shieldReason}
-          user={firebaseUser}
-          account={account}
-          onUnlock={() => setShieldLocked(false)}
-        />
-      )}
+      <DemandasFloatingQuickAdd
+        activeScreen={activeScreen}
+        canAccessAgenda={hasModuleAccess('agenda')}
+        canAccessCrachas={hasModuleAccess('crachas')}
+        onNavigate={navigateToScreen}
+      />
+      <DemandasPanelModal />
     </div>
     </DemandasProvider>
   );

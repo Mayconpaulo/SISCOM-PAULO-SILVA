@@ -8,8 +8,6 @@ import {
   useTransform,
 } from 'motion/react';
 import {
-  ArrowLeft,
-  ArrowRight,
   Calendar as CalendarIcon,
   Check,
   Clock,
@@ -262,7 +260,7 @@ const SwipeCard: React.FC<SwipeCardProps> = ({
           htmlFor={`triage-cat-${event.id}`}
           className="siscom-field-label !text-[11px]"
         >
-          Se for da COMSOC, classificar em qual categoria?
+          Categoria
         </label>
         <select
           id={`triage-cat-${event.id}`}
@@ -276,18 +274,6 @@ const SwipeCard: React.FC<SwipeCardProps> = ({
             </option>
           ))}
         </select>
-      </div>
-
-      {/* Swipe Direction Guide */}
-      <div className="relative z-10 flex items-center justify-between pt-0.5 text-[11px] text-[#8FA197]">
-        <span className="inline-flex items-center gap-1 text-red-300/80">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Arraste p/ esquerda (Geral)
-        </span>
-        <span className="inline-flex items-center gap-1 text-[#83B499]">
-          Arraste p/ direita (COMSOC)
-          <ArrowRight className="w-3.5 h-3.5" />
-        </span>
       </div>
     </motion.div>
   );
@@ -357,7 +343,7 @@ export const AgendaTriageDeck: React.FC<AgendaTriageDeckProps> = ({
       open={open && Boolean(current)}
       onClose={isBusy ? undefined : onClose}
       dismissible={!isBusy}
-      title="Triagem de atividades (hoje e futuras)"
+      title="Triagem de atividades"
       maxWidthClass="max-w-lg"
       zIndexClass="z-[55]"
     >
@@ -434,13 +420,12 @@ export const AgendaTriageDeck: React.FC<AgendaTriageDeckProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center justify-between pt-1 border-t border-white/8 text-[11px] text-[#98A89F]">
-          <span>Eventos marcados como “Não é da COMSOC” continuam no Calendário Geral.</span>
+        <div className="flex items-center justify-end pt-1 border-t border-white/8 text-[11px] text-[#98A89F]">
           <button
             type="button"
             disabled={isBusy}
             onClick={onClose}
-            className="text-[#E5C17B] hover:underline shrink-0 ml-3 cursor-pointer"
+            className="text-[#E5C17B] hover:underline shrink-0 cursor-pointer"
           >
             Decidir depois
           </button>

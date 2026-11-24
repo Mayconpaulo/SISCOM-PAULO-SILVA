@@ -5,7 +5,7 @@
 export interface DirtyPayloadCase {
   name: string;
   actor: 'anonymous' | 'spoofed_email' | 'user' | 'admin';
-  collection: 'admins' | 'users' | 'recovery' | 'alteracao_folders' | 'alteracao_docs';
+  collection: 'admins' | 'users' | 'recovery' | 'alteracao_folders' | 'alteracao_docs' | 'activity_logs';
   op: 'get' | 'list' | 'create' | 'update' | 'delete';
   expected: 'PERMISSION_DENIED';
   payload?: Record<string, unknown>;
@@ -30,4 +30,8 @@ export const DIRTY_DOZEN_CASES: DirtyPayloadCase[] = [
   { name: 'Folder self-parent cycle injection', actor: 'user', collection: 'alteracao_folders', op: 'create', expected: 'PERMISSION_DENIED', payload: { id: 'f1', parentId: 'f1' } },
   { name: 'Cross-user alteracao doc write', actor: 'user', collection: 'alteracao_docs', op: 'create', expected: 'PERMISSION_DENIED', payload: { ownerUid: 'other-user-uid' } },
   { name: 'Alteracao doc empty pagesHtml payload', actor: 'user', collection: 'alteracao_docs', op: 'create', expected: 'PERMISSION_DENIED', payload: { pagesHtml: [] } },
+  { name: 'Non-admin activity log list', actor: 'user', collection: 'activity_logs', op: 'list', expected: 'PERMISSION_DENIED' },
+  { name: 'Spoofed actorUid in activity log', actor: 'user', collection: 'activity_logs', op: 'create', expected: 'PERMISSION_DENIED', payload: { actorUid: 'other-user-uid' } },
+  { name: 'Activity log update tampering', actor: 'admin', collection: 'activity_logs', op: 'update', expected: 'PERMISSION_DENIED', payload: { summary: 'tampered' } },
+  { name: 'Activity log deletion attempt', actor: 'admin', collection: 'activity_logs', op: 'delete', expected: 'PERMISSION_DENIED' },
 ];

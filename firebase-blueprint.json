@@ -882,6 +882,112 @@
         "updatedAt"
       ]
     },
+    "RelatorioSemanalDoc": {
+      "title": "RelatorioSemanalDoc",
+      "description": "Relatório Semanal persistido na nuvem por usuário com eventos da Seção de Comunicação Social e campos do modelo A4.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único do relatório"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID do proprietário da conta"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Título do relatório semanal"
+        },
+        "periodoCabecalho": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 120,
+          "description": "Período semanal exibido no cabeçalho (sexta a quinta)"
+        },
+        "preparoEmprego": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "Texto do item 1. Preparo e Emprego"
+        },
+        "estadoSanitario": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "Texto do item 2. Estado Sanitário"
+        },
+        "problemasDisciplinares": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "Texto do item 3. Problemas Disciplinares / Justiça"
+        },
+        "generosAlimenticios": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 400,
+          "description": "Texto do item 4.1.2. Gêneros Alimentícios"
+        },
+        "vtrDisponibilidade": {
+          "type": "object",
+          "description": "Mapa de disponibilidade de viaturas e armamento (4.2)"
+        },
+        "marcaModeloRows": {
+          "type": "array",
+          "description": "Linhas de viaturas por marca/modelo (máx. 40)"
+        },
+        "execucaoFinanceiraRows": {
+          "type": "array",
+          "description": "Linhas da tabela de execução financeira (máx. 40)"
+        },
+        "diversosEventos": {
+          "type": "array",
+          "description": "Lista ordenada de atividades registradas em 5. Diversos (máx. 200)"
+        },
+        "clientUpdatedAt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Carimbo ISO da última edição do relatório"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de criação no servidor"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo da última atualização no servidor"
+        }
+      },
+      "required": [
+        "id",
+        "ownerUid",
+        "title",
+        "periodoCabecalho",
+        "preparoEmprego",
+        "estadoSanitario",
+        "problemasDisciplinares",
+        "generosAlimenticios",
+        "vtrDisponibilidade",
+        "marcaModeloRows",
+        "execucaoFinanceiraRows",
+        "diversosEventos",
+        "clientUpdatedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
     "DriveIntegrationConfig": {
       "title": "DriveIntegrationConfig",
       "description": "Configuração institucional da pasta raiz autorizada (fotos 2026) no Google Drive da Comunicação Social (nunca armazena tokens ou mídias).",
@@ -1039,6 +1145,104 @@
         "sectionScope",
         "createdAt"
       ]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Registro imutável do histórico de ações executadas por contas ativas do SISCOM, visível exclusivamente a administradores.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identificador único do registro de atividade"
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID da conta que realizou a ação"
+        },
+        "actorUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Nome de usuário da conta que realizou a ação"
+        },
+        "actorDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Nome de exibição da conta que realizou a ação"
+        },
+        "actorRole": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "Perfil da conta no momento da ação"
+        },
+        "module": {
+          "type": "string",
+          "enum": [
+            "auth",
+            "admin",
+            "prismas",
+            "crachas",
+            "alteracao",
+            "documentos",
+            "cartoes",
+            "relatorio",
+            "agenda",
+            "arquivo",
+            "demandas",
+            "sistema"
+          ],
+          "description": "Módulo do SISCOM onde a ação ocorreu"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Código curto da ação executada"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "description": "Descrição legível da ação realizada"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 300,
+          "description": "Detalhe complementar opcional da ação"
+        },
+        "sectionScope": {
+          "type": "string",
+          "enum": ["siscom"],
+          "description": "Escopo institucional do registro"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Carimbo de data/hora atribuído pelo servidor"
+        }
+      },
+      "required": [
+        "id",
+        "actorUid",
+        "actorUsername",
+        "actorDisplayName",
+        "actorRole",
+        "module",
+        "action",
+        "summary",
+        "detail",
+        "sectionScope",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -1061,6 +1265,10 @@
     "/users/{userId}/demandas/{demandaId}": {
       "schema": { "$ref": "#/entities/DemandaItem" },
       "description": "Demandas e prazos pessoais do usuário com alertas progressivos"
+    },
+    "/users/{userId}/relatorios/{relatorioId}": {
+      "schema": { "$ref": "#/entities/RelatorioSemanalDoc" },
+      "description": "Relatórios semanais sincronizados na nuvem entre dispositivos"
     },
     "/recovery/{username}": {
       "schema": { "$ref": "#/entities/RecoverySecret" },
@@ -1089,6 +1297,10 @@
     "/drive_audit/{logId}": {
       "schema": { "$ref": "#/entities/DriveAuditLog" },
       "description": "Histórico de auditoria imutável das ações no Arquivo Institucional"
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Histórico imutável de ações de todas as contas, visível apenas a administradores"
     }
   }
 }

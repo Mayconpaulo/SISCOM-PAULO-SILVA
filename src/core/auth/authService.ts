@@ -38,6 +38,7 @@ import {
 } from './recoveryCrypto';
 import { purgeAllSensitiveLocalData } from '../privacy/privacyVault';
 import { disconnectGoogleCalendarSession } from '../../modules/agenda/googleCalendarService';
+import { logActivity } from '../audit/activityLogger';
 
 export type ModuleKey =
   | 'prismas'
@@ -239,6 +240,19 @@ export async function signInWithGoogleAdmin(): Promise<User> {
 }
 
 export async function signOutCurrentUser(): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    try {
+      sessionStorage.removeItem(`siscom_activity_login_${uid}`);
+    } catch {
+      // Ignore storage errors
+    }
+    await logActivity({
+      module: 'auth',
+      action: 'logout',
+      summary: 'Saiu do sistema',
+    });
+  }
   purgeAllSensitiveLocalData();
   await disconnectGoogleCalendarSession();
   await signOut(auth);
@@ -451,6 +465,13 @@ export async function createManagedUserAccount(params: {
     await propagateAdminUidToManagedUsers(params.adminUser.uid, newUid);
   }
 
+  void logActivity({
+    module: 'admin',
+    action: 'create_user',
+    summary: `Criou a conta ${displayName} (@${cleanUser})`,
+    detail: params.role === 'admin' ? 'Perfil: Administrador' : 'Perfil: Usuário',
+  });
+
   return {
     ...payload,
     createdAt: undefined,
@@ -473,6 +494,11 @@ export async function completeFirstLoginPasswordChange(params: {
     await updateDoc(doc(db, 'users', params.user.uid), {
       mustChangePassword: false,
       updatedAt: serverTimestamp(),
+    });
+    void logActivity({
+      module: 'auth',
+      action: 'first_password_change',
+      summary: 'Definiu senha pessoal no primeiro acesso',
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
@@ -524,6 +550,11 @@ export async function saveSecurityQuestionAndPassword(params: {
 
   try {
     await batch.commit();
+    void logActivity({
+      module: 'auth',
+      action: 'security_question_setup',
+      summary: 'Cadastrou pergunta de segurança',
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `recovery/${params.account.username}`);
   }
@@ -645,6 +676,12 @@ export async function toggleUserModulePermission(
       [permField]: enabled,
       updatedAt: serverTimestamp(),
     });
+    void logActivity({
+      module: 'admin',
+      action: enabled ? 'grant_permission' : 'revoke_permission',
+      summary: `${enabled ? 'Liberou' : 'Removeu'} acesso a ${MODULE_LABELS[moduleKey]} para ${targetUser.displayName}`,
+      detail: `@${targetUser.username}`,
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
@@ -659,6 +696,12 @@ export async function toggleUserActiveStatus(
     await updateDoc(doc(db, 'users', targetUser.uid), {
       active,
       updatedAt: serverTimestamp(),
+    });
+    void logActivity({
+      module: 'admin',
+      action: active ? 'activate_user' : 'deactivate_user',
+      summary: `${active ? 'Ativou' : 'Desativou'} a conta ${targetUser.displayName}`,
+      detail: `@${targetUser.username}`,
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
@@ -684,6 +727,11 @@ export async function removeManagedUser(targetUser: UserAccount): Promise<void> 
     } catch {
       // Recovery record may not exist yet
     }
+    void logActivity({
+      module: 'admin',
+      action: 'delete_user',
+      summary: `Removeu a conta ${targetUser.displayName} (@${targetUser.username})`,
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `users/${targetUser.uid}`);
   }

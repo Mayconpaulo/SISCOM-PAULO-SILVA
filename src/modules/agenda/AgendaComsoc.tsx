@@ -87,6 +87,7 @@ import {
 } from './agendaTypes';
 import {
   CalendarUnauthorizedDomainError,
+  GOOGLE_CALENDAR_FIREBASE_PROJECT_ID,
   GoogleCalendarSession,
   connectGoogleCalendar,
   createGoogleCalendarEvent,
@@ -1775,8 +1776,7 @@ export function AgendaComsoc() {
 
                   {pendingPushEvents.length > 0 && !googleSession.connected && (
                     <p className="text-[11px] text-[#E5C17B] border-t border-white/8 pt-2">
-                      Há <strong>{pendingPushEvents.length} atividade(s)</strong> aguardando envio ao
-                      Google Calendar. Clique em <strong>Sincronizar com Google</strong> para enviá-las.
+                      <strong>{pendingPushEvents.length} atividade(s)</strong> aguardando envio ao Google Calendar.
                     </p>
                   )}
 
@@ -1870,7 +1870,7 @@ export function AgendaComsoc() {
                       </li>
                       <li>
                         Abra <strong>Firebase Authentication → Settings → Domínios autorizados</strong>{' '}
-                        do projeto <strong>gen-lang-client-0187607531</strong> e clique em{' '}
+                        do projeto <strong>{GOOGLE_CALENDAR_FIREBASE_PROJECT_ID}</strong> e clique em{' '}
                         <strong>Adicionar domínio</strong>.
                       </li>
                       <li>Volte aqui e clique novamente em “Sincronizar com Google”.</li>
@@ -2209,14 +2209,9 @@ export function AgendaComsoc() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-3">
             <div className="flex items-center gap-2.5">
               <History className="w-5 h-5 text-[#E5C17B]" />
-              <div>
-                <h3 className="font-display text-base font-semibold text-[#F4E6C4]">
-                  Histórico de Atividades e Auditoria
-                </h3>
-                <p className="text-xs text-[#98A89F]">
-                  Registro cronológico das atividades realizadas, encerradas e sincronizações.
-                </p>
-              </div>
+              <h3 className="font-display text-base font-semibold text-[#F4E6C4]">
+                Histórico
+              </h3>
             </div>
 
             <SiscomSegmentedTabs

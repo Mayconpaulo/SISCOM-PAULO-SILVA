@@ -25,6 +25,7 @@ import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants, stepSlideVariants } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
+import { logActivity } from '../../core/audit/activityLogger';
 import {
   COM_SOC_PROVIDENCIA_OPTIONS,
   type ComSocProvidenciaOption,
@@ -44,6 +45,13 @@ import {
   type RelatorioPeriodDay,
 } from './relatorioPeriods';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
+import { useAuth } from '../../core/auth/AuthContext';
+import {
+  deleteUserRelatorioDoc,
+  sanitizeRelatorioId,
+  saveUserRelatorioDoc,
+  subscribeUserRelatorios,
+} from './relatorioStore';
 
 const STORAGE_KEY = 'siscom_relatorio_state_v1';
 
@@ -215,7 +223,16 @@ const EVENT_ONLY_STEPS: readonly WizardStepMeta[] = [
 const WEEK_WINDOW_SIZE = 6;
 
 export const RelatorioGenerator: React.FC = () => {
+  const { account } = useAuth();
+  const userId = account?.uid || null;
+
   const [state, setState] = useState<StoredRelatorioState>(() => loadInitialRelatorioState());
+  const stateRef = useRef<StoredRelatorioState>(state);
+  stateRef.current = state;
+
+  const hasHydratedCloudRef = useRef<boolean>(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const pendingSaveDocRef = useRef<RelatorioDocument | null>(null);
 
   const activeDoc = useMemo(
     () => state.reports.find((r) => r.id === state.activeId) || state.reports[0],
@@ -302,10 +319,127 @@ export const RelatorioGenerator: React.FC = () => {
   useEffect(() => {
     try {
       setSecureVaultItem(STORAGE_KEY, JSON.stringify(state));
+      if (userId && state.activeId) {
+        localStorage.setItem(`siscom_relatorio_active_id_${userId}`, state.activeId);
+      }
     } catch {
       // Ignore quota errors
     }
-  }, [state]);
+  }, [state, userId]);
+
+  const persistDocImmediate = (docToSave: RelatorioDocument) => {
+    if (!userId) return;
+    if (
+      pendingSaveDocRef.current &&
+      pendingSaveDocRef.current.id === docToSave.id &&
+      saveTimerRef.current !== null
+    ) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      pendingSaveDocRef.current = null;
+    }
+    void saveUserRelatorioDoc(userId, docToSave).catch((err) => {
+      console.error('[SISCOM Relatório] Save failed:', err);
+      setNotice('Erro ao sincronizar relatório.');
+    });
+  };
+
+  const persistDocDebounced = (docToSave: RelatorioDocument) => {
+    if (!userId) return;
+    pendingSaveDocRef.current = docToSave;
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      const toFlush = pendingSaveDocRef.current;
+      pendingSaveDocRef.current = null;
+      if (toFlush && userId) {
+        void saveUserRelatorioDoc(userId, toFlush).catch((err) => {
+          console.error('[SISCOM Relatório] Debounced save failed:', err);
+          setNotice('Erro ao sincronizar relatório.');
+        });
+      }
+    }, 500);
+  };
+
+  useEffect(() => {
+    hasHydratedCloudRef.current = false;
+    if (!userId) return;
+
+    const unsubscribe = subscribeUserRelatorios(
+      userId,
+      (cloudReports) => {
+        const isFirstSnapshot = !hasHydratedCloudRef.current;
+        hasHydratedCloudRef.current = true;
+
+        if (cloudReports.length > 0) {
+          let savedActiveId: string | null = null;
+          try {
+            savedActiveId = localStorage.getItem(`siscom_relatorio_active_id_${userId}`);
+          } catch {
+            savedActiveId = null;
+          }
+
+          setState((prev) => {
+            const nextActiveId = cloudReports.some((r) => r.id === prev.activeId)
+              ? prev.activeId
+              : savedActiveId && cloudReports.some((r) => r.id === savedActiveId)
+                ? savedActiveId
+                : cloudReports[0].id;
+            return { reports: cloudReports, activeId: nextActiveId };
+          });
+
+          if (isFirstSnapshot) {
+            const chosen =
+              (savedActiveId && cloudReports.find((r) => r.id === savedActiveId)) ||
+              cloudReports[0];
+            if (chosen) {
+              setNewReportPeriodo(chosen.periodoCabecalho);
+              if (chosen.diversosEventos.length > 0) {
+                setWizardOpen(false);
+                setWizardMode('add-event');
+                setWizardStep('date');
+              }
+            }
+          }
+          return;
+        }
+
+        if (isFirstSnapshot) {
+          const toMigrate = stateRef.current.reports.filter((r) => r.diversosEventos.length > 0);
+          for (const rep of toMigrate) {
+            const normalized = { ...rep, id: sanitizeRelatorioId(rep.id) };
+            void saveUserRelatorioDoc(userId, normalized).catch((err) => {
+              console.error('[SISCOM Relatório] Migration failed:', err);
+            });
+          }
+        }
+      },
+      (err) => {
+        console.error('[SISCOM Relatório] Cloud sync error:', err);
+      }
+    );
+
+    const flushOnHide = () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const toFlush = pendingSaveDocRef.current;
+      pendingSaveDocRef.current = null;
+      if (toFlush && userId) {
+        void saveUserRelatorioDoc(userId, toFlush).catch(() => {});
+      }
+    };
+
+    window.addEventListener('pagehide', flushOnHide);
+    return () => {
+      window.removeEventListener('pagehide', flushOnHide);
+      unsubscribe();
+      flushOnHide();
+    };
+  }, [userId]);
 
   useEffect(() => {
     const handlePurged = () => {
@@ -331,13 +465,28 @@ export const RelatorioGenerator: React.FC = () => {
     return () => window.removeEventListener('siscom:vault-purged', handlePurged);
   }, []);
 
-  const updateActiveReport = (updater: (doc: RelatorioDocument) => RelatorioDocument) => {
+  const updateActiveReport = (
+    updater: (doc: RelatorioDocument) => RelatorioDocument,
+    syncMode: 'immediate' | 'debounced' = 'immediate'
+  ) => {
+    const current =
+      stateRef.current.reports.find((r) => r.id === stateRef.current.activeId) ||
+      stateRef.current.reports[0];
+    if (!current) return;
+    const updatedDoc: RelatorioDocument = {
+      ...updater(current),
+      id: sanitizeRelatorioId(current.id),
+      updatedAt: new Date().toISOString(),
+    };
     setState((prev) => ({
       ...prev,
-      reports: prev.reports.map((r) =>
-        r.id === prev.activeId ? { ...updater(r), updatedAt: new Date().toISOString() } : r
-      ),
+      reports: prev.reports.map((r) => (r.id === current.id ? updatedDoc : r)),
     }));
+    if (syncMode === 'immediate') {
+      persistDocImmediate(updatedDoc);
+    } else {
+      persistDocDebounced(updatedDoc);
+    }
   };
 
   const resetWizardFields = () => {
@@ -543,6 +692,7 @@ export const RelatorioGenerator: React.FC = () => {
         }));
       } else {
         const created = createDefaultRelatorioDocument({
+          id: sanitizeRelatorioId(`rel_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`),
           periodoCabecalho: periodoClean,
           diversosEventos: [newEntry],
         });
@@ -550,6 +700,7 @@ export const RelatorioGenerator: React.FC = () => {
           reports: [created, ...prev.reports],
           activeId: created.id,
         }));
+        persistDocImmediate(created);
       }
       setNotice('Evento adicionado em 5. Diversos.');
       resetWizardFields();
@@ -622,8 +773,9 @@ export const RelatorioGenerator: React.FC = () => {
 
   const handleDeleteCurrentReport = () => {
     if (state.reports.length <= 1) {
-      const fresh = createDefaultRelatorioDocument({ id: activeDoc.id });
+      const fresh = createDefaultRelatorioDocument({ id: sanitizeRelatorioId(activeDoc.id) });
       setState({ reports: [fresh], activeId: fresh.id });
+      persistDocImmediate(fresh);
       setWizardMode('new-report');
       setWizardStep('period');
       setNewReportPeriodo(fresh.periodoCabecalho);
@@ -632,11 +784,18 @@ export const RelatorioGenerator: React.FC = () => {
       setNotice('Relatório limpo.');
       return;
     }
-    const remaining = state.reports.filter((r) => r.id !== activeDoc.id);
+    const idToDelete = activeDoc.id;
+    const remaining = state.reports.filter((r) => r.id !== idToDelete);
     setState({
       reports: remaining,
       activeId: remaining[0].id,
     });
+    if (userId) {
+      void deleteUserRelatorioDoc(userId, idToDelete).catch((err) => {
+        console.error('[SISCOM Relatório] Delete failed:', err);
+        setNotice('Erro ao remover relatório.');
+      });
+    }
     const isEmpty = remaining[0].diversosEventos.length === 0;
     setWizardMode(isEmpty ? 'new-report' : 'add-event');
     setWizardStep(isEmpty ? 'period' : 'date');
@@ -663,6 +822,12 @@ export const RelatorioGenerator: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
       setNotice('PDF A4 vertical gerado.');
+      void logActivity({
+        module: 'relatorio',
+        action: 'export_pdf',
+        summary: `Exportou PDF do relatório: ${activeDoc.title}`,
+        detail: `${activeDoc.diversosEventos.length} atividade(s)`,
+      });
     } catch {
       setNotice('Erro ao gerar PDF.');
     } finally {
@@ -688,6 +853,12 @@ export const RelatorioGenerator: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
       setNotice('Word (.doc) A4 vertical exportado.');
+      void logActivity({
+        module: 'relatorio',
+        action: 'export_word',
+        summary: `Exportou Word do relatório: ${activeDoc.title}`,
+        detail: `${activeDoc.diversosEventos.length} atividade(s)`,
+      });
     } catch {
       setNotice('Erro ao gerar .doc.');
     } finally {
@@ -709,14 +880,9 @@ export const RelatorioGenerator: React.FC = () => {
         {/* Saved Reports Switcher + Primary Actions */}
         <section className="metal-surface rounded-xl p-4 sm:p-5 space-y-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div>
-              <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
-                Relatório Semanal
-              </h2>
-              <p className="text-[11px] text-[#98A89F]">
-                Formato A4 vertical (210 × 297 mm)
-              </p>
-            </div>
+            <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
+              Relatório Semanal
+            </h2>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -926,18 +1092,13 @@ export const RelatorioGenerator: React.FC = () => {
               className="metal-elevated rounded-xl p-4 sm:p-5 border border-[#C29B56]/30 space-y-4"
             >
               <div className="flex items-start justify-between gap-2 border-b border-white/8 pb-3">
-                <div>
-                  <h3 className="font-display text-sm font-semibold text-[#F4E6C4]">
-                    {wizardMode === 'new-report'
-                      ? 'Criar Relatório por Etapas'
-                      : wizardMode === 'edit-event'
-                        ? 'Editar Evento por Etapas'
-                        : 'Adicionar Evento por Etapas'}
-                  </h3>
-                  <p className="text-[11px] text-[#98A89F] mt-0.5">
-                    Etapa {activeStepIndex + 1} de {wizardSteps.length} — preenchimento em 5. Diversos
-                  </p>
-                </div>
+                <h3 className="font-display text-sm font-semibold text-[#F4E6C4]">
+                  {wizardMode === 'new-report'
+                    ? 'Novo Relatório'
+                    : wizardMode === 'edit-event'
+                      ? 'Editar Evento'
+                      : 'Adicionar Evento'}
+                </h3>
                 {activeDoc.diversosEventos.length > 0 && (
                   <button
                     type="button"
@@ -997,14 +1158,9 @@ export const RelatorioGenerator: React.FC = () => {
                       exit="exit"
                       className="space-y-3"
                     >
-                  <div>
-                    <h4 className="text-xs font-semibold text-[#F4E6C4]">
-                      Escolha a semana do relatório (Sexta a Quinta)
-                    </h4>
-                    <p className="text-[11px] text-[#98A89F] mt-0.5">
-                      Clique no período desejado. Cada semana vai de sexta-feira até quinta-feira da semana seguinte.
-                    </p>
-                  </div>
+                  <h4 className="text-xs font-semibold text-[#F4E6C4]">
+                    Período (Sexta a Quinta)
+                  </h4>
 
                   <div className="flex items-center justify-between gap-1.5">
                     <button
@@ -1078,9 +1234,7 @@ export const RelatorioGenerator: React.FC = () => {
                       onClick={() => setShowCustomPeriodInput((v) => !v)}
                       className="text-[11px] text-[#98A89F] hover:text-[#E5C17B] underline underline-offset-2 transition-colors"
                     >
-                      {showCustomPeriodInput
-                        ? 'Ocultar edição manual do período'
-                        : 'Precisa de outro texto de período? Editar manualmente'}
+                      {showCustomPeriodInput ? 'Fechar' : 'Editar manualmente'}
                     </button>
                     {showCustomPeriodInput && (
                       <input
@@ -1088,7 +1242,7 @@ export const RelatorioGenerator: React.FC = () => {
                         type="text"
                         value={newReportPeriodo}
                         onChange={(e) => handlePickPeriodInWizard(e.target.value)}
-                        placeholder="ex: 14 A 20 AGOSTO 26"
+                        placeholder="14 A 20 AGOSTO 26"
                         className="siscom-input mt-2 !min-h-[40px] text-xs"
                       />
                     )}
@@ -1133,11 +1287,9 @@ export const RelatorioGenerator: React.FC = () => {
                     />
                   </div>
 
-                  {dateSelectionMode === 'range' && (
+                  {dateSelectionMode === 'range' && rangeStartDay && (
                     <p className="text-[11px] text-[#E5C17B]">
-                      {rangeStartDay
-                        ? `Início: ${rangeStartDay.weekdayShort} ${rangeStartDay.dayMonth}. Agora clique no dia final.`
-                        : 'Clique no primeiro dia e depois no último dia do evento.'}
+                      {rangeStartDay.weekdayShort} {rangeStartDay.dayMonth} → ...
                     </p>
                   )}
 
@@ -1193,7 +1345,7 @@ export const RelatorioGenerator: React.FC = () => {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[11px] text-[#98A89F]">
-                        Data preenchida (editável)
+                        Data
                       </span>
                       <button
                         type="button"
@@ -1215,7 +1367,7 @@ export const RelatorioGenerator: React.FC = () => {
                         setRangeStartDay(null);
                         setQDataPeriodo(e.target.value);
                       }}
-                      placeholder="ex: 20/08/2026 ou 18 a 20/08/2026"
+                      placeholder="dd/mm/aaaa"
                       className="siscom-input !min-h-[40px] text-xs"
                     />
                   </div>
@@ -1247,7 +1399,7 @@ export const RelatorioGenerator: React.FC = () => {
                       autoFocus
                       value={qEvento}
                       onChange={(e) => setQEvento(e.target.value)}
-                      placeholder="ex: Visita de 20 alunos da escola Patrono Duque de Caxias"
+                      placeholder="Descrição do evento"
                       className="siscom-input !min-h-[84px] py-2.5 text-xs resize-y"
                     />
                   </div>
@@ -1306,7 +1458,7 @@ export const RelatorioGenerator: React.FC = () => {
                       aria-label="Observação complementar opcional"
                       value={qObservacao}
                       onChange={(e) => setQObservacao(e.target.value)}
-                      placeholder="Complemento opcional (ex: palestra, visita às instalações...)"
+                      placeholder="Complemento (opcional)"
                       className="siscom-input !min-h-[40px] text-xs"
                     />
                   </div>
@@ -1315,7 +1467,7 @@ export const RelatorioGenerator: React.FC = () => {
                   {(qProvidencias.length > 0 || qObservacao.trim()) && (
                     <div className="rounded-lg bg-[#16271F]/55 backdrop-blur-md border border-[#83B499]/32 p-3 space-y-1">
                       <span className="block text-[10px] uppercase tracking-wider text-[#83B499]">
-                        Como ficará em 5. Diversos
+                        Prévia
                       </span>
                       <p className="text-xs text-[#E4EAE6] leading-relaxed">
                         {formatRelatorioEventText({
@@ -1409,9 +1561,7 @@ export const RelatorioGenerator: React.FC = () => {
           </div>
 
           {activeDoc.diversosEventos.length === 0 ? (
-            <p className="text-xs text-[#98A89F] leading-relaxed">
-              Nenhum evento adicionado ainda. Responda às etapas à esquerda para preencher o item 5. Diversos.
-            </p>
+            <p className="text-xs text-[#98A89F]">Nenhum evento.</p>
           ) : (
             <ul className="space-y-2">
               {activeDoc.diversosEventos.map((ev, idx) => (
@@ -1480,7 +1630,7 @@ export const RelatorioGenerator: React.FC = () => {
             onClick={() => setShowAdvancedModel((v) => !v)}
             className="w-full min-h-[44px] px-4 py-3 flex items-center justify-between gap-2 text-xs font-medium text-[#C6D4CC] hover:text-white transition-colors text-left"
           >
-            <span>Textos fixos do modelo (opcional)</span>
+            <span>Textos fixos do modelo</span>
             {showAdvancedModel ? (
               <ChevronUp className="w-4 h-4 text-[#98A89F] shrink-0" />
             ) : (
@@ -1508,11 +1658,14 @@ export const RelatorioGenerator: React.FC = () => {
                     value={activeDoc.periodoCabecalho}
                     onChange={(e) => {
                       const val = e.target.value;
-                      updateActiveReport((doc) => ({
-                        ...doc,
-                        periodoCabecalho: val,
-                        title: `Relatório Semanal – ${val}`,
-                      }));
+                      updateActiveReport(
+                        (doc) => ({
+                          ...doc,
+                          periodoCabecalho: val,
+                          title: `Relatório Semanal – ${val}`,
+                        }),
+                        'debounced'
+                      );
                     }}
                     className="siscom-input !min-h-[38px] text-xs"
                   />
@@ -1528,7 +1681,10 @@ export const RelatorioGenerator: React.FC = () => {
                       type="text"
                       value={activeDoc.preparoEmprego}
                       onChange={(e) =>
-                        updateActiveReport((doc) => ({ ...doc, preparoEmprego: e.target.value }))
+                        updateActiveReport(
+                          (doc) => ({ ...doc, preparoEmprego: e.target.value }),
+                          'debounced'
+                        )
                       }
                       className="siscom-input !min-h-[36px] text-xs"
                     />
@@ -1542,7 +1698,10 @@ export const RelatorioGenerator: React.FC = () => {
                       type="text"
                       value={activeDoc.estadoSanitario}
                       onChange={(e) =>
-                        updateActiveReport((doc) => ({ ...doc, estadoSanitario: e.target.value }))
+                        updateActiveReport(
+                          (doc) => ({ ...doc, estadoSanitario: e.target.value }),
+                          'debounced'
+                        )
                       }
                       className="siscom-input !min-h-[36px] text-xs"
                     />
@@ -1556,10 +1715,13 @@ export const RelatorioGenerator: React.FC = () => {
                       type="text"
                       value={activeDoc.problemasDisciplinares}
                       onChange={(e) =>
-                        updateActiveReport((doc) => ({
-                          ...doc,
-                          problemasDisciplinares: e.target.value,
-                        }))
+                        updateActiveReport(
+                          (doc) => ({
+                            ...doc,
+                            problemasDisciplinares: e.target.value,
+                          }),
+                          'debounced'
+                        )
                       }
                       className="siscom-input !min-h-[36px] text-xs"
                     />
@@ -1573,10 +1735,13 @@ export const RelatorioGenerator: React.FC = () => {
                       type="text"
                       value={activeDoc.generosAlimenticios}
                       onChange={(e) =>
-                        updateActiveReport((doc) => ({
-                          ...doc,
-                          generosAlimenticios: e.target.value,
-                        }))
+                        updateActiveReport(
+                          (doc) => ({
+                            ...doc,
+                            generosAlimenticios: e.target.value,
+                          }),
+                          'debounced'
+                        )
                       }
                       className="siscom-input !min-h-[36px] text-xs"
                     />
@@ -1590,23 +1755,18 @@ export const RelatorioGenerator: React.FC = () => {
                       id: activeDoc.id,
                       diversosEventos: activeDoc.diversosEventos,
                     });
-                    updateActiveReport(() => fresh);
+                    updateActiveReport(() => fresh, 'immediate');
                     setNotice('Campos do modelo restaurados.');
                   }}
                   className="siscom-btn siscom-btn-secondary w-full !min-h-[38px] text-xs"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restaurar padrão do modelo</span>
+                  <span>Restaurar padrão</span>
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
         </section>
-
-        <div className="px-1 flex items-center justify-between text-[11px] text-[#98A89F]">
-          <span>A4 Vertical</span>
-          <span className="font-mono text-[#E5C17B]">210 × 297 mm</span>
-        </div>
         </div>
       }
     >
@@ -2010,9 +2170,7 @@ export const RelatorioGenerator: React.FC = () => {
                         className="border border-black text-left align-top px-[3mm] py-[2.2mm] min-h-[12mm]"
                       >
                         {activeDoc.diversosEventos.length === 0 ? (
-                          <p className="text-[9.3pt] text-center text-black/60 italic">
-                            (Aguardando eventos da Seção de Comunicação Social)
-                          </p>
+                          <div className="min-h-[8mm]" />
                         ) : (
                           <div className="space-y-[2mm]">
                             {activeDoc.diversosEventos.map((ev) => (

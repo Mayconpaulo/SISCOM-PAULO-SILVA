@@ -9,6 +9,7 @@ import {
   ListOrdered,
   Printer,
   RotateCcw,
+  Search,
   Upload,
   X,
 } from 'lucide-react';
@@ -48,6 +49,15 @@ import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
+import { logActivity } from '../../core/audit/activityLogger';
+
+function normalizeCrachaSearch(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
 
 const STORAGE_KEY = 'siscom_cracha_state_v2';
 
@@ -849,8 +859,10 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
   const [isImportingDoc, setIsImportingDoc] = useState(false);
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [crachaSearch, setCrachaSearch] = useState<string>('');
   const docInputRef = useRef<HTMLInputElement>(null);
   const crachasStripRef = useRef<HTMLDivElement>(null);
+  const sheetRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const config = configs[activeMode];
   const [perPageDraft, setPerPageDraft] = useState<string>(() => String(config.perPage));
@@ -977,6 +989,12 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             } de "${newlyExtracted[0].fileName}".`
           : `${newlyExtracted.length} arquivos importados (${addedRows} registros).`
       );
+      void logActivity({
+        module: 'crachas',
+        action: 'import_file',
+        summary: `Importou ${newlyExtracted.length} arquivo(s) de crachás (${addedRows} registros)`,
+        detail: newlyExtracted.map((d) => d.fileName).join(', '),
+      });
     } catch (err) {
       setImportError(
         err instanceof Error ? err.message : 'Não foi possível extrair os dados do documento.'
@@ -1118,6 +1136,12 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
       a.click();
       URL.revokeObjectURL(url);
       setNotice('PDF gerado.');
+      void logActivity({
+        module: 'crachas',
+        action: 'export_pdf',
+        summary: `Exportou PDF de ${config.perPage} crachá(s)`,
+        detail: `Modelo: ${config.mode === 'identificacao' ? 'Identificação' : 'RP'}`,
+      });
     } catch {
       setNotice('Erro ao gerar PDF.');
     } finally {
@@ -1147,6 +1171,12 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
         URL.revokeObjectURL(url);
       }
       setNotice('PNG gerado.');
+      void logActivity({
+        module: 'crachas',
+        action: 'export_png',
+        summary: `Exportou PNG de ${config.perPage} crachá(s)`,
+        detail: `Modelo: ${config.mode === 'identificacao' ? 'Identificação' : 'RP'}`,
+      });
     } catch {
       setNotice('Erro ao gerar PNG.');
     } finally {
@@ -1156,6 +1186,12 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
   const handlePrint = () => {
     setNotice(null);
+    void logActivity({
+      module: 'crachas',
+      action: 'print',
+      summary: `Imprimiu ${config.perPage} crachá(s)`,
+      detail: `Modelo: ${config.mode === 'identificacao' ? 'Identificação' : 'RP'}`,
+    });
     window.print();
   };
 
@@ -1168,6 +1204,46 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
     [config.entries, config.mode, config.perPage]
   );
 
+  const indexedEntries = useMemo(() => {
+    const q = normalizeCrachaSearch(crachaSearch);
+    const all = activeEntries.map((entry, idx) => ({ entry, idx }));
+    if (!q) return all;
+
+    const cleanNum = q.replace(/^#/, '');
+    const numericMatch = /^\d+$/.test(cleanNum) ? Number.parseInt(cleanNum, 10) : null;
+
+    return all.filter(({ entry, idx }) => {
+      if (numericMatch !== null && idx + 1 === numericMatch) return true;
+      const haystack = normalizeCrachaSearch(
+        [
+          `#${idx + 1}`,
+          entry.nomeCompleto,
+          entry.cpf,
+          entry.rpTexto,
+          entry.versoTexto,
+          entry.topTextOverride,
+          entry.bottomTextOverride,
+        ].join(' ')
+      );
+      return haystack.includes(q);
+    });
+  }, [activeEntries, crachaSearch]);
+
+  useEffect(() => {
+    if (crachasStripRef.current) {
+      crachasStripRef.current.scrollLeft = 0;
+    }
+  }, [crachaSearch]);
+
+  const scrollToEntryPreview = (entryIdx: number) => {
+    const pageIdx = layout.pages.findIndex((units) =>
+      units.some((u) => u.entryIndex === entryIdx)
+    );
+    if (pageIdx >= 0) {
+      sheetRefs.current[pageIdx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   return (
     <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
@@ -1179,9 +1255,6 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-[#E5C17B]">
               Importar arquivos
-            </span>
-            <span className="text-[11px] text-[#98A89F]">
-              Sem limite de tamanho
             </span>
           </div>
 
@@ -1225,13 +1298,10 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             )}
             <span className="text-xs font-semibold text-[#F4E6C4]">
               {isImportingDoc
-                ? 'Extraindo dados do(s) arquivo(s)...'
+                ? 'Importando...'
                 : importedDocs.length > 0
-                  ? 'Adicionar outro arquivo (PDF, Word, Excel, foto...)'
-                  : 'Subir arquivo(s) para preencher crachás'}
-            </span>
-            <span className="text-[11px] text-[#98A89F]">
-              PDF, Word (.docx/.doc/.odt), Excel, CSV, TXT ou foto — leitura fiel das colunas com montagem flexível
+                  ? 'Adicionar arquivo'
+                  : 'Subir arquivo'}
             </span>
           </button>
 
@@ -1294,10 +1364,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                                 {src.rows.length}{' '}
                                 {src.rows.length === 1 ? 'registro' : 'registros'} ·{' '}
                                 {src.columns.length}{' '}
-                                {src.columns.length === 1 ? 'coluna' : 'colunas'} ·{' '}
-                                {src.hasExplicitHeader
-                                  ? 'Cabeçalho real da 1ª linha'
-                                  : 'Sem cabeçalho (colunas genéricas)'}
+                                {src.columns.length === 1 ? 'coluna' : 'colunas'}
                               </p>
                             </div>
                           </div>
@@ -1398,20 +1465,20 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     {/* Flexible Prefix + Main Name Assembly */}
                     <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
                       <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
-                        Montagem do Nome (Prefixo + Principal)
+                        Nome
                       </span>
 
                       <SlotSourcePicker
-                        label="Prefixo (opcional — ex: Posto/Grad)"
-                        emptyLabel="(Sem prefixo)"
+                        label="Prefixo"
+                        emptyLabel="Nenhum"
                         slot={fieldMapping.identPrefixo}
                         sources={importedDocs}
                         onChange={(next) => handleMappingSlotChange('identPrefixo', next)}
                       />
 
                       <SlotSourcePicker
-                        label="Nome Principal (ex: Nome de Guerra ou Nome)"
-                        emptyLabel="(Deixar em branco)"
+                        label="Principal"
+                        emptyLabel="Nenhum"
                         slot={fieldMapping.identPrincipal}
                         sources={importedDocs}
                         onChange={(next) => handleMappingSlotChange('identPrincipal', next)}
@@ -1450,8 +1517,8 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     </div>
 
                     <SlotSourcePicker
-                      label="Documento (CPF / Identidade)"
-                      emptyLabel="(Deixar em branco — sem documento)"
+                      label="Documento"
+                      emptyLabel="Nenhum"
                       slot={fieldMapping.identSecundario}
                       sources={importedDocs}
                       onChange={(next) => handleMappingSlotChange('identSecundario', next)}
@@ -1490,20 +1557,20 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                     {/* Flexible Prefix + Main Text Assembly (RP) */}
                     <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
                       <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
-                        Montagem do Texto Central (Prefixo + Principal)
+                        Texto central
                       </span>
 
                       <SlotSourcePicker
-                        label="Prefixo (opcional — ex: Posto/Grad)"
-                        emptyLabel="(Sem prefixo)"
+                        label="Prefixo"
+                        emptyLabel="Nenhum"
                         slot={fieldMapping.rpPrefixo}
                         sources={importedDocs}
                         onChange={(next) => handleMappingSlotChange('rpPrefixo', next)}
                       />
 
                       <SlotSourcePicker
-                        label="Texto Principal do centro (RP)"
-                        emptyLabel="(Deixar em branco)"
+                        label="Principal"
+                        emptyLabel="Nenhum"
                         slot={fieldMapping.rpPrincipal}
                         sources={importedDocs}
                         onChange={(next) => handleMappingSlotChange('rpPrincipal', next)}
@@ -1543,7 +1610,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
 
                     <div className="grid grid-cols-1 gap-2">
                       <SlotSourcePicker
-                        label="Superior (opcional)"
+                        label="Superior"
                         emptyLabel="Padrão"
                         slot={fieldMapping.rpTop}
                         sources={importedDocs}
@@ -1628,7 +1695,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
               handlePerPageChange(clamped);
               setPerPageDraft(String(clamped));
             }}
-            placeholder="Digite a quantidade (1 a 200)"
+            placeholder="1 a 200"
             className="siscom-input w-full min-h-[40px] px-3 font-mono text-sm"
           />
         </div>
@@ -1810,7 +1877,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             ) : (
               <div className="space-y-1">
                 <label htmlFor="cracha-rp-header" className="block text-[11px] text-[#98A89F]">
-                  Superior (opcional)
+                  Superior
                 </label>
                 <input
                   id="cracha-rp-header"
@@ -1915,31 +1982,70 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             </div>
           </div>
 
+          {config.perPage > 1 && (
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 text-[#83B499] absolute left-3 pointer-events-none" />
+              <input
+                type="text"
+                value={crachaSearch}
+                onChange={(e) => setCrachaSearch(e.target.value)}
+                placeholder="Pesquisar crachá por nome ou nº..."
+                aria-label="Pesquisar crachá por nome, CPF ou número"
+                className="siscom-input w-full min-h-[36px] !pl-8 !pr-16 text-xs"
+              />
+              {crachaSearch.trim() !== '' && (
+                <div className="absolute right-1.5 flex items-center gap-1">
+                  <span className="font-mono text-[10px] text-[#E5C17B]">
+                    {indexedEntries.length}/{config.perPage}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCrachaSearch('')}
+                    aria-label="Limpar pesquisa"
+                    className="h-6 w-6 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-white hover:bg-white/[0.08] transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             ref={crachasStripRef}
             className="flex gap-2.5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth"
           >
-            {activeEntries.map((entry, idx) => {
-              void fontsTick;
-              const diag = getCrachaTextDiagnostics(config, entry);
-              return (
-              <div
-                key={`entry-${idx}`}
-                className="siscom-liquid-subcard w-[246px] xl:w-[266px] shrink-0 snap-start rounded-lg p-3 space-y-2.5"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-medium text-[#83B499]">
-                      #{idx + 1}
-                    </span>
-                    <span
-                      className={`font-mono text-[11px] ${
-                        diag.adjusted ? 'text-[#E5C17B]' : 'text-[#6E7E75]'
-                      }`}
-                    >
-                      {diag.label}
-                    </span>
-                  </div>
+            {indexedEntries.length === 0 ? (
+              <div className="siscom-liquid-subcard w-full rounded-lg px-3 py-4 text-center text-xs text-[#98A89F]">
+                Nenhum crachá encontrado.
+              </div>
+            ) : (
+              indexedEntries.map(({ entry, idx }) => {
+                void fontsTick;
+                const diag = getCrachaTextDiagnostics(config, entry);
+                return (
+                <div
+                  key={`entry-${idx}`}
+                  className="siscom-liquid-subcard w-[246px] xl:w-[266px] shrink-0 snap-start rounded-lg p-3 space-y-2.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => scrollToEntryPreview(idx)}
+                        title={`Ver crachá #${idx + 1} na folha`}
+                        className="font-mono text-xs font-medium text-[#83B499] hover:text-[#E5C17B] transition-colors cursor-pointer"
+                      >
+                        #{idx + 1}
+                      </button>
+                      <span
+                        className={`font-mono text-[11px] ${
+                          diag.adjusted ? 'text-[#E5C17B]' : 'text-[#6E7E75]'
+                        }`}
+                      >
+                        {diag.label}
+                      </span>
+                    </div>
                   {config.sidedness === 'frente_verso' && (
                     <label className="inline-flex items-center gap-1.5 min-h-[28px] text-[11px] text-[#98A89F] cursor-pointer select-none">
                       <input
@@ -1994,8 +2100,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                   />
                 )}
               </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -2065,7 +2172,13 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
     >
       <div className="w-full min-w-0 flex flex-col items-center gap-5 print-wrapper">
         {layout.pages.map((pageUnits, pageIndex) => (
-          <div key={`sheet-${pageIndex}`} className="print-page-item w-full max-w-[620px] space-y-1.5">
+          <div
+            key={`sheet-${pageIndex}`}
+            ref={(el) => {
+              sheetRefs.current[pageIndex] = el;
+            }}
+            className="print-page-item w-full max-w-[620px] space-y-1.5"
+          >
             {layout.pages.length > 1 && (
               <div className="no-print flex items-center justify-between text-[11px] text-[#98A89F] px-0.5">
                 <span className="font-mono">Pág. {pageIndex + 1}/{layout.pages.length}</span>

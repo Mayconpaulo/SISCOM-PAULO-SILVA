@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { logActivity } from '../../../core/audit/activityLogger';
 import {
   Archive,
   Calendar,
@@ -396,6 +397,11 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
         .replace(/(^-|-$)/g, '')
         .slice(0, 60);
       triggerBlobDownload(blob, `cartao-aniversario-${rawName || 'militar'}.png`);
+      void logActivity({
+        module: 'cartoes',
+        action: 'export_aniversario_png',
+        summary: `Exportou cartão de aniversário: ${activeCardData.recipientLine || 'Militar'}`,
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao exportar PNG.');
     } finally {
@@ -431,6 +437,12 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
         zipBlob,
         `cartoes-aniversariantes-${relationMonth.toLowerCase()}-${relationYear}.zip`
       );
+      void logActivity({
+        module: 'cartoes',
+        action: 'export_aniversario_zip',
+        summary: `Exportou ZIP de ${entries.length} cartão(ões) de aniversário`,
+        detail: `${relationMonth}/${relationYear}`,
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao gerar arquivo ZIP.');
     } finally {
@@ -626,11 +638,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                     </button>
                   </div>
 
-                  {entries.length === 0 ? (
-                    <p className="siscom-liquid-subcard rounded-lg p-3 text-xs text-[#B8B3A6]">
-                      Envie o PDF mensal da relação.
-                    </p>
-                  ) : (
+                  {entries.length > 0 && (
                     <div className="siscom-liquid-subcard max-h-60 overflow-y-auto rounded-lg divide-y divide-white/8">
                       {entries.map((entry, idx) => {
                         const isSel = entry.id === selectedEntry?.id;
@@ -664,18 +672,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                   )}
                 </div>
               </motion.div>
-            ) : (
-              <motion.div
-                key="aniv-individual-hint"
-                variants={stepSlideVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="siscom-liquid-subcard rounded-lg p-3 text-xs text-[#B8B3A6] leading-relaxed"
-              >
-                Preencha o destinatário, a data e o texto no painel de <span className="text-[#E5C17B] font-medium">Texto do Cartão</span> à direita.
-              </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
         </section>
 
@@ -807,11 +804,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 </label>
               </div>
             </section>
-          ) : (
-            <p className="siscom-liquid-subcard rounded-lg p-3 text-xs text-[#98A89F]">
-              Selecione um militar na lista à esquerda para editar o nome e o dia.
-            </p>
-          )
+          ) : null
         ) : (
           <section className="space-y-3">
             <div className="grid grid-cols-[72px_1fr_1fr] gap-2">
@@ -956,7 +949,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
             <label className="block space-y-1">
               <span className="flex items-center gap-1 text-[11px] font-medium text-[#98A89F]">
                 <Calendar className="w-3 h-3 text-[#83B499]" />
-                Data livre (opcional)
+                Data livre
               </span>
               <input
                 type="text"

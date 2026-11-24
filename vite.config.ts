@@ -127,8 +127,7 @@ export default defineConfig(({ mode }) => {
           ],
         },
         devOptions: {
-          enabled: true,
-          type: 'classic',
+          enabled: false,
         },
       }),
       // Injects build ID meta into HTML, copies src/assets into dist/, and writes dist/version.json

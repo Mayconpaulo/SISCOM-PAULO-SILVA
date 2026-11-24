@@ -9,10 +9,6 @@ import {
   verifyFirebaseIdToken,
 } from './server/biApiCore.ts';
 import {
-  extractAlterationsFromBulletin,
-  getBiAiProviderStatus,
-} from './server/biExtractionService.ts';
-import {
   getPublicPushConfig,
   runPushReminderSweep,
   sendTestPushForUser,
@@ -20,7 +16,37 @@ import {
   verifyCronAuthorization,
 } from './server/pushService.ts';
 
-const PORT = Number(process.env.PORT || 3000);
+let biExtractionModulePromise: Promise<typeof import('./server/biExtractionService.ts')> | null = null;
+function getBiExtractionModule() {
+  if (!biExtractionModulePromise) {
+    biExtractionModulePromise = import('./server/biExtractionService.ts');
+  }
+  return biExtractionModulePromise;
+}
+
+function resolveServerPort(): number {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--port' && argv[i + 1]) {
+      const parsed = Number(argv[i + 1]);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    } else if (argv[i].startsWith('--port=')) {
+      const parsed = Number(argv[i].slice('--port='.length));
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  }
+  const envPort = Number(process.env.PORT || 3000);
+  if (
+    process.env.NODE_ENV === 'development' &&
+    process.env.NGINX_PORT &&
+    String(envPort) === String(process.env.NGINX_PORT)
+  ) {
+    return Number(process.env.DEFAULT_APP_PORT || 3000);
+  }
+  return Number.isFinite(envPort) && envPort > 0 ? envPort : 3000;
+}
+
+const PORT = resolveServerPort();
 const isProduction =
   process.env.NODE_ENV === 'production' ||
   (process.env.NODE_ENV !== 'development' &&
@@ -68,7 +94,13 @@ function getNewestMtimeMs(dirPath: string): number {
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') {
+        if (
+          entry.name === 'node_modules' ||
+          entry.name === 'dist' ||
+          entry.name === 'dev-dist' ||
+          entry.name === '.git' ||
+          entry.name === 'aistudio'
+        ) {
           continue;
         }
         const sub = getNewestMtimeMs(fullPath);
@@ -274,9 +306,15 @@ async function startServer() {
     res.json({ ok: true, timestamp: new Date().toISOString() });
   });
 
-  app.get('/api/bi/provider-status', verifyFirebaseAuthMiddleware, (_req, res) => {
+  app.get('/api/bi/provider-status', verifyFirebaseAuthMiddleware, async (_req, res) => {
     setNoStoreHeaders(res);
-    res.json(getBiAiProviderStatus());
+    try {
+      const { getBiAiProviderStatus } = await getBiExtractionModule();
+      res.json(getBiAiProviderStatus());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao consultar provedor de BI.';
+      res.status(500).json({ error: message });
+    }
   });
 
   app.post(
@@ -292,6 +330,7 @@ async function startServer() {
           return;
         }
 
+        const { extractAlterationsFromBulletin } = await getBiExtractionModule();
         const result = await extractAlterationsFromBulletin(validationResult.payload);
         res.json(result);
       } catch (err) {
@@ -399,16 +438,30 @@ async function startServer() {
       });
     });
 
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: false,
-        ws: { server: httpServer },
-      },
-      appType: 'spa',
+    // Initialize Vite asynchronously so port 3000 binds immediately without timing out cold boots
+    const viteReadyPromise = import('vite')
+      .then(({ createServer: createViteServer }) =>
+        createViteServer({
+          server: {
+            middlewareMode: true,
+            hmr: false,
+            ws: false,
+          },
+          appType: 'spa',
+        })
+      )
+      .catch((err) => {
+        console.error('[Vite Init Error]', err);
+        throw err;
+      });
+
+    app.use((req, res, next) => {
+      viteReadyPromise
+        .then((vite) => {
+          vite.middlewares(req, res, next);
+        })
+        .catch(next);
     });
-    app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(import.meta.dirname, 'dist');
     app.use(

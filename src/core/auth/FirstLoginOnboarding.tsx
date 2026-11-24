@@ -149,10 +149,6 @@ export function FirstLoginOnboarding({ user, account }: FirstLoginOnboardingProp
                 onSubmit={handlePasswordSubmit}
                 className="space-y-4"
               >
-                <p className="text-xs text-[#98A89F] leading-relaxed">
-                  No seu primeiro acesso, escolha a sua senha pessoal para continuar.
-                </p>
-
                 <div className="space-y-1.5">
                   <label htmlFor="first-new-pass" className="siscom-field-label">
                     Nova senha
@@ -221,11 +217,6 @@ export function FirstLoginOnboarding({ user, account }: FirstLoginOnboardingProp
                 onSubmit={handleSecuritySubmit}
                 className="space-y-4"
               >
-                <p className="text-xs text-[#98A89F] leading-relaxed">
-                  Cadastre sua pergunta de segurança e a resposta. Caso esqueça sua senha, você poderá
-                  redefini-la respondendo a esta pergunta.
-                </p>
-
                 <div className="space-y-1.5">
                   <label htmlFor="sec-question" className="siscom-field-label">
                     Pergunta de segurança
@@ -237,7 +228,7 @@ export function FirstLoginOnboarding({ user, account }: FirstLoginOnboardingProp
                     maxLength={160}
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    placeholder="Ex: Qual o nome do meu primeiro animal?"
+                    placeholder="Pergunta de segurança"
                     className="siscom-input"
                   />
                 </div>
@@ -252,7 +243,7 @@ export function FirstLoginOnboarding({ user, account }: FirstLoginOnboardingProp
                     required
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
-                    placeholder="Digite a resposta que você irá lembrar"
+                    placeholder="Resposta"
                     className="siscom-input"
                   />
                 </div>

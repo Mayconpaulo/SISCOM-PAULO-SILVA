@@ -1725,12 +1725,6 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             <span className="relative z-10">Gerar de Boletins</span>
           </button>
         </div>
-
-        <span className="hidden sm:inline text-[11px] text-[#8EA196]">
-          {alteracaoMode === 'gerar'
-            ? 'Pesquisa Inteligente em Boletins Internos (BI)'
-            : 'Editor e Formatador de Folhas de Alterações'}
-        </span>
       </div>
 
       {/* Keep BiSmartSearchView mounted while switching tabs so uploaded BIs & review cards are preserved */}
@@ -1780,9 +1774,8 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
               <Upload className="w-5 h-5 text-[#E5C17B]" />
             )}
             <span className="text-xs font-semibold text-[#F4E6C4]">
-              {isImporting ? 'Lendo documento...' : 'Subir PDF da Alteração'}
+              {isImporting ? 'Lendo documento...' : 'Importar Alteração'}
             </span>
-            <span className="text-[11px] text-[#98A89F]">.pdf, .docx ou .doc</span>
           </button>
 
           <button
@@ -1865,7 +1858,7 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
               <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="text-[11px] font-medium text-[#DCE5DF] truncate">
                   {[header.postoGraduacao, header.nomeCompleto].filter(Boolean).join(' · ') ||
-                    'Dados preenchidos automaticamente'}
+                    'Mais dados'}
                 </div>
                 <div className="text-[10px] text-[#8EA196] truncate">
                   {[
@@ -2685,9 +2678,6 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             >
               Aplicar na 2ª Parte
             </button>
-            <p className="text-[10px] leading-snug text-[#8EA196]">
-              Altera somente as linhas de tempo na 2ª Parte, sem resetar o documento.
-            </p>
           </div>
         </div>
       }

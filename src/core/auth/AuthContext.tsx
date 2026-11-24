@@ -20,6 +20,7 @@ import {
   db,
   handleFirestoreError,
 } from './firebase';
+import { logActivity, setActivityActor } from '../audit/activityLogger';
 
 interface AuthContextValue {
   firebaseUser: User | null;
@@ -114,12 +115,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfileLoaded(true);
       },
       (err) => {
-        handleFirestoreError(err, OperationType.GET, userDocPath);
+        try {
+          handleFirestoreError(err, OperationType.GET, userDocPath);
+        } catch {
+          // Structured error logged via handleFirestoreError; recover UI state cleanly
+        }
+        setAccount(null);
+        setUnauthorizedReason('Não foi possível carregar seu perfil de acesso. Tente novamente.');
+        setProfileLoaded(true);
       }
     );
 
     return () => unsub();
   }, [firebaseUser]);
+
+  // Keep central activity logger synchronized with active user and log login once per browser session
+  useEffect(() => {
+    if (!firebaseUser || !account || !account.active) {
+      setActivityActor(null);
+      return;
+    }
+    setActivityActor(account);
+    const sessionKey = `siscom_activity_login_${account.uid}`;
+    try {
+      if (!sessionStorage.getItem(sessionKey)) {
+        sessionStorage.setItem(sessionKey, '1');
+        void logActivity({
+          module: 'auth',
+          action: 'login',
+          summary: 'Entrou no sistema',
+          actorOverride: {
+            uid: account.uid,
+            username: account.username,
+            displayName: account.displayName,
+            role: account.role,
+          },
+        });
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }, [firebaseUser, account]);
 
   // Real-time listener for all managed users when signed in as Admin
   useEffect(() => {
@@ -147,7 +183,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setManagedUsers(list);
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, 'users');
+        try {
+          handleFirestoreError(err, OperationType.LIST, 'users');
+        } catch {
+          // Structured error logged via handleFirestoreError
+        }
       }
     );
 

@@ -11,21 +11,16 @@ export function ArquivoInstitucional() {
         <div className="w-12 h-12 rounded-xl bg-[#14251C]/85 border border-[#C9A961]/35 flex items-center justify-center text-[#E5C17B] mx-auto">
           <Folder className="w-6 h-6" />
         </div>
-        <div className="space-y-1">
-          <h2 className="font-display text-lg font-semibold text-[#F4E6C4] tracking-tight">
-            FOTOS - 2026
-          </h2>
-          <p className="text-xs text-[#98A89F]">
-            Acesse diretamente a pasta no Google Drive.
-          </p>
-        </div>
+        <h2 className="font-display text-lg font-semibold text-[#F4E6C4] tracking-tight">
+          FOTOS - 2026
+        </h2>
         <a
           href={ARQUIVO_DRIVE_FOLDER_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="siscom-btn siscom-btn-gold !min-h-[44px] w-full text-sm inline-flex items-center justify-center gap-2"
         >
-          <span>Abrir FOTOS - 2026 no Google Drive</span>
+          <span>Abrir no Google Drive</span>
           <ExternalLink className="w-4 h-4" />
         </a>
       </section>

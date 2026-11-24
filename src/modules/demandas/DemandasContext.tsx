@@ -350,14 +350,8 @@ export const DemandasProvider: React.FC<DemandasProviderProps> = ({ userId, chil
     if (unseenAlerts.length > 0) {
       return { hasNotificationDot: true, notificationDotTone: 'upcoming' as const };
     }
-    if (derived.overdueCount > 0) {
-      return { hasNotificationDot: true, notificationDotTone: 'overdue' as const };
-    }
-    if (derived.todayCount > 0) {
-      return { hasNotificationDot: true, notificationDotTone: 'today' as const };
-    }
     return { hasNotificationDot: false, notificationDotTone: null };
-  }, [activeAlerts, derived.overdueCount, derived.todayCount, seenTick]);
+  }, [activeAlerts, seenTick]);
 
   const value = useMemo<DemandasContextValue>(
     () => ({

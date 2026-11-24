@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { OperationType, db, handleFirestoreError } from '../../core/auth/firebase';
+import { logActivity } from '../../core/audit/activityLogger';
 import {
   sanitizeAlteracaoHtml,
   sanitizeCssFontFamily,
@@ -338,6 +339,11 @@ export async function createAlteracaoFolder(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    void logActivity({
+      module: 'alteracao',
+      action: 'create_folder',
+      summary: `Criou pasta de alterações: ${cleanName}`,
+    });
     return folderId;
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, path);
@@ -430,6 +436,11 @@ export async function deleteAlteracaoFolderCascade(
       }
       await batch.commit();
     }
+    void logActivity({
+      module: 'alteracao',
+      action: 'delete_folder',
+      summary: `Excluiu pasta de alterações (${folderIdsToDelete.size} pasta(s), ${docsToDelete.length} doc(s))`,
+    });
     return {
       deletedFolders: folderIdsToDelete.size,
       deletedDocs: docsToDelete.length,
@@ -471,6 +482,14 @@ export async function saveAlteracaoDoc(
         updatedAt: serverTimestamp(),
       });
     }
+    void logActivity(
+      {
+        module: 'alteracao',
+        action: isUpdate ? 'update_alteracao_doc' : 'save_alteracao_doc',
+        summary: `${isUpdate ? 'Atualizou' : 'Arquivou'} alteração: ${fields.title}`,
+      },
+      isUpdate ? { dedupeKey: `alt:save:${docId}`, cooldownMs: 30_000 } : undefined
+    );
     return docId;
   } catch (err) {
     handleFirestoreError(
@@ -522,6 +541,11 @@ export async function deleteAlteracaoDoc(uid: string, docId: string): Promise<vo
   const path = `users/${uid}/alteracao_docs/${docId}`;
   try {
     await deleteDoc(doc(db, 'users', uid, 'alteracao_docs', docId));
+    void logActivity({
+      module: 'alteracao',
+      action: 'delete_alteracao_doc',
+      summary: 'Excluiu uma alteração arquivada',
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
   }

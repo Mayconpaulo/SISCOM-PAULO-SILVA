@@ -36,7 +36,6 @@ import {
   BiBulletinPage,
   BiDiscardedHomonymItem,
   BiOccurrenceItem,
-  BiProviderStatus,
   BiQueuedFile,
   BiSearchMilitaryProfile,
   BiSemesterSelection,
@@ -132,7 +131,6 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
   const [semester, setSemester] = useState<BiSemesterSelection>(() => getDefaultSemester());
   const [includeFirstPart, setIncludeFirstPart] = useState(false);
   const [archivedSuggestions, setArchivedSuggestions] = useState<ArchivedMilitarySuggestion[]>([]);
-  const [providerStatus, setProviderStatus] = useState<BiProviderStatus | null>(null);
 
   const [queuedFiles, setQueuedFiles] = useState<BiQueuedFile[]>([]);
   const [occurrences, setOccurrences] = useState<BiOccurrenceItem[]>([]);
@@ -187,29 +185,6 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
     );
     return () => unsub();
   }, [account?.uid]);
-
-  // Check active server AI provider status (OpenAI / Gemini)
-  useEffect(() => {
-    let cancelled = false;
-    const checkProvider = async () => {
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) return;
-        const res = await fetch('/api/bi/provider-status', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as BiProviderStatus;
-        if (!cancelled) setProviderStatus(data);
-      } catch {
-        // Ignore transient network check errors
-      }
-    };
-    void checkProvider();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const semesterMeta = useMemo(() => getSemesterLabels(semester), [semester]);
 
@@ -431,7 +406,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         setQueuedFiles((prev) =>
           prev.map((f) =>
             f.id === item.id
-              ? { ...f, status: 'analyzing', progressText: 'Analisando boletim com IA...' }
+              ? { ...f, status: 'analyzing', progressText: 'Analisando boletim...' }
               : f
           )
         );
@@ -789,14 +764,11 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
           <div className="rounded-lg border border-[#C9A961]/45 bg-[#2A2210]/70 px-3 py-2 flex items-start gap-2 text-xs text-[#F4E0AE]">
             <AlertTriangle className="w-4 h-4 text-[#E5C17B] shrink-0 mt-0.5" />
             <div className="space-y-0.5">
-              <div className="font-semibold">Conferência manual obrigatória (não atribuída automaticamente)</div>
-              <div className="text-[11px] text-[#E6D5AA]">
-                {occ.matchReason ||
-                  'Identificação parcial no boletim. Confira o trecho original antes de marcar para inclusão.'}
-              </div>
+              <div className="font-semibold">Conferência manual</div>
+              {occ.matchReason && <div className="text-[11px] text-[#E6D5AA]">{occ.matchReason}</div>}
               {occ.matchedExcerpt && (
                 <div className="text-[11px] font-mono text-[#F4E6C4]/90 pt-0.5">
-                  Trecho encontrado: “{occ.matchedExcerpt}”
+                  “{occ.matchedExcerpt}”
                 </div>
               )}
             </div>
@@ -902,12 +874,9 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
 
         {/* Editable Verbatim Body Content */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <label className="block text-[10px] uppercase tracking-wider text-[#98A89F]">
-              Conteúdo Integral da Alteração
-            </label>
-            <span className="text-[10px] text-[#7D9186]">Texto literal preservado</span>
-          </div>
+          <label className="block text-[10px] uppercase tracking-wider text-[#98A89F]">
+            Conteúdo
+          </label>
           <textarea
             value={occ.contentText}
             onChange={(e) => updateOccurrence(occ.id, { contentText: e.target.value })}
@@ -919,7 +888,6 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         {/* Optional Long Personnel List Toggle + Expandable Editor */}
         {occ.personnelListText && (
           <div className="rounded-lg border border-white/[0.08] bg-[#0A110E]/65 p-2.5 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs text-[#DCE5DF] cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -931,14 +899,9 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                 />
                 <ListChecks className="w-3.5 h-3.5 text-[#E5C17B]" />
                 <span>
-                  Incluir lista completa de militares ({listLineCount} linha
-                  {listLineCount !== 1 ? 's' : ''})
+                  Incluir lista de militares ({listLineCount})
                 </span>
               </label>
-              <span className="text-[10px] text-[#8EA196]">
-                {occ.includePersonnelList ? 'Será incluída na folha' : 'Oculta (padrão Folha 26.1)'}
-              </span>
-            </div>
             <details className="text-xs">
               <summary className="cursor-pointer text-[11px] text-[#98A89F] hover:text-[#E5C17B] select-none">
                 Visualizar / editar lista extraída
@@ -956,7 +919,6 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         {/* Optional "Em consequência" Toggle */}
         {occ.emConsequenciaText && (
           <div className="rounded-lg border border-white/[0.08] bg-[#0A110E]/65 p-2.5 space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs text-[#DCE5DF] cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -966,12 +928,8 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                   }
                   className="h-3.5 w-3.5 accent-[#C9A961] cursor-pointer"
                 />
-                <span>Incluir bloco “Em consequência”</span>
+                <span>Incluir “Em consequência”</span>
               </label>
-              <span className="text-[10px] text-[#8EA196]">
-                {occ.includeEmConsequencia ? 'Será incluído' : 'Oculto (padrão Folha 26.1)'}
-              </span>
-            </div>
             <p className="text-[11px] text-[#98A89F] leading-snug pl-5 line-clamp-2">
               {occ.emConsequenciaText}
             </p>
@@ -1018,12 +976,9 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
         {/* Editable Verbatim Post-Table Content (e.g. DCEM Observações + Adt da DCEM) */}
         {occ.contentAfterTable && (
           <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <label className="block text-[10px] uppercase tracking-wider text-[#98A89F]">
-                Observações / Texto após a tabela
-              </label>
-              <span className="text-[10px] text-[#7D9186]">Posição preservada após a tabela</span>
-            </div>
+            <label className="block text-[10px] uppercase tracking-wider text-[#98A89F]">
+              Texto após a tabela
+            </label>
             <textarea
               value={occ.contentAfterTable}
               onChange={(e) => updateOccurrence(occ.id, { contentAfterTable: e.target.value })}
@@ -1047,19 +1002,14 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
               <div className="flex items-center justify-between gap-2">
                 <span className="siscom-field-label flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-[#E5C17B]" />
-                  <span>1. Militar Pesquisado</span>
+                  <span>Militar</span>
                 </span>
-                {providerStatus && (
-                  <span className="text-[10px] font-mono text-[#8EA196]">
-                    IA: {providerStatus.provider === 'openai' ? 'OpenAI' : providerStatus.provider === 'gemini' ? 'Gemini' : 'Indisponível'}
-                  </span>
-                )}
               </div>
 
               {archivedSuggestions.length > 0 && (
                 <div className="space-y-1">
                   <label htmlFor="bi-archived-suggest" className="block text-[11px] text-[#98A89F]">
-                    Preenchimento rápido (do seu arquivo)
+                    Arquivo
                   </label>
                   <select
                     id="bi-archived-suggest"
@@ -1069,7 +1019,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                     }}
                     className="siscom-input w-full !min-h-[36px] !px-2.5 text-xs"
                   >
-                    <option value="">Selecionar militar arquivado (opcional)...</option>
+                    <option value="">Selecionar militar...</option>
                     {archivedSuggestions.map((s) => (
                       <option key={s.key} value={s.key}>
                         {s.label}
@@ -1150,14 +1100,14 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
 
               <div className="space-y-1">
                 <label htmlFor="bi-mil-qms" className="block text-[11px] text-[#98A89F]">
-                  QAS / QMS (para o cabeçalho da folha)
+                  QAS / QMS
                 </label>
                 <input
                   id="bi-mil-qms"
                   type="text"
                   value={military.qasQms}
                   onChange={(e) => updateMilitary('qasQms', e.target.value)}
-                  placeholder="Ex.: Infantaria / QMG 00"
+                  placeholder="QAS / QMS"
                   className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
                 />
               </div>
@@ -1221,7 +1171,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
               <div className="flex items-center justify-between gap-2">
                 <span className="siscom-field-label flex items-center gap-1.5">
                   <FileSearch className="w-3.5 h-3.5 text-[#83B499]" />
-                  <span>2. Boletins Internos ({queuedFiles.length})</span>
+                  <span>Boletins ({queuedFiles.length})</span>
                 </span>
                 {queuedFiles.length > 0 && !isSearching && (
                   <button
@@ -1229,7 +1179,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                     onClick={handleClearAll}
                     className="text-[11px] text-[#98A89F] hover:text-white hover:underline cursor-pointer"
                   >
-                    Limpar lista
+                    Limpar
                   </button>
                 )}
               </div>
@@ -1253,10 +1203,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
               >
                 <Upload className="w-5 h-5 text-[#E5C17B]" />
                 <span className="text-xs font-semibold text-[#F4E6C4]">
-                  Importar Boletins Internos (1 ou vários)
-                </span>
-                <span className="text-[11px] text-[#98A89F]">
-                  .pdf (inclusive escaneado com OCR), .docx ou .txt
+                  Importar Boletins
                 </span>
               </button>
 
@@ -1365,21 +1312,16 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
             <div className="space-y-0.5 min-w-0">
               <h2 className="font-display text-sm sm:text-base font-semibold text-[#F4E6C4] flex items-center gap-2">
                 <Search className="w-4 h-4 text-[#E5C17B] shrink-0" />
-                <span>Pesquisa Inteligente em Boletins Internos</span>
+                <span>Boletins Internos</span>
               </h2>
-              <p className="text-xs text-[#98A89F]">
-                {military.nomeCompleto.trim() ? (
-                  <>
-                    Militar:{' '}
-                    <strong className="text-[#E8EEEA]">
-                      {[military.postoGraduacao, military.nomeCompleto].filter(Boolean).join(' ')}
-                    </strong>{' '}
-                    · {semesterMeta.semestre}
-                  </>
-                ) : (
-                  'Digite o nome do militar, importe os Boletins Internos e revise cada ocorrência antes de gerar a Folha de Alterações.'
-                )}
-              </p>
+              {military.nomeCompleto.trim() && (
+                <p className="text-xs text-[#98A89F]">
+                  <strong className="text-[#E8EEEA]">
+                    {[military.postoGraduacao, military.nomeCompleto].filter(Boolean).join(' ')}
+                  </strong>{' '}
+                  · {semesterMeta.semestre}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -1421,44 +1363,11 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
 
           {/* Empty state before first search */}
           {occurrences.length === 0 && discardedHomonyms.length === 0 && !isSearching && (
-            <div className="metal-surface rounded-xl p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-xl mx-auto bg-[#121E17] border border-[#C9A961]/35 flex items-center justify-center">
-                <FileSearch className="w-6 h-6 text-[#E5C17B]" />
+            <div className="metal-surface rounded-xl p-10 text-center space-y-2.5">
+              <div className="w-11 h-11 rounded-xl mx-auto bg-[#121E17] border border-[#C9A961]/30 flex items-center justify-center">
+                <FileSearch className="w-5 h-5 text-[#E5C17B]" />
               </div>
-              <div className="space-y-1 max-w-lg mx-auto">
-                <h3 className="text-sm font-semibold text-[#F4E6C4]">
-                  Pronto para pesquisar nos Boletins Internos
-                </h3>
-                <p className="text-xs text-[#98A89F] leading-relaxed">
-                  Informe o nome do militar à esquerda, importe um ou vários BIs do semestre e clique
-                  em <strong className="text-[#E8EEEA]">Pesquisar nos Boletins</strong>. As
-                  alterações serão extraídas na íntegra para sua conferência antes de gerar a folha
-                  A4.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 max-w-2xl mx-auto text-left">
-                <div className="siscom-liquid-subcard rounded-lg p-3 space-y-1">
-                  <div className="text-[11px] font-semibold text-[#E5C17B]">Texto 100% integral</div>
-                  <p className="text-[11px] text-[#98A89F] leading-snug">
-                    Preserva a redação original do BI, une quebras entre páginas e mantém notas e
-                    tabelas.
-                  </p>
-                </div>
-                <div className="siscom-liquid-subcard rounded-lg p-3 space-y-1">
-                  <div className="text-[11px] font-semibold text-[#83B499]">Filtro anti-homônimo</div>
-                  <p className="text-[11px] text-[#98A89F] leading-snug">
-                    Descarta outros militares com sobrenome igual e sinaliza casos duvidosos para
-                    conferência.
-                  </p>
-                </div>
-                <div className="siscom-liquid-subcard rounded-lg p-3 space-y-1">
-                  <div className="text-[11px] font-semibold text-[#DCE5DF]">Padrão Folha 26.1</div>
-                  <p className="text-[11px] text-[#98A89F] leading-snug">
-                    Gera no formato <span className="font-mono">- a 5, BI Nº 2:</span> com{' '}
-                    <span className="underline">Sem Alteração</span> nos meses vazios.
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs text-[#98A89F]">Nenhuma ocorrência</p>
             </div>
           )}
 
@@ -1477,12 +1386,9 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                   <div className="flex items-center gap-2 text-xs font-semibold text-[#E5C17B]">
                     <ShieldAlert className="w-4 h-4" />
                     <span>
-                      Requer Conferência Manual ({pendingReviewOccurrences.length})
+                      Conferência Manual ({pendingReviewOccurrences.length})
                     </span>
                   </div>
-                  <span className="text-[11px] text-[#98A89F]">
-                    Desmarcadas por padrão — marque apenas se confirmar que é o mesmo militar
-                  </span>
                 </div>
                 <div className="space-y-3">
                   {pendingReviewOccurrences.map((occ) => renderOccurrenceCard(occ))}
@@ -1573,7 +1479,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
             <details className="metal-surface rounded-xl p-3.5 group">
               <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-xs text-[#98A89F] hover:text-[#E8EEEA] select-none">
                 <span>
-                  Homônimos e outros militares descartados automaticamente ({discardedHomonyms.length})
+                  Descartados ({discardedHomonyms.length})
                 </span>
                 <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" />
               </summary>

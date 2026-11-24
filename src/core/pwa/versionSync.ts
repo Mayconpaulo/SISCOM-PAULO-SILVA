@@ -1,8 +1,8 @@
 const FORCE_ATTEMPT_KEY = 'siscom_force_update_attempt_v2';
 const BUST_QUERY_PARAM = '_siscom_v';
 const BROADCAST_CHANNEL_NAME = 'siscom-mandatory-version-sync';
-const POLL_INTERVAL_MS = 5_000;
-const SSE_RECONNECT_MS = 3_000;
+const POLL_INTERVAL_MS = import.meta.env.PROD ? 60_000 : 10_000;
+const SSE_RECONNECT_MS = 10_000;
 const MAX_ATTEMPTS_PER_VERSION = 2;
 
 let reloadInProgress = false;
@@ -10,6 +10,7 @@ let baselineServerVersion: string | null = null;
 let swRegistrationRef: ServiceWorkerRegistration | null = null;
 let versionSyncStarted = false;
 let eventSourceRef: EventSource | null = null;
+let sseDisabled = false;
 let broadcastChannelRef: BroadcastChannel | null = null;
 let deferMandatoryUpdates = false;
 let pendingDeferredVersion: string | null = null;
@@ -199,7 +200,10 @@ async function fetchRemoteVersion(): Promise<string | null> {
   if (typeof window === 'undefined' || !navigator.onLine) return null;
 
   const bust = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const endpoints = [`/api/version?t=${bust}`, `/version.json?t=${bust}`];
+  // In production, static /version.json works on both Vercel and Node servers without causing /api/version 404 noise.
+  const endpoints = import.meta.env.PROD
+    ? [`/version.json?t=${bust}`]
+    : [`/api/version?t=${bust}`, `/version.json?t=${bust}`];
 
   for (const url of endpoints) {
     try {
@@ -295,8 +299,8 @@ export async function forceDeviceUpdate(targetVersion: string, fromBroadcast = f
 
   await clearAllPwaCaches();
 
-  // Unregister existing service workers so no stale SW can intercept the hard navigation;
-  // main.tsx immediately re-registers the fresh SW on the next page load.
+  // Activate waiting service worker and clear caches WITHOUT unregistering the SW,
+  // preserving active Web Push subscriptions for closed-app background notifications.
   if ('serviceWorker' in navigator) {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -309,9 +313,9 @@ export async function forceDeviceUpdate(targetVersion: string, fromBroadcast = f
             if (reg.active) {
               await postMessageWithAck(reg.active, { type: 'SISCOM_CLEAR_ALL_CACHES' }, 250);
             }
-            await reg.unregister();
+            await reg.update();
           } catch {
-            // ignore SW unregister failures
+            // ignore transient SW update failures
           }
         })
       );
@@ -377,7 +381,15 @@ export async function checkForAppUpdate(): Promise<void> {
 }
 
 function connectVersionEventStream(): void {
-  if (typeof window === 'undefined' || typeof EventSource === 'undefined' || reloadInProgress) {
+  // Only use SSE in development (Node server); in production rely on /version.json polling
+  // to avoid continuous 404 reconnect loops on serverless/static hosts like Vercel.
+  if (
+    import.meta.env.PROD ||
+    sseDisabled ||
+    typeof window === 'undefined' ||
+    typeof EventSource === 'undefined' ||
+    reloadInProgress
+  ) {
     return;
   }
 
@@ -391,10 +403,12 @@ function connectVersionEventStream(): void {
   }
 
   try {
+    let receivedMessage = false;
     const es = new EventSource(`/api/version-stream?t=${Date.now()}`);
     eventSourceRef = es;
 
     es.onmessage = (event) => {
+      receivedMessage = true;
       try {
         const parsed = JSON.parse(event.data) as { version?: unknown };
         if (typeof parsed?.version === 'string' && parsed.version.trim()) {
@@ -410,6 +424,10 @@ function connectVersionEventStream(): void {
       if (eventSourceRef === es) {
         eventSourceRef = null;
       }
+      if (!receivedMessage) {
+        sseDisabled = true;
+        return;
+      }
       if (!reloadInProgress) {
         window.setTimeout(() => {
           if (document.visibilityState === 'visible' && navigator.onLine && !reloadInProgress) {
@@ -419,7 +437,7 @@ function connectVersionEventStream(): void {
       }
     };
   } catch {
-    // Fallback polling continues seamlessly
+    sseDisabled = true;
   }
 }
 

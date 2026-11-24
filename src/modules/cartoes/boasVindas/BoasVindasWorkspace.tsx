@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { logActivity } from '../../../core/audit/activityLogger';
 import {
   Calendar,
   Download,
@@ -419,6 +420,11 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      void logActivity({
+        module: 'cartoes',
+        action: 'export_boas_vindas_pdf',
+        summary: `Exportou PDF de cartão de boas-vindas (${layout.effectiveCount}x)`,
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao gerar PDF.');
     } finally {
@@ -439,6 +445,11 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      void logActivity({
+        module: 'cartoes',
+        action: 'export_boas_vindas_png',
+        summary: `Exportou PNG de cartão de boas-vindas (${layout.effectiveCount}x)`,
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao gerar PNG.');
     } finally {

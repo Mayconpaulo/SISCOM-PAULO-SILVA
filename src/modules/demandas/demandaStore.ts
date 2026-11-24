@@ -11,6 +11,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { OperationType, db, handleFirestoreError } from '../../core/auth/firebase';
+import { logActivity } from '../../core/audit/activityLogger';
 import {
   CreateDemandaInput,
   DemandaItem,
@@ -130,6 +131,12 @@ export async function createDemanda(
 
   try {
     await setDoc(doc(db, 'users', userId, 'demandas', id), payload);
+    void logActivity({
+      module: 'demandas',
+      action: 'create_demanda',
+      summary: `Criou demanda: ${title}`,
+      detail: `Prazo: ${payload.dueDate}`,
+    });
     return id;
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `users/${userId}/demandas/${id}`);
@@ -190,6 +197,11 @@ export async function toggleDemandaStatus(
     status: nextStatus,
     completedAt: nextStatus === 'concluida' ? new Date().toISOString() : '',
   });
+  void logActivity({
+    module: 'demandas',
+    action: nextStatus === 'concluida' ? 'complete_demanda' : 'reopen_demanda',
+    summary: `${nextStatus === 'concluida' ? 'Concluiu' : 'Reabriu'} demanda: ${item.title}`,
+  });
 }
 
 export async function postponeDemanda(
@@ -207,11 +219,22 @@ export async function postponeDemanda(
     status: 'pendente',
     completedAt: '',
   });
+  void logActivity({
+    module: 'demandas',
+    action: 'postpone_demanda',
+    summary: `Adiou demanda: ${item.title}`,
+    detail: `Novo prazo: ${nextDate}`,
+  });
 }
 
 export async function deleteDemanda(userId: string, demandaId: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'users', userId, 'demandas', demandaId));
+    void logActivity({
+      module: 'demandas',
+      action: 'delete_demanda',
+      summary: 'Excluiu uma demanda',
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `users/${userId}/demandas/${demandaId}`);
   }
