@@ -25,14 +25,14 @@ import {
   parseRemindersJson,
 } from './agendaTypes';
 
-import firebaseConfig from '../../../firebase-applet-config.json';
+import workspaceOAuthConfig from '../../../firebase-workspace-oauth-config.json';
 
 /**
  * Isolated OAuth app for Google Calendar, Contacts, and Drive integration.
  * Runs alongside (never replacing) SISCOM's primary Firebase Auth session
  * so military users signed in with @siscom.app credentials remain signed in.
  * Uses optional VITE_GOOGLE_CALENDAR_FIREBASE_* environment variables when configured,
- * falling back to the app's managed firebase-applet-config.json.
+ * falling back to firebase-workspace-oauth-config.json provisioned via Google Workspace OAuth.
  */
 function resolveGoogleCalendarOAuthConfig() {
   const envApiKey = (import.meta.env.VITE_GOOGLE_CALENDAR_FIREBASE_API_KEY || '').trim();
@@ -58,12 +58,12 @@ function resolveGoogleCalendarOAuthConfig() {
   }
 
   return {
-    projectId: firebaseConfig.projectId,
-    appId: firebaseConfig.appId,
-    apiKey: firebaseConfig.apiKey,
-    authDomain: firebaseConfig.authDomain,
-    storageBucket: firebaseConfig.storageBucket,
-    messagingSenderId: firebaseConfig.messagingSenderId,
+    projectId: workspaceOAuthConfig.projectId,
+    appId: workspaceOAuthConfig.appId,
+    apiKey: workspaceOAuthConfig.apiKey,
+    authDomain: workspaceOAuthConfig.authDomain,
+    storageBucket: workspaceOAuthConfig.storageBucket,
+    messagingSenderId: workspaceOAuthConfig.messagingSenderId,
   };
 }
 
