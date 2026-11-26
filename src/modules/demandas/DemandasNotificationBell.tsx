@@ -12,7 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useDemandas } from './DemandasContext';
-import { SISCOM_EASE } from '../../shared/motion';
+import { SPRING_GENTLE } from '../../shared/motion';
 
 export const DemandasNotificationBell: React.FC = () => {
   const {
@@ -110,9 +110,9 @@ export const DemandasNotificationBell: React.FC = () => {
         aria-label="Notificações"
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="relative siscom-btn siscom-btn-secondary !min-h-[40px] sm:!min-h-[36px] !w-[40px] sm:!w-[36px] !px-0 text-[#CFDAD3] hover:text-[#F4E6C4] shrink-0"
+        className="relative siscom-btn siscom-btn-secondary !min-h-[40px] sm:!min-h-[38px] !w-[40px] sm:!w-[38px] !px-0 text-[#CFDAD3] hover:text-[#F4E6C4] shrink-0"
       >
-        <Bell className="w-4 h-4 text-[#DFBC75]" aria-hidden="true" />
+        <Bell className="w-4 h-4 text-[#E5C17B]" aria-hidden="true" />
         {hasNotificationDot && (
           <span
             aria-label="Há notificações pendentes"
@@ -126,11 +126,11 @@ export const DemandasNotificationBell: React.FC = () => {
           <motion.div
             role="dialog"
             aria-label="Central de Notificações"
-            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={{ duration: 0.16, ease: SISCOM_EASE }}
-            className="siscom-liquid-panel fixed sm:absolute right-3 sm:right-0 top-[60px] sm:top-auto sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-[356px] max-w-[356px] rounded-2xl overflow-hidden z-50"
+            exit={{ opacity: 0, y: 5, scale: 0.97 }}
+            transition={SPRING_GENTLE}
+            className="siscom-liquid-panel fixed sm:absolute right-3 sm:right-0 top-[62px] sm:top-auto sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-[360px] max-w-[360px] rounded-2xl overflow-hidden z-50"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-white/[0.09] flex items-center justify-between gap-2">

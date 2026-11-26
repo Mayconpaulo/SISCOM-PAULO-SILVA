@@ -339,21 +339,21 @@ function WorkspaceShell() {
         />
       )}
 
-      {/* Liquid Glass Top Bar (Module Views) */}
+      {/* Modern Glass Top Bar (Module Views) */}
       {activeScreen !== 'home' && (
-        <header className="no-print siscom-liquid-bar sticky top-0 z-30 h-14 shrink-0 px-3.5 sm:px-6 border-b border-white/[0.11] grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <header className="no-print siscom-liquid-bar sticky top-0 z-30 h-14 sm:h-[58px] shrink-0 px-3.5 sm:px-6 border-b border-white/[0.09] grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <motion.div
             initial={{ opacity: 0, x: -6 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2, delay: 0.04, ease: SISCOM_EASE }}
+            transition={{ duration: 0.2, delay: 0.03, ease: SISCOM_EASE }}
             className="flex items-center justify-start"
           >
             <button
               type="button"
               onClick={navigateBackToHome}
-              className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs sm:text-sm !border-[#C9A961]/28 hover:!border-[#C9A961]/55"
+              className="group siscom-btn siscom-btn-secondary !min-h-[40px] sm:!min-h-[38px] !px-3 sm:!px-3.5 text-xs sm:text-sm !border-[#C9A961]/26 hover:!border-[#E5C17B]/52"
             >
-              <ArrowLeft className="w-4 h-4 text-[#C9A961] shrink-0" />
+              <ArrowLeft className="w-4 h-4 text-[#DFBC75] shrink-0 transition-transform duration-150 group-hover:-translate-x-0.5" />
               <span>Voltar</span>
             </button>
           </motion.div>
@@ -362,14 +362,14 @@ function WorkspaceShell() {
             <motion.div
               layoutId={`module-icon-${activeScreen}`}
               transition={MODULE_LOCKUP_TRANSITION}
-              className="w-8 h-8 shrink-0 rounded-[9px] bg-[#0E1813]/65 backdrop-blur-md border border-[#C9A961]/38 flex items-center justify-center text-[#DFBC75] shadow-[inset_0_1px_0.5px_rgba(255,250,236,0.22)]"
+              className="siscom-icon-vessel w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl flex items-center justify-center text-[#E7C580]"
             >
-              {renderScreenIcon(activeScreen, 'w-4 h-4 sm:w-[18px] sm:h-[18px]')}
+              {renderScreenIcon(activeScreen, 'w-4 h-4 sm:w-[19px] sm:h-[19px]')}
             </motion.div>
             <motion.h1
               layoutId={`module-title-${activeScreen}`}
               transition={MODULE_LOCKUP_TRANSITION}
-              className="font-display text-sm sm:text-base font-semibold tracking-wide text-[#F4E6C4] truncate whitespace-nowrap drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
+              className="font-display text-sm sm:text-base font-bold tracking-[-0.015em] text-[#F6EAD0] truncate whitespace-nowrap drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
             >
               {getScreenTitle(activeScreen)}
             </motion.h1>

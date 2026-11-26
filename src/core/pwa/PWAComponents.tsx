@@ -35,8 +35,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ compact = fa
         type="button"
         onClick={handleClick}
         title="Instalar SISCOM como aplicativo"
-        className={`siscom-btn siscom-btn-secondary !min-h-[38px] text-xs shrink-0 ${
-          compact ? '!px-3' : 'w-full !px-3.5'
+        className={`siscom-btn siscom-btn-secondary !min-h-[40px] sm:!min-h-[38px] text-xs shrink-0 ${
+          compact ? '!px-2.5 sm:!px-3' : 'w-full !px-3.5'
         }`}
       >
         {isIOS ? (

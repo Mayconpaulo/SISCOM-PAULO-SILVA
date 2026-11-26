@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ActiveScreen } from '../registry';
-import { SISCOM_EASE } from '../../shared/motion';
+import { SISCOM_EASE, SPRING_EXPRESSIVE, SPRING_SNAPPY } from '../../shared/motion';
 import { SiscomSpinner } from '../../shared/ui';
 import { useDemandas } from './DemandasContext';
 import {
@@ -248,11 +248,11 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
             ref={popoverRef}
             role="dialog"
             aria-label="Anotar demanda rápida"
-            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+            initial={{ opacity: 0, y: 14, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{ duration: 0.18, ease: SISCOM_EASE }}
-            className="mb-3 w-[calc(100vw-2rem)] sm:w-[368px] metal-elevated rounded-[16px] overflow-hidden"
+            exit={{ opacity: 0, y: 10, scale: 0.96 }}
+            transition={SPRING_SNAPPY}
+            className="mb-3 w-[calc(100vw-2rem)] sm:w-[372px] metal-elevated rounded-2xl overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-white/[0.1] bg-white/[0.04]">
@@ -467,15 +467,14 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
                 type="button"
                 role="menuitem"
                 onClick={item.onClick}
-                initial={{ opacity: 0, y: 10, scale: 0.94 }}
+                initial={{ opacity: 0, y: 12, scale: 0.92 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.94 }}
+                exit={{ opacity: 0, y: 8, scale: 0.94 }}
                 transition={{
-                  duration: 0.16,
-                  delay: (speedDialItems.length - 1 - index) * 0.03,
-                  ease: SISCOM_EASE,
+                  ...SPRING_EXPRESSIVE,
+                  delay: (speedDialItems.length - 1 - index) * 0.032,
                 }}
-                className="min-h-[44px] pl-3.5 pr-2 py-1.5 rounded-full bg-[#0E1612]/94 backdrop-blur-xl border border-[#C9A961]/42 active:border-[#E5C17B] active:scale-[0.97] shadow-[inset_0_1px_0.5px_rgba(255,250,236,0.22),0_12px_28px_rgba(0,0,0,0.72)] flex items-center gap-2.5 text-xs font-semibold text-[#E8E4D8] whitespace-nowrap cursor-pointer transition-colors"
+                className="min-h-[44px] pl-4 pr-2 py-1.5 rounded-full bg-[#0D1511]/95 backdrop-blur-xl border border-[#C9A961]/42 active:border-[#E7C580] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,250,236,0.22),0_14px_30px_rgba(0,0,0,0.74)] flex items-center gap-2.5 text-xs font-semibold text-[#EDF2EE] whitespace-nowrap cursor-pointer transition-colors"
               >
                 <span>{item.label}</span>
                 <span className="w-8 h-8 rounded-full bg-[#182720] border border-[#C9A961]/35 flex items-center justify-center shrink-0">

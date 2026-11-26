@@ -3,6 +3,11 @@ export interface PrismaData {
   funcao: string;
 }
 
+export interface PrismaFontSettings {
+  nomePt: number;
+  funcaoPt: number;
+}
+
 export const A4_WIDTH_MM = 210;
 export const A4_HEIGHT_MM = 297;
 export const PRISMA_WIDTH_MM = 153.75;
@@ -35,7 +40,42 @@ export const TEXT_SAFE_WIDTH_MM = TEXT_RIGHT_LIMIT_MM - TEXT_LEFT_LIMIT_MM; // 8
 export const TEXT_CENTER_X_MM = (TEXT_LEFT_LIMIT_MM + TEXT_RIGHT_LIMIT_MM) / 2; // 76.875mm
 
 export const STANDARD_FONT_PT = 20;
+export const MIN_CUSTOM_FONT_PT = 8;
+export const MAX_CUSTOM_FONT_PT = 40;
 const MIN_FONT_PT = 3.5;
+
+export const DEFAULT_PRISMA_FONT_SETTINGS: PrismaFontSettings = {
+  nomePt: STANDARD_FONT_PT,
+  funcaoPt: STANDARD_FONT_PT,
+};
+
+export function clampPrismaFontPt(value: number): number {
+  if (!Number.isFinite(value)) return STANDARD_FONT_PT;
+  const clamped = Math.min(MAX_CUSTOM_FONT_PT, Math.max(MIN_CUSTOM_FONT_PT, value));
+  return Math.round(clamped * 2) / 2;
+}
+
+export function computePrismaLineOffsetsMm(
+  nomePt: number,
+  funcaoPt: number
+): { nomeOffsetMm: number; funcaoOffsetMm: number } {
+  const nomeMm = (nomePt * 25.4) / 72;
+  const funcaoMm = (funcaoPt * 25.4) / 72;
+  const avgMm = (nomeMm + funcaoMm) / 2;
+  // Matches exact 4.2mm offset at 20pt / 20pt while scaling proportionally without overlap
+  const gapMm = avgMm * 0.1905;
+  const rawNomeOffset = -(funcaoMm + gapMm) / 2;
+  const rawFuncaoOffset = (nomeMm + gapMm) / 2;
+  const maxHalfMm = FACE_HEIGHT_MM / 2 - 4.0;
+  const topEdge = Math.abs(rawNomeOffset) + nomeMm / 2;
+  const botEdge = Math.abs(rawFuncaoOffset) + funcaoMm / 2;
+  const maxEdge = Math.max(topEdge, botEdge);
+  const scale = maxEdge > maxHalfMm && maxEdge > 0 ? maxHalfMm / maxEdge : 1;
+  return {
+    nomeOffsetMm: rawNomeOffset * scale,
+    funcaoOffsetMm: rawFuncaoOffset * scale,
+  };
+}
 
 export function getPrismaTopPositionsMm(count: 1 | 2): number[] {
   if (count === 1) {
@@ -67,22 +107,27 @@ function measureTextSafeWidthPx(ctx: CanvasRenderingContext2D, text: string): nu
 }
 
 /**
- * Keeps font size strictly equal to STANDARD_FONT_PT (20pt) unless the text
+ * Keeps font size strictly equal to targetFontPt (default 20pt) unless the text
  * would encroach on the safe area between the two crests. Only then does it shrink.
  */
-export function computeFittedFontPt(text: string, weight: '400' | '700'): number {
+export function computeFittedFontPt(
+  text: string,
+  weight: '400' | '700',
+  targetFontPt: number = STANDARD_FONT_PT
+): number {
+  const startPt = clampPrismaFontPt(targetFontPt);
   const clean = text.trim();
-  if (!clean) return STANDARD_FONT_PT;
+  if (!clean) return startPt;
 
   const ctx = getMeasureContext();
-  if (!ctx) return STANDARD_FONT_PT;
+  if (!ctx) return startPt;
 
   // Measure in px at 96 DPI with 97% safety margin against browser subpixel kerning
   const mmToPx = 96 / 25.4;
   const ptToPx = 96 / 72;
   const maxWidthPx = TEXT_SAFE_WIDTH_MM * 0.97 * mmToPx;
 
-  let sizePt = STANDARD_FONT_PT;
+  let sizePt = startPt;
   while (sizePt > MIN_FONT_PT) {
     ctx.font = `${weight} ${sizePt * ptToPx}px "Open Sans", Arial, sans-serif`;
     if (measureTextSafeWidthPx(ctx, clean) <= maxWidthPx) {
@@ -115,7 +160,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export async function renderA4PrismaCanvas(
   count: 1 | 2,
   prismas: [PrismaData, PrismaData],
-  uppercase: boolean
+  uppercase: boolean,
+  fontSettings: PrismaFontSettings = DEFAULT_PRISMA_FONT_SETTINGS
 ): Promise<HTMLCanvasElement> {
   if (typeof document !== 'undefined' && document.fonts) {
     await document.fonts.ready;
@@ -173,8 +219,9 @@ export async function renderA4PrismaCanvas(
     const nome = uppercase ? rawNome.toUpperCase() : rawNome;
     const funcao = uppercase ? rawFuncao.toUpperCase() : rawFuncao;
 
-    const nomePt = computeFittedFontPt(nome, '700');
-    const funcaoPt = computeFittedFontPt(funcao, '400');
+    const nomePt = computeFittedFontPt(nome, '700', fontSettings.nomePt);
+    const funcaoPt = computeFittedFontPt(funcao, '400', fontSettings.funcaoPt);
+    const { nomeOffsetMm, funcaoOffsetMm } = computePrismaLineOffsetsMm(nomePt, funcaoPt);
 
     const nomePx = ptToPx(nomePt);
     const funcaoPx = ptToPx(funcaoPt);
@@ -216,13 +263,14 @@ export async function renderA4PrismaCanvas(
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const lineOffset = mmToPx(4.2);
+      const nomeOffsetPx = mmToPx(nomeOffsetMm);
+      const funcaoOffsetPx = mmToPx(funcaoOffsetMm);
       if (nome && funcao) {
         ctx.font = `700 ${nomePx}px "Open Sans", Arial, sans-serif`;
-        ctx.fillText(nome, 0, -lineOffset);
+        ctx.fillText(nome, 0, nomeOffsetPx);
 
         ctx.font = `400 ${funcaoPx}px "Open Sans", Arial, sans-serif`;
-        ctx.fillText(funcao, 0, lineOffset);
+        ctx.fillText(funcao, 0, funcaoOffsetPx);
       } else if (nome) {
         ctx.font = `700 ${nomePx}px "Open Sans", Arial, sans-serif`;
         ctx.fillText(nome, 0, 0);
@@ -264,9 +312,10 @@ function base64ToBytes(base64: string): Uint8Array {
 export async function generateA4PdfBlob(
   count: 1 | 2,
   prismas: [PrismaData, PrismaData],
-  uppercase: boolean
+  uppercase: boolean,
+  fontSettings: PrismaFontSettings = DEFAULT_PRISMA_FONT_SETTINGS
 ): Promise<Blob> {
-  const canvas = await renderA4PrismaCanvas(count, prismas, uppercase);
+  const canvas = await renderA4PrismaCanvas(count, prismas, uppercase, fontSettings);
   const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.96);
   const jpegBytes = base64ToBytes(jpegDataUrl.split(',')[1]);
 
@@ -323,9 +372,10 @@ export async function generateA4PdfBlob(
 export async function generateA4PngBlob(
   count: 1 | 2,
   prismas: [PrismaData, PrismaData],
-  uppercase: boolean
+  uppercase: boolean,
+  fontSettings: PrismaFontSettings = DEFAULT_PRISMA_FONT_SETTINGS
 ): Promise<Blob> {
-  const canvas = await renderA4PrismaCanvas(count, prismas, uppercase);
+  const canvas = await renderA4PrismaCanvas(count, prismas, uppercase, fontSettings);
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);

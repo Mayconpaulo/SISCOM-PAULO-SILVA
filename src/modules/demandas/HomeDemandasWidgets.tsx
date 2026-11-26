@@ -9,7 +9,7 @@ import {
   Clock,
   Plus,
 } from 'lucide-react';
-import { SISCOM_EASE } from '../../shared/motion';
+import { SISCOM_EASE, SPRING_SNAPPY } from '../../shared/motion';
 import { useDemandas } from './DemandasContext';
 import {
   formatDemandaCountdown,
@@ -148,17 +148,17 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.1, ease: SISCOM_EASE }}
-      className={`w-full rounded-xl transition-colors ${
+      className={`w-full rounded-2xl transition-colors ${
         compact
-          ? 'siscom-home-panel px-4 py-3.5'
-          : 'metal-surface border border-[#C29B56]/22 px-4 py-3.5'
-      } flex flex-col justify-between gap-2.5 ${className}`}
+          ? 'siscom-home-panel px-4 sm:px-5 py-4'
+          : 'metal-surface border border-[#C29B56]/22 px-4 sm:px-5 py-4'
+      } flex flex-col justify-between gap-3 ${className}`}
     >
       <div>
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.08]">
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <h2 className="text-xs font-semibold text-[#E8E4D8] tracking-wide whitespace-nowrap">
+            <h2 className="font-display text-[13px] font-semibold text-[#EEF3F0] tracking-[-0.01em] whitespace-nowrap">
               Demandas
             </h2>
             {!loading && summaryParts.length > 0 && !compact && (
@@ -175,12 +175,12 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setQuickAddOpen(true)}
               title="Nova demanda rápida"
-              className="inline-flex items-center gap-1 min-h-[28px] px-2 rounded-md text-[11px] font-medium text-[#9DD1B3] hover:text-[#D6EEE0] bg-[#2D5A43]/25 hover:bg-[#2D5A43]/45 transition-colors cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-1 min-h-[30px] px-2.5 rounded-lg text-[11px] font-medium text-[#A6DBC0] hover:text-[#E2F6EB] bg-[#2D5A43]/30 hover:bg-[#2D5A43]/52 border border-[#4E8C6B]/28 transition-colors cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3 h-3" aria-hidden="true" />
               <span>Nova</span>
@@ -189,17 +189,20 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
-              className="inline-flex items-center gap-1 min-h-[28px] px-1 text-xs font-medium text-[#DFBC75] hover:text-[#F4E6C4] transition-colors cursor-pointer whitespace-nowrap"
+              className="group inline-flex items-center gap-1 min-h-[30px] px-2 -mr-1 rounded-lg text-xs font-medium text-[#E7C580] hover:text-[#FAF0D7] hover:bg-white/[0.05] transition-colors cursor-pointer whitespace-nowrap"
             >
               <span>Gerenciar</span>
-              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              <ArrowRight
+                className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+                aria-hidden="true"
+              />
             </button>
           </div>
         </div>
 
         {/* Compact summary line when in rail mode */}
         {compact && !loading && summaryParts.length > 0 && (
-          <div className="pt-2 text-[11px] tabular-nums flex items-center gap-1.5 flex-wrap">
+          <div className="pt-2.5 text-[11px] font-mono tabular-nums flex items-center gap-1.5 flex-wrap">
             {summaryParts.map((part, idx) => (
               <React.Fragment key={part.text}>
                 {idx > 0 && (
@@ -214,28 +217,36 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
         )}
 
         {/* Mode Switcher + Notification Toggle */}
-        <div className="flex items-center justify-between gap-2 pt-2 pb-1.5 text-[11px]">
-          <div className="inline-flex items-center rounded-[7px] bg-[#080C0A] border border-white/[0.07] p-0.5">
+        <div className="flex items-center justify-between gap-2 pt-2.5 pb-1.5 text-[11px]">
+          <div className="inline-flex items-center rounded-[9px] bg-[#070B09]/85 border border-white/[0.08] p-0.5">
             {(
               [
                 { id: 'completo', label: 'Completo' },
                 { id: 'lista', label: 'Lista' },
                 { id: 'foco', label: 'Foco' },
               ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleModeChange(tab.id)}
-                className={`px-2 py-0.5 rounded-[5px] text-[11px] font-medium transition-colors cursor-pointer ${
-                  mode === tab.id
-                    ? 'bg-[#1B2922] text-[#F4E6C4]'
-                    : 'text-[#B8B3A6] hover:text-[#E8E4D8]'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            ).map((tab) => {
+              const active = mode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleModeChange(tab.id)}
+                  className={`relative px-2.5 py-1 rounded-[7px] text-[11px] font-medium transition-colors cursor-pointer ${
+                    active ? 'text-[#FAF3E3]' : 'text-[#A6B3AC] hover:text-[#EDF2EE]'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="home-demandas-mode"
+                      transition={SPRING_SNAPPY}
+                      className="absolute inset-0 rounded-[7px] bg-[#1F342A] border border-[#8AC0A3]/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
+                    />
+                  )}
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {notificationPermission === 'default' ? (

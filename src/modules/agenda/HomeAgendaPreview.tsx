@@ -162,19 +162,19 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
-      className={`w-full rounded-xl transition-colors ${
+      className={`w-full rounded-2xl transition-colors ${
         compact
-          ? 'siscom-home-panel px-4 py-3.5'
-          : 'metal-surface border border-[#C29B56]/22 px-4 py-3.5'
+          ? 'siscom-home-panel px-4 sm:px-5 py-4'
+          : 'metal-surface border border-[#C29B56]/22 px-4 sm:px-5 py-4'
       } flex flex-col justify-between ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.08]">
+      <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
         <div className="flex items-baseline gap-1.5 min-w-0">
-          <h2 className="text-xs font-semibold text-[#E8E4D8] tracking-wide whitespace-nowrap">
+          <h2 className="font-display text-[13px] font-semibold text-[#EEF3F0] tracking-[-0.01em] whitespace-nowrap">
             {headerTitle}
           </h2>
           {preview.mode === 'today' && (
-            <span className="text-[11px] text-[#9AA8A0] tabular-nums whitespace-nowrap">
+            <span className="text-[11px] font-mono text-[#9AA8A0] tabular-nums whitespace-nowrap">
               <span aria-hidden="true">· </span>
               {preview.todayLabel}
             </span>
@@ -184,18 +184,21 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         <button
           type="button"
           onClick={onOpenAgenda}
-          className="inline-flex items-center gap-1 min-h-[28px] px-1.5 text-xs font-medium text-[#DFBC75] hover:text-[#F4E6C4] transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 rounded"
+          className="group inline-flex items-center gap-1 min-h-[32px] px-2 -mr-1 text-xs font-medium text-[#E7C580] hover:text-[#FAF0D7] hover:bg-white/[0.05] transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 rounded-lg"
         >
           <span>Acessar agenda</span>
-          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          <ArrowRight
+            className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+            aria-hidden="true"
+          />
         </button>
       </div>
 
-      <div className="pt-2">
+      <div className="pt-2.5">
         {loading ? (
           <div className="space-y-2 py-0.5" aria-busy="true" aria-label="Carregando prévia da agenda">
-            <div className="h-3.5 w-3/4 rounded bg-white/[0.06]" />
-            <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
+            <div className="h-3.5 w-3/4 rounded-md bg-white/[0.06] animate-pulse" />
+            <div className="h-3 w-1/2 rounded-md bg-white/[0.04] animate-pulse" />
           </div>
         ) : hasError ? (
           <p className="text-xs text-[#B8B3A6]">

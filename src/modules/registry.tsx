@@ -20,20 +20,27 @@ function PrismaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
       <path
-        d="M12 44L22 18H52L42 44H12Z"
+        d="M12 45L22 18H52L42 45H12Z"
+        fill="currentColor"
+        fillOpacity="0.12"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.1"
         strokeLinejoin="round"
       />
       <path
-        d="M12 44H42L52 44L47 29"
+        d="M42 45L52 45L47.5 30"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.58"
+      />
+      <path
+        d="M25 28.5H41M22.5 35.5H36.5"
         stroke="currentColor"
         strokeWidth="2.2"
         strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.55"
       />
-      <path d="M25 28H41M23 34H37" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -41,15 +48,41 @@ function PrismaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
 function CrachaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <path
-        d="M27 10H37V17H27V10Z"
+      <rect
+        x="14"
+        y="17"
+        width="36"
+        height="37"
+        rx="5"
+        fill="currentColor"
+        fillOpacity="0.1"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.1"
+      />
+      <path
+        d="M26.5 10.5H37.5V17H26.5V10.5Z"
+        fill="currentColor"
+        fillOpacity="0.18"
+        stroke="currentColor"
+        strokeWidth="2.1"
         strokeLinejoin="round"
       />
-      <rect x="14" y="17" width="36" height="37" rx="4" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M14 27H50M14 44H50" stroke="currentColor" strokeWidth="2" opacity="0.7" />
-      <circle cx="32" cy="35.5" r="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M14 26.5H50" stroke="currentColor" strokeWidth="1.9" opacity="0.65" />
+      <circle
+        cx="32"
+        cy="36"
+        r="4.5"
+        fill="currentColor"
+        fillOpacity="0.18"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M23.5 47.5C25.2 44.6 28.3 43.2 32 43.2C35.7 43.2 38.8 44.6 40.5 47.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -57,12 +90,27 @@ function CrachaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
 function AlteracaoSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <rect x="15" y="10" width="34" height="44" rx="3" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M15 22H49M32 10V22" stroke="currentColor" strokeWidth="2" opacity="0.75" />
-      <path
-        d="M21 30H43M21 37H43M21 44H35"
+      <rect
+        x="15"
+        y="10"
+        width="34"
+        height="44"
+        rx="4"
+        fill="currentColor"
+        fillOpacity="0.1"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.1"
+      />
+      <path
+        d="M15 21.5H49V14C49 11.7909 47.2091 10 45 10H19C16.7909 10 15 11.7909 15 14V21.5Z"
+        fill="currentColor"
+        fillOpacity="0.14"
+      />
+      <path d="M15 21.5H49M32 10V21.5" stroke="currentColor" strokeWidth="1.9" opacity="0.7" />
+      <path
+        d="M22 30H42M22 37.5H42M22 45H34"
+        stroke="currentColor"
+        strokeWidth="2.1"
         strokeLinecap="round"
       />
     </svg>
@@ -73,17 +121,19 @@ function DocumentosSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
       <path
-        d="M10 20C10 17.7909 11.7909 16 14 16H25L30 21H50C52.2091 21 54 22.7909 54 25V46C54 48.2091 52.2091 50 50 50H14C11.7909 50 10 48.2091 10 46V20Z"
+        d="M10 20C10 17.7909 11.7909 16 14 16H24.8L29.8 21H50C52.2091 21 54 22.7909 54 25V46C54 48.2091 52.2091 50 50 50H14C11.7909 50 10 48.2091 10 46V20Z"
+        fill="currentColor"
+        fillOpacity="0.11"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.1"
         strokeLinejoin="round"
       />
       <path
-        d="M18 32H46M18 39H36"
+        d="M18.5 32.5H45.5M18.5 39.5H35.5"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.1"
         strokeLinecap="round"
-        opacity="0.75"
+        opacity="0.82"
       />
     </svg>
   );
@@ -92,19 +142,29 @@ function DocumentosSymbol({ className = 'w-14 h-14' }: { className?: string }) {
 function CartoesSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <rect x="10" y="15" width="44" height="34" rx="3" stroke="currentColor" strokeWidth="2.2" />
       <rect
-        x="14.5"
-        y="19.5"
-        width="35"
-        height="25"
-        rx="1.5"
+        x="10"
+        y="15"
+        width="44"
+        height="34"
+        rx="4.5"
+        fill="currentColor"
+        fillOpacity="0.1"
         stroke="currentColor"
-        strokeWidth="1.6"
-        opacity="0.65"
+        strokeWidth="2.1"
+      />
+      <rect
+        x="15"
+        y="20"
+        width="34"
+        height="24"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        opacity="0.58"
       />
       <path
-        d="M22 27H42M20 33H44M26 39H38"
+        d="M22.5 27.5H41.5M20.5 33.5H43.5M26.5 39.5H37.5"
         stroke="currentColor"
         strokeWidth="2.1"
         strokeLinecap="round"
@@ -116,10 +176,21 @@ function CartoesSymbol({ className = 'w-14 h-14' }: { className?: string }) {
 function RelatorioSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <rect x="14" y="10" width="36" height="44" rx="3" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M14 21H50M25 21V54" stroke="currentColor" strokeWidth="1.8" opacity="0.7" />
+      <rect
+        x="14"
+        y="10"
+        width="36"
+        height="44"
+        rx="4"
+        fill="currentColor"
+        fillOpacity="0.1"
+        stroke="currentColor"
+        strokeWidth="2.1"
+      />
+      <rect x="14" y="21" width="11" height="33" fill="currentColor" fillOpacity="0.1" />
+      <path d="M14 21H50M25 21V54" stroke="currentColor" strokeWidth="1.8" opacity="0.68" />
       <path
-        d="M30 29H44M30 37H44M30 45H40"
+        d="M30.5 29.5H44M30.5 37H44M30.5 44.5H39.5"
         stroke="currentColor"
         strokeWidth="2.1"
         strokeLinecap="round"
@@ -131,13 +202,38 @@ function RelatorioSymbol({ className = 'w-14 h-14' }: { className?: string }) {
 function AgendaSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
-      <rect x="11" y="15" width="42" height="38" rx="4" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M22 10V19M42 10V19" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M11 26H53" stroke="currentColor" strokeWidth="2" opacity="0.75" />
-      <rect x="19" y="32" width="7" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" />
-      <rect x="29" y="32" width="7" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" opacity="0.75" />
-      <rect x="39" y="32" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.8" opacity="0.75" />
-      <path d="M19 44H35" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
+      <rect
+        x="11"
+        y="15"
+        width="42"
+        height="38"
+        rx="5"
+        fill="currentColor"
+        fillOpacity="0.1"
+        stroke="currentColor"
+        strokeWidth="2.1"
+      />
+      <path
+        d="M11 26H53V20C53 17.2386 50.7614 15 48 15H16C13.2386 15 11 17.2386 11 20V26Z"
+        fill="currentColor"
+        fillOpacity="0.14"
+      />
+      <path d="M22 10.5V19M42 10.5V19" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M11 26H53" stroke="currentColor" strokeWidth="1.9" opacity="0.72" />
+      <rect
+        x="19"
+        y="32"
+        width="7"
+        height="6"
+        rx="1.5"
+        fill="currentColor"
+        fillOpacity="0.28"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <rect x="29" y="32" width="7" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.7" opacity="0.75" />
+      <rect x="39" y="32" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.7" opacity="0.75" />
+      <path d="M19 44.5H35" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
     </svg>
   );
 }
@@ -146,24 +242,26 @@ function ArquivoSymbol({ className = 'w-14 h-14' }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
       <path
-        d="M10 19C10 16.7909 11.7909 15 14 15H25L30 20H50C52.2091 20 54 21.7909 54 24V46C54 48.2091 52.2091 50 50 50H14C11.7909 50 10 48.2091 10 46V19Z"
+        d="M10 19C10 16.7909 11.7909 15 14 15H24.8L29.8 20H50C52.2091 20 54 21.7909 54 24V46C54 48.2091 52.2091 50 50 50H14C11.7909 50 10 48.2091 10 46V19Z"
+        fill="currentColor"
+        fillOpacity="0.11"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.1"
         strokeLinejoin="round"
       />
       <path
-        d="M32 42V29M32 29L26.5 34.5M32 29L37.5 34.5"
+        d="M32 41.5V28.5M32 28.5L26.5 34M32 28.5L37.5 34"
         stroke="currentColor"
         strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M22 44H42"
+        d="M22.5 44.5H41.5"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
-        opacity="0.7"
+        opacity="0.72"
       />
     </svg>
   );

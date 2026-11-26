@@ -270,12 +270,12 @@ export function LoginScreen({
   return (
     <div className="min-h-screen bg-[#080B09] text-[#E4EAE6] flex flex-col items-center justify-center px-4 py-8 relative">
       <OperationalBackdrop mode="auth" />
-      <div className="relative z-10 w-full max-w-[400px] flex flex-col items-center space-y-6">
+      <div className="relative z-10 w-full max-w-[408px] flex flex-col items-center space-y-6">
         <div className="flex flex-col items-center text-center space-y-2.5">
           <motion.div
             layoutId="siscom-crest"
             transition={CREST_LAYOUT_TRANSITION}
-            className="w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center"
+            className="w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center drop-shadow-[0_12px_28px_rgba(0,0,0,0.55)]"
           >
             <img
               src="/assets/logo_arma_comunicacoes.png"
@@ -287,24 +287,28 @@ export function LoginScreen({
           <motion.h1
             layoutId="siscom-wordmark"
             transition={CREST_LAYOUT_TRANSITION}
-            className="metallic-wordmark font-display text-2xl font-bold tracking-[0.22em] pl-[0.22em] uppercase"
+            className="metallic-wordmark font-display text-[26px] font-extrabold tracking-[0.22em] pl-[0.22em] uppercase"
           >
             SISCOM
           </motion.h1>
           <motion.div
             layoutId="siscom-divider"
             transition={CREST_LAYOUT_TRANSITION}
-            className="w-12 h-[1.5px] bg-gradient-to-r from-transparent via-[#C29B56]/75 to-transparent"
+            className="w-14 h-[1.5px] bg-gradient-to-r from-transparent via-[#D8B268]/80 to-transparent"
           />
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 12, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 6 }}
           transition={{ duration: 0.24, ease: SISCOM_EASE }}
-          className="w-full metal-surface rounded-2xl p-6 sm:p-7 space-y-4 overflow-hidden"
+          className="relative w-full metal-elevated rounded-2xl p-6 sm:p-7 space-y-4 overflow-hidden"
         >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#E7C580]/55 to-transparent"
+          />
           <AnimatePresence mode="wait">
             {unauthorizedReason && hasFirebaseUser ? (
               <motion.div
