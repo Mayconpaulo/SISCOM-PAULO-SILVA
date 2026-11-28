@@ -35,7 +35,17 @@ import {
   subscribeActivityLogs,
 } from '../../core/audit/activityLogger';
 import { FIREBASE_PROJECT_ID } from '../../core/auth/firebase';
-import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletWorkspaceDrawer,
+  WorkspaceSplitLayout,
+} from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../shared/TabletRibbonPrimitives';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 
 type AdminMainTab = 'contas' | 'historico';
@@ -122,6 +132,7 @@ export function AdminPanel() {
   const [filterAccount, setFilterAccount] = useState<string>('all');
   const [filterModule, setFilterModule] = useState<string>('all');
   const [historySearch, setHistorySearch] = useState<string>('');
+  const [tabletDrawer, setTabletDrawer] = useState<'own' | 'create' | null>(null);
 
   useEffect(() => {
     if (!account) return;
@@ -229,6 +240,7 @@ export function AdminPanel() {
       } else {
         setNotice('Dados de administrador atualizados.');
       }
+      setTabletDrawer(null);
     } catch (err) {
       if (isFirebaseAuthOperationNotAllowed(err)) {
         setNeedsEmailSetup(true);
@@ -264,6 +276,7 @@ export function AdminPanel() {
       setNewRole('user');
       setNewPerms(DEFAULT_NEW_USER_PERMS);
       setNotice(`Login criado: ${created.displayName} (entrar com "${warClean}" ou "${created.username}").`);
+      setTabletDrawer(null);
     } catch (err) {
       if (isFirebaseAuthOperationNotAllowed(err)) {
         setNeedsEmailSetup(true);
@@ -302,208 +315,273 @@ export function AdminPanel() {
     }
   };
 
+  const ownAdminFormContent = (
+    <form onSubmit={handleSaveOwnProfile} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="space-y-1.5">
+          <label htmlFor="admin-own-user" className="siscom-field-label !text-[11px]">
+            Usuário / Nome de guerra
+          </label>
+          <input
+            id="admin-own-user"
+            type="text"
+            value={ownUsername}
+            onChange={(e) => setOwnUsername(e.target.value)}
+            placeholder="admin"
+            className="siscom-input !min-h-[40px] text-xs"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="admin-own-name" className="siscom-field-label !text-[11px]">
+            Posto/graduação + Nome de guerra
+          </label>
+          <input
+            id="admin-own-name"
+            type="text"
+            value={ownDisplayName}
+            onChange={(e) => setOwnDisplayName(e.target.value)}
+            placeholder="ex: Sgt Paulo Silva"
+            className="siscom-input !min-h-[40px] text-xs"
+          />
+        </div>
+
+        {!isGoogleAdminSession && (
+          <div className="space-y-1.5">
+            <label htmlFor="admin-curr-pass" className="siscom-field-label !text-[11px]">
+              Senha atual (ao alterar login/senha)
+            </label>
+            <input
+              id="admin-curr-pass"
+              type="password"
+              value={ownCurrentPassword}
+              onChange={(e) => setOwnCurrentPassword(e.target.value)}
+              placeholder="••••••"
+              className="siscom-input !min-h-[40px] text-xs"
+            />
+          </div>
+        )}
+
+        <div className={`space-y-1.5 ${isGoogleAdminSession ? 'sm:col-span-2' : ''}`}>
+          <label htmlFor="admin-new-pass" className="siscom-field-label !text-[11px]">
+            {isGoogleAdminSession ? 'Definir senha (mín. 6 caracteres)' : 'Nova senha (opcional)'}
+          </label>
+          <input
+            id="admin-new-pass"
+            type="password"
+            value={ownNewPassword}
+            onChange={(e) => setOwnNewPassword(e.target.value)}
+            placeholder="••••••"
+            className="siscom-input !min-h-[40px] text-xs"
+          />
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={savingOwn}
+        className="siscom-btn siscom-btn-primary text-xs"
+      >
+        {savingOwn ? (
+          <SiscomSpinner className="w-3.5 h-3.5" />
+        ) : (
+          <Shield className="w-3.5 h-3.5" />
+        )}
+        <span>{savingOwn ? 'Salvando...' : 'Salvar login admin'}</span>
+      </button>
+    </form>
+  );
+
+  const createUserFormContent = (
+    <form onSubmit={handleCreateUser} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="space-y-1.5">
+          <label htmlFor="new-user-rank" className="siscom-field-label !text-[11px]">
+            1. Posto/graduação
+          </label>
+          <input
+            id="new-user-rank"
+            type="text"
+            required
+            value={newRank}
+            onChange={(e) => setNewRank(e.target.value)}
+            placeholder="ex: Sgt"
+            className="siscom-input !min-h-[40px] text-xs"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="new-user-warname" className="siscom-field-label !text-[11px]">
+            2. Nome de guerra
+          </label>
+          <input
+            id="new-user-warname"
+            type="text"
+            required
+            value={newWarName}
+            onChange={(e) => setNewWarName(e.target.value)}
+            placeholder="ex: Paulo Silva"
+            className="siscom-input !min-h-[40px] text-xs"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="new-user-pass" className="siscom-field-label !text-[11px]">
+            3. Senha
+          </label>
+          <input
+            id="new-user-pass"
+            type="password"
+            required
+            minLength={6}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="mín. 6 caracteres"
+            className="siscom-input !min-h-[40px] text-xs"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="new-user-role" className="siscom-field-label !text-[11px]">
+            4. Perfil
+          </label>
+          <select
+            id="new-user-role"
+            value={newRole}
+            onChange={(e) => setNewRole(e.target.value as 'user' | 'admin')}
+            className="siscom-input !min-h-[40px] text-xs"
+          >
+            <option value="user">Usuário</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-2 pt-0.5">
+        <span className="siscom-field-label !text-[11px]">Funções liberadas</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {ALL_MODULE_KEYS.map((mod) => {
+            const field = MODULE_PERM_FIELD[mod];
+            return (
+              <label
+                key={mod}
+                className="min-h-[34px] inline-flex items-center gap-2 text-xs text-[#E4EAE6] cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(newPerms[field])}
+                  onChange={(e) =>
+                    setNewPerms((prev) => ({ ...prev, [field]: e.target.checked }))
+                  }
+                  className="h-4 w-4 accent-[#2D5A43] cursor-pointer"
+                />
+                <span>{MODULE_LABELS[mod]}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={creatingUser}
+        className="siscom-btn siscom-btn-gold text-xs"
+      >
+        {creatingUser ? (
+          <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
+        ) : (
+          <UserPlus className="w-3.5 h-3.5" />
+        )}
+        <span>{creatingUser ? 'Criando...' : 'Criar login'}</span>
+      </button>
+    </form>
+  );
+
+  const activeTabletDrawer: TabletWorkspaceDrawer | null =
+    tabletDrawer === 'own'
+      ? {
+          title: isGoogleAdminSession ? 'Criar / Configurar Login Admin' : 'Meu Login Admin',
+          anchor: 'bottom',
+          onClose: () => setTabletDrawer(null),
+          content: ownAdminFormContent,
+        }
+      : tabletDrawer === 'create'
+        ? {
+            title: 'Criar Novo Login',
+            anchor: 'bottom',
+            onClose: () => setTabletDrawer(null),
+            content: createUserFormContent,
+          }
+        : null;
+
   return (
     <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[400px] xl:w-[435px]"
+      tabletSingleBarPosition="bottom"
+      tabletDrawer={activeTabletDrawer}
+      tabletBottomBar={
+        <TabletRibbonRow>
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              icon={<KeyRound className="w-4 h-4 text-[#E5C17B]" />}
+              variant={tabletDrawer === 'own' ? 'active' : 'default'}
+              chevron
+              open={tabletDrawer === 'own'}
+              onClick={() => setTabletDrawer((prev) => (prev === 'own' ? null : 'own'))}
+            >
+              {isGoogleAdminSession ? 'Login Admin' : 'Meu Login'}
+            </TabletRibbonButton>
+            <TabletRibbonButton
+              icon={<UserPlus className="w-4 h-4" />}
+              variant={tabletDrawer === 'create' ? 'active' : 'gold'}
+              chevron
+              open={tabletDrawer === 'create'}
+              onClick={() => setTabletDrawer((prev) => (prev === 'create' ? null : 'create'))}
+            >
+              Novo Login
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonSegment
+              ariaLabel="Seções do painel administrativo"
+              options={[
+                { value: 'contas', label: `Contas (${managedUsers.length})` },
+                { value: 'historico', label: `Histórico (${activityLogs.length})` },
+              ]}
+              value={activeTab}
+              onChange={(val) => setActiveTab(val as AdminMainTab)}
+            />
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
       sidebar={
         <div className="space-y-5">
           {/* Meu Login de Administrador */}
           <section className="metal-surface rounded-xl p-4 sm:p-5 space-y-4">
-          <div className="flex items-center gap-2 border-b border-white/8 pb-3">
-            <KeyRound className="w-4 h-4 text-[#E5C17B]" />
-            <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
-              {isGoogleAdminSession ? 'Criar / Configurar Login Admin' : 'Meu Login Admin'}
-            </h2>
-          </div>
-
-          <form onSubmit={handleSaveOwnProfile} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="space-y-1.5">
-                <label htmlFor="admin-own-user" className="siscom-field-label !text-[11px]">
-                  Usuário / Nome de guerra
-                </label>
-                <input
-                  id="admin-own-user"
-                  type="text"
-                  value={ownUsername}
-                  onChange={(e) => setOwnUsername(e.target.value)}
-                  placeholder="admin"
-                  className="siscom-input !min-h-[40px] text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="admin-own-name" className="siscom-field-label !text-[11px]">
-                  Posto/graduação + Nome de guerra
-                </label>
-                <input
-                  id="admin-own-name"
-                  type="text"
-                  value={ownDisplayName}
-                  onChange={(e) => setOwnDisplayName(e.target.value)}
-                  placeholder="ex: Sgt Paulo Silva"
-                  className="siscom-input !min-h-[40px] text-xs"
-                />
-              </div>
-
-              {!isGoogleAdminSession && (
-                <div className="space-y-1.5">
-                  <label htmlFor="admin-curr-pass" className="siscom-field-label !text-[11px]">
-                    Senha atual (ao alterar login/senha)
-                  </label>
-                  <input
-                    id="admin-curr-pass"
-                    type="password"
-                    value={ownCurrentPassword}
-                    onChange={(e) => setOwnCurrentPassword(e.target.value)}
-                    placeholder="••••••"
-                    className="siscom-input !min-h-[40px] text-xs"
-                  />
-                </div>
-              )}
-
-              <div className={`space-y-1.5 ${isGoogleAdminSession ? 'sm:col-span-2' : ''}`}>
-                <label htmlFor="admin-new-pass" className="siscom-field-label !text-[11px]">
-                  {isGoogleAdminSession ? 'Definir senha (mín. 6 caracteres)' : 'Nova senha (opcional)'}
-                </label>
-                <input
-                  id="admin-new-pass"
-                  type="password"
-                  value={ownNewPassword}
-                  onChange={(e) => setOwnNewPassword(e.target.value)}
-                  placeholder="••••••"
-                  className="siscom-input !min-h-[40px] text-xs"
-                />
-              </div>
+            <div className="flex items-center gap-2 border-b border-white/8 pb-3">
+              <KeyRound className="w-4 h-4 text-[#E5C17B]" />
+              <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
+                {isGoogleAdminSession ? 'Criar / Configurar Login Admin' : 'Meu Login Admin'}
+              </h2>
             </div>
 
-            <button
-              type="submit"
-              disabled={savingOwn}
-              className="siscom-btn siscom-btn-primary text-xs"
-            >
-              {savingOwn ? (
-                <SiscomSpinner className="w-3.5 h-3.5" />
-              ) : (
-                <Shield className="w-3.5 h-3.5" />
-              )}
-              <span>{savingOwn ? 'Salvando...' : 'Salvar login admin'}</span>
-            </button>
-          </form>
-        </section>
+            {ownAdminFormContent}
+          </section>
 
-        {/* Novo Login */}
-        <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
-          <div className="flex items-center gap-2 border-b border-white/8 pb-3">
-            <UserPlus className="w-4 h-4 text-[#83B499]" />
-            <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
-              Criar Novo Login
-            </h2>
-          </div>
-
-          <form onSubmit={handleCreateUser} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="space-y-1.5">
-                <label htmlFor="new-user-rank" className="siscom-field-label !text-[11px]">
-                  1. Posto/graduação
-                </label>
-                <input
-                  id="new-user-rank"
-                  type="text"
-                  required
-                  value={newRank}
-                  onChange={(e) => setNewRank(e.target.value)}
-                  placeholder="ex: Sgt"
-                  className="siscom-input !min-h-[40px] text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="new-user-warname" className="siscom-field-label !text-[11px]">
-                  2. Nome de guerra
-                </label>
-                <input
-                  id="new-user-warname"
-                  type="text"
-                  required
-                  value={newWarName}
-                  onChange={(e) => setNewWarName(e.target.value)}
-                  placeholder="ex: Paulo Silva"
-                  className="siscom-input !min-h-[40px] text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="new-user-pass" className="siscom-field-label !text-[11px]">
-                  3. Senha
-                </label>
-                <input
-                  id="new-user-pass"
-                  type="password"
-                  required
-                  minLength={6}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="mín. 6 caracteres"
-                  className="siscom-input !min-h-[40px] text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="new-user-role" className="siscom-field-label !text-[11px]">
-                  4. Perfil
-                </label>
-                <select
-                  id="new-user-role"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as 'user' | 'admin')}
-                  className="siscom-input !min-h-[40px] text-xs"
-                >
-                  <option value="user">Usuário</option>
-                  <option value="admin">Administrador</option>
-                </select>
-              </div>
+          {/* Novo Login */}
+          <section className="metal-surface rounded-xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-2 border-b border-white/8 pb-3">
+              <UserPlus className="w-4 h-4 text-[#83B499]" />
+              <h2 className="font-display text-sm font-semibold text-[#F4E6C4] tracking-tight">
+                Criar Novo Login
+              </h2>
             </div>
 
-            <div className="space-y-2 pt-0.5">
-              <span className="siscom-field-label !text-[11px]">Funções liberadas</span>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
-                {ALL_MODULE_KEYS.map((mod) => {
-                  const field = MODULE_PERM_FIELD[mod];
-                  return (
-                    <label
-                      key={mod}
-                      className="min-h-[34px] inline-flex items-center gap-2 text-xs text-[#E4EAE6] cursor-pointer select-none"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(newPerms[field])}
-                        onChange={(e) =>
-                          setNewPerms((prev) => ({ ...prev, [field]: e.target.checked }))
-                        }
-                        className="h-4 w-4 accent-[#2D5A43] cursor-pointer"
-                      />
-                      <span>{MODULE_LABELS[mod]}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={creatingUser}
-              className="siscom-btn siscom-btn-gold text-xs"
-            >
-              {creatingUser ? (
-                <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
-              ) : (
-                <UserPlus className="w-3.5 h-3.5" />
-              )}
-              <span>{creatingUser ? 'Criando...' : 'Criar login'}</span>
-            </button>
-          </form>
-        </section>
+            {createUserFormContent}
+          </section>
         </div>
       }
     >

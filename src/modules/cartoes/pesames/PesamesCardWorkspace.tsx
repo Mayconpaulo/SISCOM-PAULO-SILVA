@@ -26,7 +26,18 @@ import {
 import { isSafeImageObjectOrDataUrl } from '../../../shared/htmlSanitizer';
 import { getSecureVaultItem, setSecureVaultItem } from '../../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../../shared/PinchZoomSheetFrame';
-import { WorkspaceSplitLayout } from '../../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonIconButton,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../../shared/TabletRibbonPrimitives';
 import { fadeSlideVariants } from '../../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../../shared/ui';
 
@@ -120,6 +131,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
 
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [tabletPhotoDrawerOpen, setTabletPhotoDrawerOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cropAreaRef = useRef<HTMLDivElement>(null);
@@ -381,11 +393,302 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
 
   const cardScaleFactor = PESAMES_CIRCLE.diam / CROP_UI_DIAM;
 
+  const photoCropEditor =
+    photoUrl && miniCropGeom ? (
+      <div className="siscom-liquid-subcard rounded-xl p-3.5 space-y-3.5">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 text-[#C6D4CC] font-medium">
+            <Move className="w-3.5 h-3.5 text-[#83B499]" />
+            <span>Ajustar foto</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setPhotoScale(1);
+              setPhotoOffsetX(0);
+              setPhotoOffsetY(0);
+            }}
+            className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC] transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Centralizar</span>
+          </button>
+        </div>
+
+        <div className="flex flex-col items-center gap-1.5">
+          <div
+            ref={cropAreaRef}
+            onPointerDown={(e) => {
+              if (e.button !== 0 && e.pointerType === 'mouse') return;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              dragRef.current = {
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                startY: e.clientY,
+                origOffsetX: photoOffsetX,
+                origOffsetY: photoOffsetY,
+              };
+            }}
+            onPointerMove={(e) => {
+              const drag = dragRef.current;
+              if (!drag || drag.pointerId !== e.pointerId || cropPinchRef.current) return;
+              const dx = (e.clientX - drag.startX) * cardScaleFactor;
+              const dy = (e.clientY - drag.startY) * cardScaleFactor;
+              setPhotoOffsetX(
+                Math.min(500, Math.max(-500, Math.round(drag.origOffsetX + dx)))
+              );
+              setPhotoOffsetY(
+                Math.min(500, Math.max(-500, Math.round(drag.origOffsetY + dy)))
+              );
+            }}
+            onPointerUp={(e) => {
+              if (dragRef.current?.pointerId === e.pointerId) {
+                dragRef.current = null;
+              }
+            }}
+            onPointerCancel={() => {
+              dragRef.current = null;
+            }}
+            onWheel={(e) => {
+              e.preventDefault();
+              const delta = e.deltaY < 0 ? 0.08 : -0.08;
+              setPhotoScale((prev) =>
+                Math.min(4, Math.max(0.4, Number((prev + delta).toFixed(3))))
+              );
+            }}
+            style={{
+              width: `${CROP_UI_DIAM}px`,
+              height: `${CROP_UI_DIAM}px`,
+              touchAction: 'none',
+            }}
+            className="relative rounded-full overflow-hidden border-2 border-[#83B499]/55 bg-[#141414] cursor-grab active:cursor-grabbing select-none shadow-inner"
+          >
+            <img
+              src={photoUrl}
+              alt="Ajuste da foto no círculo"
+              draggable={false}
+              style={{
+                position: 'absolute',
+                left: `${miniCropGeom.x}px`,
+                top: `${miniCropGeom.y}px`,
+                width: `${miniCropGeom.width}px`,
+                height: `${miniCropGeom.height}px`,
+                maxWidth: 'none',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[#98A89F]">Tamanho da foto</span>
+            <span className="font-mono text-[#E5C17B]">
+              {Math.round(photoScale * 100)}%
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setPhotoScale((prev) =>
+                  Math.max(0.4, Number((prev - 0.1).toFixed(2)))
+                )
+              }
+              aria-label="Diminuir foto"
+              className="siscom-btn siscom-btn-secondary !min-h-[38px] !w-[38px] !px-0 shrink-0"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+
+            <input
+              type="range"
+              aria-label="Redimensionar foto no círculo"
+              min={0.4}
+              max={4}
+              step={0.02}
+              value={photoScale}
+              onChange={(e) => setPhotoScale(Number(e.target.value))}
+              className="flex-1 accent-[#2D5A43] cursor-pointer"
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                setPhotoScale((prev) =>
+                  Math.min(4, Number((prev + 0.1).toFixed(2)))
+                )
+              }
+              aria-label="Aumentar foto"
+              className="siscom-btn siscom-btn-secondary !min-h-[38px] !w-[38px] !px-0 shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  const activeTabletDrawer: TabletWorkspaceDrawer | null =
+    tabletPhotoDrawerOpen && photoMode === 'com_foto' && photoCropEditor
+      ? {
+          title: 'Ajustar Foto no Círculo',
+          anchor: 'top',
+          onClose: () => setTabletPhotoDrawerOpen(false),
+          content: photoCropEditor,
+        }
+      : null;
+
   return (
-    <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
-      rightSidebarWidthClass="lg:w-[275px] xl:w-[295px]"
-      sidebar={
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleUploadPhoto(file);
+            setTabletPhotoDrawerOpen(true);
+          }
+        }}
+      />
+
+      <WorkspaceSplitLayout
+        sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
+        rightSidebarWidthClass="lg:w-[275px] xl:w-[295px]"
+        tabletDrawer={activeTabletDrawer}
+        tabletTopBar={
+          <TabletRibbonRow className="justify-between">
+            <TabletRibbonGroup>
+              <TabletRibbonSegment
+                ariaLabel="Modelo de cartão"
+                value="pesames"
+                onChange={(val) => {
+                  if (val === 'boas_vindas') onSwitchToBoasVindas();
+                  if (val === 'aniversario') onSwitchToAniversario();
+                }}
+                options={[
+                  { value: 'boas_vindas', label: 'Boas-Vindas' },
+                  { value: 'aniversario', label: 'Aniversário' },
+                  { value: 'pesames', label: 'Pêsames' },
+                ]}
+              />
+
+              <TabletRibbonDivider />
+
+              <TabletRibbonSegment
+                ariaLabel="Modo de foto"
+                value={photoMode}
+                onChange={(next) => {
+                  setPhotoMode(next);
+                  if (next === 'sem_foto') setTabletPhotoDrawerOpen(false);
+                }}
+                options={[
+                  { value: 'sem_foto', label: 'Sem foto' },
+                  { value: 'com_foto', label: 'Com foto' },
+                ]}
+              />
+
+              {photoMode === 'com_foto' && (
+                <>
+                  <TabletRibbonButton
+                    variant="gold"
+                    onClick={() => fileInputRef.current?.click()}
+                    icon={<Upload className="w-3.5 h-3.5" />}
+                  >
+                    {photoUrl ? 'Trocar foto' : 'Enviar foto'}
+                  </TabletRibbonButton>
+
+                  {photoUrl && (
+                    <>
+                      <TabletRibbonButton
+                        chevron
+                        open={tabletPhotoDrawerOpen}
+                        onClick={() => setTabletPhotoDrawerOpen((v) => !v)}
+                        icon={<Move className="w-3.5 h-3.5 text-[#83B499]" />}
+                      >
+                        Ajustar
+                      </TabletRibbonButton>
+
+                      <TabletRibbonIconButton
+                        onClick={() => {
+                          setTabletPhotoDrawerOpen(false);
+                          handleRemovePhoto();
+                        }}
+                        aria-label="Remover foto"
+                        className="!text-red-300 hover:!bg-red-950/60"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </TabletRibbonIconButton>
+                    </>
+                  )}
+                </>
+              )}
+            </TabletRibbonGroup>
+
+            <TabletRibbonGroup>
+              {errorMsg && (
+                <button
+                  type="button"
+                  onClick={() => setErrorMsg(null)}
+                  className="min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border bg-red-950/60 border-red-400/35 text-red-200 whitespace-nowrap cursor-pointer"
+                >
+                  {errorMsg}
+                </button>
+              )}
+
+              <TabletRibbonButton
+                variant="primary"
+                onClick={handleDownloadPng}
+                disabled={isExportingPng}
+                icon={
+                  isExportingPng ? (
+                    <SiscomSpinner className="w-3.5 h-3.5" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )
+                }
+              >
+                {isExportingPng ? 'Gerando...' : 'Baixar PNG'}
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+          </TabletRibbonRow>
+        }
+        tabletBottomBar={
+          <TabletRibbonRow>
+            <TabletRibbonGroup>
+              <TabletRibbonSegment
+                ariaLabel="Tratamento"
+                value={prefix}
+                onChange={setPrefix}
+                options={[
+                  { value: 'À', label: 'À' },
+                  { value: 'AO', label: 'AO' },
+                ]}
+              />
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <div className="flex-1 min-w-[300px] flex items-center gap-2">
+              <span className="text-[11px] font-medium text-[#A2B1A8] whitespace-nowrap shrink-0">
+                Nome completo
+              </span>
+              <input
+                type="text"
+                aria-label="Nome completo do destinatário"
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                placeholder="(REMETENTE)"
+                className="siscom-input flex-1 !min-h-[40px] !rounded-xl text-xs sm:text-sm uppercase"
+              />
+            </div>
+          </TabletRibbonRow>
+        }
+        sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Card Model Switcher */}
         <div className="space-y-2">
@@ -441,17 +744,6 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                 exit="exit"
                 className="space-y-3.5"
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleUploadPhoto(file);
-                  }}
-                />
-
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -477,143 +769,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                   )}
                 </div>
 
-                {photoUrl && miniCropGeom && (
-                  <div className="siscom-liquid-subcard rounded-xl p-3.5 space-y-3.5">
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="inline-flex items-center gap-1.5 text-[#C6D4CC] font-medium">
-                        <Move className="w-3.5 h-3.5 text-[#83B499]" />
-                        <span>Ajustar foto</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPhotoScale(1);
-                          setPhotoOffsetX(0);
-                          setPhotoOffsetY(0);
-                        }}
-                        className="inline-flex items-center gap-1 text-[11px] text-[#83B499] hover:text-[#A8D6BC] transition-colors"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Centralizar</span>
-                      </button>
-                    </div>
-
-                    {/* Interactive Drag & Resize Circular Pad */}
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div
-                        ref={cropAreaRef}
-                        onPointerDown={(e) => {
-                          if (e.button !== 0 && e.pointerType === 'mouse') return;
-                          e.currentTarget.setPointerCapture(e.pointerId);
-                          dragRef.current = {
-                            pointerId: e.pointerId,
-                            startX: e.clientX,
-                            startY: e.clientY,
-                            origOffsetX: photoOffsetX,
-                            origOffsetY: photoOffsetY,
-                          };
-                        }}
-                        onPointerMove={(e) => {
-                          const drag = dragRef.current;
-                          if (!drag || drag.pointerId !== e.pointerId || cropPinchRef.current) return;
-                          const dx = (e.clientX - drag.startX) * cardScaleFactor;
-                          const dy = (e.clientY - drag.startY) * cardScaleFactor;
-                          setPhotoOffsetX(
-                            Math.min(500, Math.max(-500, Math.round(drag.origOffsetX + dx)))
-                          );
-                          setPhotoOffsetY(
-                            Math.min(500, Math.max(-500, Math.round(drag.origOffsetY + dy)))
-                          );
-                        }}
-                        onPointerUp={(e) => {
-                          if (dragRef.current?.pointerId === e.pointerId) {
-                            dragRef.current = null;
-                          }
-                        }}
-                        onPointerCancel={() => {
-                          dragRef.current = null;
-                        }}
-                        onWheel={(e) => {
-                          e.preventDefault();
-                          const delta = e.deltaY < 0 ? 0.08 : -0.08;
-                          setPhotoScale((prev) =>
-                            Math.min(4, Math.max(0.4, Number((prev + delta).toFixed(3))))
-                          );
-                        }}
-                        style={{
-                          width: `${CROP_UI_DIAM}px`,
-                          height: `${CROP_UI_DIAM}px`,
-                          touchAction: 'none',
-                        }}
-                        className="relative rounded-full overflow-hidden border-2 border-[#83B499]/55 bg-[#141414] cursor-grab active:cursor-grabbing select-none shadow-inner"
-                      >
-                        <img
-                          src={photoUrl}
-                          alt="Ajuste da foto no círculo"
-                          draggable={false}
-                          style={{
-                            position: 'absolute',
-                            left: `${miniCropGeom.x}px`,
-                            top: `${miniCropGeom.y}px`,
-                            width: `${miniCropGeom.width}px`,
-                            height: `${miniCropGeom.height}px`,
-                            maxWidth: 'none',
-                            pointerEvents: 'none',
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Size / Zoom Controls */}
-                    <div className="space-y-2 pt-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#98A89F]">Tamanho da foto</span>
-                        <span className="font-mono text-[#E5C17B]">
-                          {Math.round(photoScale * 100)}%
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPhotoScale((prev) =>
-                              Math.max(0.4, Number((prev - 0.1).toFixed(2)))
-                            )
-                          }
-                          aria-label="Diminuir foto"
-                          className="siscom-btn siscom-btn-secondary !min-h-[38px] !w-[38px] !px-0 shrink-0"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-
-                        <input
-                          type="range"
-                          aria-label="Redimensionar foto no círculo"
-                          min={0.4}
-                          max={4}
-                          step={0.02}
-                          value={photoScale}
-                          onChange={(e) => setPhotoScale(Number(e.target.value))}
-                          className="flex-1 accent-[#2D5A43] cursor-pointer"
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPhotoScale((prev) =>
-                              Math.min(4, Number((prev + 0.1).toFixed(2)))
-                            )
-                          }
-                          aria-label="Aumentar foto"
-                          className="siscom-btn siscom-btn-secondary !min-h-[38px] !w-[38px] !px-0 shrink-0"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {photoCropEditor}
               </motion.div>
             )}
           </AnimatePresence>
@@ -821,5 +977,6 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
         </div>
       </div>
     </WorkspaceSplitLayout>
+    </>
   );
 };

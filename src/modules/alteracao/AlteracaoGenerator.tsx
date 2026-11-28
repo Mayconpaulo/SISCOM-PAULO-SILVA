@@ -5,16 +5,19 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  Building2,
   Calculator,
   ChevronDown,
   Eraser,
   FilePlus2,
   FileSearch,
   FileText,
+  FolderOpen,
   Highlighter,
   Indent,
   Italic,
   List,
+  ListChecks,
   ListOrdered,
   Maximize2,
   Minus,
@@ -30,6 +33,7 @@ import {
   Underline,
   Undo2,
   Upload,
+  User,
 } from 'lucide-react';
 import {
   AlteracaoHeaderExtract,
@@ -62,6 +66,13 @@ import {
 import { BiSmartSearchSendPayload, BiSmartSearchView } from './BiSmartSearchView';
 import { inferPortugueseContinuacaoArticle } from '../../shared/portugueseGender';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonIconButton,
+  TabletRibbonRow,
+} from '../../shared/TabletRibbonPrimitives';
 import {
   sanitizeAlteracaoHtml,
   sanitizeCssFontFamily,
@@ -468,6 +479,9 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   const [lineHeight, setLineHeight] = useState(initial.lineHeight);
   const [textColor, setTextColor] = useState('#000000');
   const [highlightColor, setHighlightColor] = useState('#FEF08A');
+  const [tabletPanel, setTabletPanel] = useState<
+    'arquivo' | 'militar' | 'cabecalho' | 'topicos' | 'localizar' | 'tempo' | null
+  >(null);
   const [zoom, setZoom] = useState<number>(100);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
   const [pinchZoom, setPinchZoom] = useState<number>(1);
@@ -1745,20 +1759,804 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
             : 'hidden'
         }
       >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.html,.htm,.txt"
+        onChange={handleUploadAlteracao}
+        className="hidden"
+      />
       <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[305px] xl:w-[335px]"
       rightSidebarWidthClass="lg:w-[268px] xl:w-[292px]"
+      tabletTopBar={
+        <TabletRibbonRow>
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              variant="gold"
+              disabled={isImporting}
+              icon={
+                isImporting ? (
+                  <SiscomSpinner tone="gold" className="w-3.5 h-3.5" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5" />
+                )
+              }
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isImporting ? 'Lendo...' : 'Importar'}
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              icon={<RotateCcw className="w-3.5 h-3.5 text-[#83B499]" />}
+              onClick={handleResetModel}
+            >
+              Nova Folha
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              icon={<FolderOpen className="w-3.5 h-3.5 text-[#E5C17B]" />}
+              chevron
+              open={tabletPanel === 'arquivo'}
+              onClick={() => setTabletPanel((p) => (p === 'arquivo' ? null : 'arquivo'))}
+            >
+              Arquivo
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              icon={<User className="w-3.5 h-3.5 text-[#83B499]" />}
+              chevron
+              open={tabletPanel === 'militar'}
+              onClick={() => setTabletPanel((p) => (p === 'militar' ? null : 'militar'))}
+            >
+              {header.nomeGuerra.trim() ? header.nomeGuerra.trim() : 'Militar'}
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              icon={<Building2 className="w-3.5 h-3.5 text-[#98A89F]" />}
+              chevron
+              open={tabletPanel === 'cabecalho'}
+              onClick={() => setTabletPanel((p) => (p === 'cabecalho' ? null : 'cabecalho'))}
+            >
+              Cabeçalho
+            </TabletRibbonButton>
+
+            {groupedChecklist.length > 0 && (
+              <TabletRibbonButton
+                icon={<ListChecks className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                badge={`${enabledItemIds.length}/${structuredDoc?.items.length ?? 0}`}
+                chevron
+                open={tabletPanel === 'topicos'}
+                onClick={() => setTabletPanel((p) => (p === 'topicos' ? null : 'topicos'))}
+              >
+                Tópicos
+              </TabletRibbonButton>
+            )}
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              icon={<FilePlus2 className="w-3.5 h-3.5 text-[#83B499]" />}
+              onClick={handleAddPage}
+            >
+              + Fl. {String(header.folhaInicial + pagesHtml.length).padStart(2, '0')}
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              icon={<Trash2 className="w-3.5 h-3.5 text-[#98A89F]" />}
+              onClick={handleClearBody}
+            >
+              Limpar
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              variant="primary"
+              icon={<Printer className="w-3.5 h-3.5" />}
+              onClick={() => window.print()}
+            >
+              PDF / Imprimir
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              icon={<FileText className="w-3.5 h-3.5 text-[#83B499]" />}
+              onClick={handleDownloadWordDoc}
+            >
+              Word
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
+      tabletBottomBar={
+        <TabletRibbonRow>
+          <TabletRibbonGroup>
+            <TabletRibbonIconButton
+              title="Desfazer"
+              aria-label="Desfazer"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('undo');
+              }}
+            >
+              <Undo2 className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Refazer"
+              aria-label="Refazer"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('redo');
+              }}
+            >
+              <Redo2 className="w-4 h-4" />
+            </TabletRibbonIconButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <select
+              aria-label="Fonte do texto"
+              value={fontFamily}
+              onChange={(e) => applySelectionFontFamily(e.target.value)}
+              className="siscom-input !w-[144px] !min-h-[40px] !px-2.5 text-xs shrink-0"
+            >
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Arial">Arial</option>
+              <option value="Open Sans">Open Sans</option>
+            </select>
+
+            <select
+              aria-label="Tamanho da fonte"
+              value={fontSizePt}
+              onChange={(e) => applySelectionFontSize(e.target.value)}
+              className="siscom-input !w-[76px] !min-h-[40px] !px-2 font-mono text-xs shrink-0"
+            >
+              <option value="9pt">9 pt</option>
+              <option value="10pt">10 pt</option>
+              <option value="10.5pt">10.5 pt</option>
+              <option value="11pt">11 pt</option>
+              <option value="12pt">12 pt</option>
+              <option value="14pt">14 pt</option>
+              <option value="16pt">16 pt</option>
+            </select>
+
+            <select
+              aria-label="Espaçamento entre linhas"
+              value={lineHeight}
+              onChange={(e) => {
+                const nextLh = sanitizeCssLineHeight(e.target.value, '1.22');
+                setLineHeight(nextLh);
+                scheduleLiveReflow(activePageIndex, true, { lineHeight: nextLh });
+              }}
+              className="siscom-input !w-[72px] !min-h-[40px] !px-2 font-mono text-xs shrink-0"
+            >
+              <option value="1.05">1.0</option>
+              <option value="1.22">1.15</option>
+              <option value="1.35">1.3</option>
+              <option value="1.5">1.5</option>
+            </select>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonIconButton
+              title="Negrito"
+              aria-label="Negrito"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('bold');
+              }}
+            >
+              <Bold className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Itálico"
+              aria-label="Itálico"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('italic');
+              }}
+            >
+              <Italic className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Sublinhado"
+              aria-label="Sublinhado"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('underline');
+              }}
+            >
+              <Underline className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Tachado"
+              aria-label="Tachado"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('strikeThrough');
+              }}
+            >
+              <Strikethrough className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Limpar formatação"
+              aria-label="Limpar formatação"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('removeFormat');
+              }}
+            >
+              <Eraser className="w-4 h-4" />
+            </TabletRibbonIconButton>
+
+            <label
+              title="Cor do texto"
+              className="h-10 px-2.5 inline-flex items-center gap-1.5 rounded-xl border border-white/[0.12] bg-white/[0.06] cursor-pointer shrink-0"
+            >
+              <span className="text-xs font-bold border-b-2 leading-none" style={{ borderColor: textColor }}>
+                A
+              </span>
+              <input
+                type="color"
+                aria-label="Cor do texto"
+                value={textColor}
+                onChange={(e) => {
+                  setTextColor(e.target.value);
+                  runFormatCommand('foreColor', e.target.value);
+                }}
+                className="w-4 h-4 bg-transparent border-0 cursor-pointer p-0"
+              />
+            </label>
+
+            <label
+              title="Realce"
+              className="h-10 px-2.5 inline-flex items-center gap-1.5 rounded-xl border border-white/[0.12] bg-white/[0.06] cursor-pointer shrink-0"
+            >
+              <Highlighter className="w-3.5 h-3.5 text-[#E5C17B]" />
+              <input
+                type="color"
+                aria-label="Cor de realce"
+                value={highlightColor}
+                onChange={(e) => {
+                  setHighlightColor(e.target.value);
+                  runFormatCommand('hiliteColor', e.target.value);
+                }}
+                className="w-4 h-4 bg-transparent border-0 cursor-pointer p-0"
+              />
+            </label>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonIconButton
+              title="Alinhar à esquerda"
+              aria-label="Alinhar à esquerda"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('justifyLeft');
+              }}
+            >
+              <AlignLeft className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Centralizar"
+              aria-label="Centralizar"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('justifyCenter');
+              }}
+            >
+              <AlignCenter className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Alinhar à direita"
+              aria-label="Alinhar à direita"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('justifyRight');
+              }}
+            >
+              <AlignRight className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Justificar"
+              aria-label="Justificar"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('justifyFull');
+              }}
+            >
+              <AlignJustify className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Lista com marcadores"
+              aria-label="Lista com marcadores"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('insertUnorderedList');
+              }}
+            >
+              <List className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Lista numerada"
+              aria-label="Lista numerada"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('insertOrderedList');
+              }}
+            >
+              <ListOrdered className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Diminuir recuo"
+              aria-label="Diminuir recuo"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('outdent');
+              }}
+            >
+              <Outdent className="w-4 h-4" />
+            </TabletRibbonIconButton>
+            <TabletRibbonIconButton
+              title="Aumentar recuo"
+              aria-label="Aumentar recuo"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                runFormatCommand('indent');
+              }}
+            >
+              <Indent className="w-4 h-4" />
+            </TabletRibbonIconButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              icon={<Search className="w-3.5 h-3.5" />}
+              chevron
+              open={tabletPanel === 'localizar'}
+              onClick={() => setTabletPanel((p) => (p === 'localizar' ? null : 'localizar'))}
+            >
+              Localizar
+            </TabletRibbonButton>
+
+            <select
+              aria-label="Zoom da folha"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="siscom-input !w-[98px] !min-h-[40px] !px-2 font-mono text-xs shrink-0"
+            >
+              <option value={75}>Zoom 75%</option>
+              <option value={90}>Zoom 90%</option>
+              <option value={100}>Zoom 100%</option>
+            </select>
+
+            <TabletRibbonButton
+              variant="gold"
+              icon={<Calculator className="w-3.5 h-3.5" />}
+              badge={serviceTime ? serviceTime.formatted : undefined}
+              chevron
+              open={tabletPanel === 'tempo'}
+              onClick={() => setTabletPanel((p) => (p === 'tempo' ? null : 'tempo'))}
+            >
+              Tempo
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
+      tabletDrawer={
+        tabletPanel === 'arquivo'
+          ? {
+              position: 'top',
+              title: 'Arquivo da Conta',
+              onClose: () => setTabletPanel(null),
+              content: (
+                <AlteracaoArchivePanel
+                  activeDocId={activeArchivedDoc.id}
+                  activeDocTitle={activeArchivedDoc.title}
+                  activeDocFolderId={activeArchivedDoc.folderId}
+                  suggestedTitle={suggestedArchiveTitle}
+                  getCurrentSnapshot={getArchiveSnapshot}
+                  onOpenArchivedDoc={(rec) => {
+                    handleOpenArchivedDoc(rec);
+                    setTabletPanel(null);
+                  }}
+                  onActiveDocChange={setActiveArchivedDoc}
+                  onBatchUpdatedDocs={handleBatchUpdatedDocs}
+                  onNotify={setNotice}
+                />
+              ),
+            }
+          : tabletPanel === 'militar'
+            ? {
+                position: 'top',
+                title: 'Dados do Militar',
+                onClose: () => setTabletPanel(null),
+                content: (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-[#E5C17B]">Nome de guerra</label>
+                      <input
+                        type="text"
+                        value={header.nomeGuerra}
+                        onChange={(e) => updateHeaderField('nomeGuerra', e.target.value)}
+                        placeholder="Ex.: CARDOSO"
+                        className="siscom-input !min-h-[40px] px-3 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-medium text-[#E5C17B]">QAS / QMS</label>
+                      <input
+                        type="text"
+                        value={header.qasQms}
+                        onChange={(e) => updateHeaderField('qasQms', e.target.value)}
+                        placeholder="Ex.: Infantaria"
+                        className="siscom-input !min-h-[40px] px-3 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Posto / Grad.</label>
+                      <input
+                        type="text"
+                        value={header.postoGraduacao}
+                        onChange={(e) => updateHeaderField('postoGraduacao', e.target.value)}
+                        className="siscom-input !min-h-[40px] px-3 text-xs"
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Nome completo</label>
+                      <input
+                        type="text"
+                        value={header.nomeCompleto}
+                        onChange={(e) => updateHeaderField('nomeCompleto', e.target.value)}
+                        className="siscom-input !min-h-[40px] px-3 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Identidade</label>
+                      <input
+                        type="text"
+                        value={header.identidade}
+                        onChange={(e) => updateHeaderField('identidade', e.target.value)}
+                        className="siscom-input !min-h-[40px] px-3 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Semestre</label>
+                      <input
+                        type="text"
+                        value={header.semestre}
+                        onChange={(e) => updateHeaderField('semestre', e.target.value)}
+                        className="siscom-input !min-h-[40px] px-3 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Período</label>
+                      <input
+                        type="text"
+                        value={header.periodo}
+                        onChange={(e) => updateHeaderField('periodo', e.target.value)}
+                        className="siscom-input !min-h-[40px] px-3 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Folha inicial</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={999}
+                        value={header.folhaInicial}
+                        onChange={(e) =>
+                          updateHeaderField('folhaInicial', Math.max(1, Number(e.target.value) || 1))
+                        }
+                        className="siscom-input !min-h-[40px] px-3 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] text-[#98A89F]">Tratamento</label>
+                      <select
+                        value={header.generoCont}
+                        onChange={(e) =>
+                          updateHeaderField('generoCont', e.target.value as 'auto' | 'do' | 'da')
+                        }
+                        className="siscom-input !min-h-[40px] px-2.5 text-xs"
+                      >
+                        <option value="auto">Auto ({continuacaoArticle})</option>
+                        <option value="do">do (Masculino)</option>
+                        <option value="da">da (Feminino)</option>
+                      </select>
+                    </div>
+                  </div>
+                ),
+              }
+            : tabletPanel === 'cabecalho'
+              ? {
+                  position: 'top',
+                  title: 'Cabeçalho da OM',
+                  onClose: () => setTabletPanel(null),
+                  content: (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <input
+                        type="text"
+                        aria-label="Ministério"
+                        value={header.ministerio}
+                        onChange={(e) => updateHeaderField('ministerio', e.target.value)}
+                        placeholder="MINISTÉRIO DA DEFESA"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="Força"
+                        value={header.forca}
+                        onChange={(e) => updateHeaderField('forca', e.target.value)}
+                        placeholder="EXÉRCITO BRASILEIRO"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="Comando e DE"
+                        value={header.comandoDivisao}
+                        onChange={(e) => updateHeaderField('comandoDivisao', e.target.value)}
+                        placeholder="CML - 1ª DE"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="Grande Unidade"
+                        value={header.grandeUnidade}
+                        onChange={(e) => updateHeaderField('grandeUnidade', e.target.value)}
+                        placeholder="GUEs - 9ª Bda Inf Mtz"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="OM e Codom"
+                        value={header.omCodom}
+                        onChange={(e) => updateHeaderField('omCodom', e.target.value)}
+                        placeholder="1º BI Mec (Es) - 008326"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="OM por extenso"
+                        value={header.omExtenso}
+                        onChange={(e) => updateHeaderField('omExtenso', e.target.value)}
+                        placeholder="1º BATALHÃO DE INFANTARIA MECANIZADO (ESCOLA)"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="Título do documento"
+                        value={header.tituloDocumento}
+                        onChange={(e) => updateHeaderField('tituloDocumento', e.target.value)}
+                        placeholder="FOLHAS DE ALTERAÇÕES"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                      <input
+                        type="text"
+                        aria-label="Guarnição"
+                        value={header.guarnicao}
+                        onChange={(e) => updateHeaderField('guarnicao', e.target.value)}
+                        placeholder="GUARNIÇÃO DA VILA MILITAR - RJ"
+                        className="siscom-input !min-h-[38px] px-3 text-xs"
+                      />
+                    </div>
+                  ),
+                }
+              : tabletPanel === 'topicos' && groupedChecklist.length > 0
+                ? {
+                    position: 'top',
+                    title: `Tópicos e Tabelas (${enabledItemIds.length}/${structuredDoc?.items.length ?? 0})`,
+                    onClose: () => setTabletPanel(null),
+                    headerActions: (
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            applyChecklistSelection(structuredDoc?.items.map((i) => i.id) ?? [])
+                          }
+                          className="text-[#E5C17B] hover:underline cursor-pointer"
+                        >
+                          Todos
+                        </button>
+                        <span className="text-white/20">·</span>
+                        <button
+                          type="button"
+                          onClick={() => applyChecklistSelection([])}
+                          className="text-[#98A89F] hover:text-white hover:underline cursor-pointer"
+                        >
+                          Nenhum
+                        </button>
+                      </div>
+                    ),
+                    content: (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {groupedChecklist.map((group) => {
+                          const allGroupChecked = group.items.every((i) => enabledItemIdSet.has(i.id));
+                          const someGroupChecked = group.items.some((i) => enabledItemIdSet.has(i.id));
+                          return (
+                            <div
+                              key={group.key}
+                              className="siscom-liquid-subcard rounded-lg p-2.5 space-y-1.5"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleScrollToChecklistTarget({
+                                      kind: 'group',
+                                      groupKey: group.key,
+                                      month: group.month,
+                                      title: group.title,
+                                    });
+                                    setTabletPanel(null);
+                                  }}
+                                  className="min-w-0 flex-1 text-left cursor-pointer"
+                                >
+                                  <span className="inline-block text-[10px] font-mono text-[#E5C17B] mr-1.5">
+                                    {group.month.slice(0, 3)}
+                                  </span>
+                                  <span className="text-xs font-semibold text-[#E8EEEA]">
+                                    {group.title}
+                                  </span>
+                                </button>
+                                <input
+                                  type="checkbox"
+                                  ref={(el) => {
+                                    if (el) {
+                                      el.indeterminate = someGroupChecked && !allGroupChecked;
+                                    }
+                                  }}
+                                  checked={allGroupChecked}
+                                  onChange={() => handleToggleChecklistGroup(group.items)}
+                                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#C8A461] cursor-pointer"
+                                />
+                              </div>
+                              <div className="space-y-1 pl-2 border-l border-white/[0.08]">
+                                {group.items.map((item) => {
+                                  const isChecked = enabledItemIdSet.has(item.id);
+                                  const itemLabel =
+                                    item.kind === 'table'
+                                      ? item.previewLabel
+                                      : item.subtitle || item.previewLabel;
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      className="flex items-center justify-between gap-2 py-0.5 text-[11px] text-[#98A89F]"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleScrollToChecklistTarget({ kind: 'item', item });
+                                          setTabletPanel(null);
+                                        }}
+                                        className="min-w-0 flex-1 text-left truncate hover:text-[#E5C17B] cursor-pointer"
+                                      >
+                                        {itemLabel}
+                                      </button>
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => handleToggleChecklistItem(item.id)}
+                                        className="h-4 w-4 shrink-0 accent-[#2D5A43] cursor-pointer"
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ),
+                  }
+                : tabletPanel === 'localizar'
+                  ? {
+                      position: 'bottom',
+                      title: 'Localizar e Substituir',
+                      onClose: () => setTabletPanel(null),
+                      content: (
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2.5 items-center">
+                          <input
+                            type="text"
+                            value={findQuery}
+                            onChange={(e) => setFindQuery(e.target.value)}
+                            placeholder="Localizar texto..."
+                            className="siscom-input !min-h-[40px] px-3 text-xs"
+                          />
+                          <input
+                            type="text"
+                            value={replaceQuery}
+                            onChange={(e) => setReplaceQuery(e.target.value)}
+                            placeholder="Substituir por..."
+                            className="siscom-input !min-h-[40px] px-3 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleReplaceAll}
+                            className="siscom-btn siscom-btn-primary !min-h-[40px] px-4 text-xs"
+                          >
+                            <Replace className="w-3.5 h-3.5" />
+                            <span>Substituir tudo</span>
+                          </button>
+                        </div>
+                      ),
+                    }
+                  : tabletPanel === 'tempo'
+                    ? {
+                        position: 'bottom',
+                        title: `Tempo de Serviço · ${serviceTime ? serviceTime.formatted : '00 a 00 m 00 d'}`,
+                        onClose: () => setTabletPanel(null),
+                        content: (
+                          <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                            <label className="block space-y-1">
+                              <span className="block text-[11px] text-[#B8B3A6]">Data de praça</span>
+                              <input
+                                type="date"
+                                value={dataPraca}
+                                onChange={(e) => handleDateCalculatorChange('praca', e.target.value)}
+                                className="siscom-input !min-h-[40px] px-2.5 text-xs"
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="block text-[11px] text-[#B8B3A6]">Data final</span>
+                              <input
+                                type="date"
+                                value={dataFinal}
+                                onChange={(e) => handleDateCalculatorChange('final', e.target.value)}
+                                className="siscom-input !min-h-[40px] px-2.5 text-xs"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={!serviceTime}
+                              onClick={() => {
+                                applyServiceTimeToDocument(
+                                  dataPraca,
+                                  dataFinal,
+                                  true,
+                                  updateClosingDateWithCalc
+                                );
+                                setTabletPanel(null);
+                              }}
+                              className="siscom-btn siscom-btn-gold !min-h-[40px] px-4 text-xs col-span-2 sm:col-span-1"
+                            >
+                              Aplicar na 2ª Parte
+                            </button>
+                            <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs text-[#B8C6BE] cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={updateClosingDateWithCalc}
+                                onChange={(e) => setUpdateClosingDateWithCalc(e.target.checked)}
+                                className="h-4 w-4 accent-[#C8A461] cursor-pointer"
+                              />
+                              <span>Atualizar também a data do fecho</span>
+                            </label>
+                          </div>
+                        ),
+                      }
+                    : null
+      }
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Top Primary PDF Upload Dropzone */}
         <div className="space-y-3 pb-4 border-b border-white/[0.07]">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.doc,.docx,.html,.htm,.txt"
-            onChange={handleUploadAlteracao}
-            className="hidden"
-          />
 
           <button
             type="button"

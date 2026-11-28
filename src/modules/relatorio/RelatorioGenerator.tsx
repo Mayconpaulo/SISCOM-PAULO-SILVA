@@ -15,14 +15,26 @@ import {
   Edit3,
   FilePlus2,
   FileText,
+  ListChecks,
   Plus,
   Printer,
   RotateCcw,
+  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-react';
 import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
-import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonIconButton,
+  TabletRibbonRow,
+} from '../../shared/TabletRibbonPrimitives';
 import { fadeSlideVariants, stepSlideVariants } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 import { logActivity } from '../../core/audit/activityLogger';
@@ -252,6 +264,18 @@ export const RelatorioGenerator: React.FC = () => {
     (activeDoc?.diversosEventos.length ?? 0) === 0 ? 'period' : 'date'
   );
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [tabletDrawer, setTabletDrawer] = useState<
+    'wizard' | 'periodo' | 'diversos' | 'fixos' | null
+  >(null);
+  const toggleTabletDrawer = (key: 'wizard' | 'periodo' | 'diversos' | 'fixos') => {
+    setTabletDrawer((prev) => (prev === key ? null : key));
+  };
+
+  useEffect(() => {
+    if (!wizardOpen && tabletDrawer === 'wizard') {
+      setTabletDrawer(null);
+    }
+  }, [wizardOpen, tabletDrawer]);
 
   // Friday→Thursday period selector state
   const [weekWindowStartOffset, setWeekWindowStartOffset] = useState<number>(-1);
@@ -871,10 +895,889 @@ export const RelatorioGenerator: React.FC = () => {
 
   const vtr = activeDoc.vtrDisponibilidade;
 
+  const wizardFormContent = (
+    <div className="space-y-4">
+      <nav
+        aria-label="Etapas do relatório"
+        className="grid gap-1.5"
+        style={{ gridTemplateColumns: `repeat(${wizardSteps.length}, minmax(0, 1fr))` }}
+      >
+        {wizardSteps.map((step, idx) => {
+          const isActive = idx === activeStepIndex;
+          const isDone = idx < activeStepIndex;
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => handleJumpToStep(idx)}
+              className={`min-h-[46px] rounded-lg px-2.5 py-1.5 border text-left transition-all active:scale-[0.98] flex flex-col justify-center gap-0.5 cursor-pointer ${
+                isActive
+                  ? 'bg-[#241E12]/65 backdrop-blur-md border-[#C29B56]/75 text-[#F4E6C4]'
+                  : isDone
+                    ? 'bg-[#2D5A43]/28 backdrop-blur-md border-[#83B499]/45 text-[#B4D8C5] hover:border-[#83B499]/70'
+                    : 'bg-[#0A110E]/45 backdrop-blur-md border-white/10 text-[#98A89F] hover:border-white/22'
+              }`}
+            >
+              <span className="flex items-center justify-between text-[10px] font-mono">
+                <span>{idx + 1}</span>
+                {isDone && <Check className="w-3 h-3 text-[#83B499]" />}
+              </span>
+              <span className="text-[11px] font-medium truncate">{step.shortLabel}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <form onSubmit={handleSubmitForm} className="space-y-4">
+        <AnimatePresence mode="wait">
+          {wizardStep === 'period' && (
+            <motion.div
+              key="step-period"
+              variants={stepSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="space-y-3"
+            >
+              <h4 className="text-xs font-semibold text-[#F4E6C4]">
+                Período (Sexta a Quinta)
+              </h4>
+
+              <div className="flex items-center justify-between gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setWeekWindowStartOffset((o) => o - 4)}
+                  className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px]"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Anteriores</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeekWindowStartOffset(-1)}
+                  className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-[11px]"
+                >
+                  Semana atual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeekWindowStartOffset((o) => o + 4)}
+                  className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px]"
+                >
+                  <span>Próximas</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {visibleWeekPeriods.map((period) => {
+                  const selected = newReportPeriodo === period.headerLabel;
+                  return (
+                    <button
+                      key={period.id}
+                      type="button"
+                      onClick={() => handlePickPeriodInWizard(period.headerLabel)}
+                      aria-pressed={selected}
+                      className={`p-3 rounded-lg border text-left transition-all active:scale-[0.98] space-y-1 cursor-pointer ${
+                        selected
+                          ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
+                          : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span
+                          className={`text-[10px] font-medium uppercase tracking-wide ${
+                            period.weekOffset === 0
+                              ? 'text-[#83B499]'
+                              : selected
+                                ? 'text-[#E5C17B]'
+                                : 'text-[#98A89F]'
+                          }`}
+                        >
+                          {period.relativeTag}
+                        </span>
+                        {selected && <Check className="w-3.5 h-3.5 text-[#83B499] shrink-0" />}
+                      </div>
+                      <div className="text-xs font-semibold text-[#E4EAE6]">
+                        {period.weekdayRange}
+                      </div>
+                      <div className="text-[10px] font-mono text-[#98A89F] truncate">
+                        {period.headerLabel}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomPeriodInput((v) => !v)}
+                  className="text-[11px] text-[#98A89F] hover:text-[#E5C17B] underline underline-offset-2 transition-colors cursor-pointer"
+                >
+                  {showCustomPeriodInput ? 'Fechar' : 'Editar manualmente'}
+                </button>
+                {showCustomPeriodInput && (
+                  <input
+                    id="rel-periodo-cab"
+                    type="text"
+                    value={newReportPeriodo}
+                    onChange={(e) => handlePickPeriodInWizard(e.target.value)}
+                    placeholder="14 A 20 AGOSTO 26"
+                    className="siscom-input mt-2 !min-h-[40px] text-xs"
+                  />
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {wizardStep === 'date' && (
+            <motion.div
+              key="step-date"
+              variants={stepSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="space-y-3"
+            >
+              <div className="siscom-liquid-subcard rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+                <span className="text-[#98A89F]">Semana selecionada:</span>
+                <span className="font-semibold text-[#E5C17B] truncate">
+                  {activePeriodHeaderForDays}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label htmlFor="rel-q-data" className="block text-xs font-semibold text-[#F4E6C4]">
+                  Quando aconteceu o evento?
+                </label>
+                <SiscomSegmentedTabs
+                  layoutId="relatorio-date-mode"
+                  size="sm"
+                  ariaLabel="Tipo de data do evento"
+                  value={dateSelectionMode}
+                  onChange={(mode) => {
+                    setDateSelectionMode(mode);
+                    setRangeStartDay(null);
+                  }}
+                  options={[
+                    { value: 'single', label: '1 dia' },
+                    { value: 'range', label: 'Vários dias' },
+                  ]}
+                />
+              </div>
+
+              {dateSelectionMode === 'range' && rangeStartDay && (
+                <p className="text-[11px] text-[#E5C17B]">
+                  {rangeStartDay.weekdayShort} {rangeStartDay.dayMonth} → ...
+                </p>
+              )}
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {activePeriodDays.map((day) => {
+                  const isPicked =
+                    qDataPeriodo === day.fullDate || rangeStartDay?.iso === day.iso;
+                  return (
+                    <button
+                      key={day.iso}
+                      type="button"
+                      onClick={() => handleDayButtonClick(day)}
+                      className={`min-h-[48px] py-2 px-1.5 rounded-lg border text-center transition-all active:scale-[0.97] cursor-pointer ${
+                        isPicked
+                          ? 'bg-[#2D5A43]/45 border-[#83B499] text-[#F4E6C4]'
+                          : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/50'
+                      }`}
+                    >
+                      <span className="block text-[10px] uppercase text-[#98A89F]">
+                        {day.weekdayShort}
+                      </span>
+                      <span className="block text-xs font-semibold text-[#E4EAE6] mt-0.5">
+                        {day.dayMonth}
+                      </span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRangeStartDay(null);
+                    if (activePeriodDays.length >= 7) {
+                      setQDataPeriodo(
+                        formatEventDateRange(
+                          activePeriodDays[0].date,
+                          activePeriodDays[6].date
+                        )
+                      );
+                    }
+                  }}
+                  className="min-h-[48px] py-2 px-1.5 rounded-lg border border-[#C29B56]/40 bg-[#241E12]/60 hover:bg-[#2F2717]/70 backdrop-blur-md text-center transition-all active:scale-[0.97] cursor-pointer"
+                >
+                  <span className="block text-[10px] uppercase text-[#E5C17B]">
+                    Sex→Qui
+                  </span>
+                  <span className="block text-[11px] font-semibold text-[#F4E6C4] mt-0.5">
+                    Semana toda
+                  </span>
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-[#98A89F]">Data</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRangeStartDay(null);
+                      setQDataPeriodo(formatDdMmYyyy(new Date()));
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] text-[#E5C17B] hover:underline cursor-pointer"
+                  >
+                    <Calendar className="w-3 h-3" />
+                    <span>Hoje</span>
+                  </button>
+                </div>
+                <input
+                  id="rel-q-data"
+                  type="text"
+                  value={qDataPeriodo}
+                  onChange={(e) => {
+                    setRangeStartDay(null);
+                    setQDataPeriodo(e.target.value);
+                  }}
+                  placeholder="dd/mm/aaaa"
+                  className="siscom-input !min-h-[40px] text-xs"
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {wizardStep === 'event' && (
+            <motion.div
+              key="step-event"
+              variants={stepSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="space-y-3"
+            >
+              <div className="siscom-liquid-subcard rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="text-[#98A89F]">Data do evento:</span>
+                <span className="font-semibold text-[#83B499]">{qDataPeriodo}</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="rel-q-evento" className="block text-xs font-semibold text-[#F4E6C4]">
+                  Qual foi o evento?
+                </label>
+                <textarea
+                  id="rel-q-evento"
+                  rows={3}
+                  autoFocus
+                  value={qEvento}
+                  onChange={(e) => setQEvento(e.target.value)}
+                  placeholder="Descrição do evento"
+                  className="siscom-input !min-h-[84px] py-2.5 text-xs resize-y"
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {wizardStep === 'providencias' && (
+            <motion.div
+              key="step-providencias"
+              variants={stepSlideVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="space-y-3"
+            >
+              <div className="siscom-liquid-subcard rounded-lg px-3 py-2 space-y-0.5 text-[11px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#98A89F]">Data:</span>
+                  <span className="font-semibold text-[#83B499]">{qDataPeriodo}</span>
+                </div>
+                <p className="text-[#C6D4CC] truncate" title={qEvento}>
+                  <span className="text-[#98A89F]">Evento: </span>
+                  {qEvento}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <span className="block text-xs font-semibold text-[#F4E6C4]">
+                  Providências da Seção de Comunicação Social
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {COM_SOC_PROVIDENCIA_OPTIONS.map((opt) => {
+                    const selected = qProvidencias.includes(opt);
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => toggleProvidencia(opt)}
+                        aria-pressed={selected}
+                        className={`min-h-[42px] px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center justify-between gap-1.5 transition-all active:scale-[0.98] text-left cursor-pointer ${
+                          selected
+                            ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
+                            : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/45'
+                        }`}
+                      >
+                        <span>{opt}</span>
+                        {selected && <Check className="w-3.5 h-3.5 text-[#83B499] shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <input
+                  type="text"
+                  aria-label="Observação complementar opcional"
+                  value={qObservacao}
+                  onChange={(e) => setQObservacao(e.target.value)}
+                  placeholder="Complemento (opcional)"
+                  className="siscom-input !min-h-[40px] text-xs"
+                />
+              </div>
+
+              {(qProvidencias.length > 0 || qObservacao.trim()) && (
+                <div className="rounded-lg bg-[#16271F]/55 backdrop-blur-md border border-[#83B499]/32 p-3 space-y-1">
+                  <span className="block text-[10px] uppercase tracking-wider text-[#83B499]">
+                    Prévia
+                  </span>
+                  <p className="text-xs text-[#E4EAE6] leading-relaxed">
+                    {formatRelatorioEventText({
+                      id: 'preview',
+                      dataPeriodo: qDataPeriodo,
+                      evento: qEvento,
+                      providencias: qProvidencias,
+                      observacao: qObservacao,
+                    })}
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {formError && <SiscomAlert tone="error">{formError}</SiscomAlert>}
+        </AnimatePresence>
+
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/8">
+          {activeStepIndex > 0 && (
+            <button
+              type="button"
+              onClick={handlePrevStep}
+              className="siscom-btn siscom-btn-secondary !min-h-[42px] !px-3.5 text-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Voltar</span>
+            </button>
+          )}
+
+          {activeStepIndex < wizardSteps.length - 1 ? (
+            <button
+              type="submit"
+              className="siscom-btn siscom-btn-primary flex-1 !min-h-[42px] text-xs"
+            >
+              <span>Avançar</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <>
+              <button
+                type="submit"
+                className="siscom-btn siscom-btn-primary flex-1 !min-h-[42px] text-xs"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>
+                  {wizardMode === 'edit-event' ? 'Salvar alterações' : 'Concluir e salvar'}
+                </span>
+              </button>
+              {wizardMode !== 'edit-event' && (
+                <button
+                  type="button"
+                  onClick={() => handleFinalizeWizard(true)}
+                  className="siscom-btn siscom-btn-gold !min-h-[42px] !px-3.5 text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Salvar e +1</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+
+  const activeTabletDrawer: TabletWorkspaceDrawer | null = (() => {
+    if (!tabletDrawer) return null;
+
+    if (tabletDrawer === 'wizard') {
+      return {
+        title:
+          wizardMode === 'new-report'
+            ? 'Novo Relatório'
+            : wizardMode === 'edit-event'
+              ? 'Editar Evento'
+              : 'Adicionar Evento',
+        anchor: 'top',
+        onClose: () => {
+          resetWizardFields();
+          setWizardOpen(false);
+          setTabletDrawer(null);
+        },
+        content: wizardFormContent,
+      };
+    }
+
+    if (tabletDrawer === 'periodo') {
+      return {
+        title: 'Período (Sexta a Quinta)',
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        content: (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setWeekWindowStartOffset((o) => o - 4)}
+                className="siscom-btn siscom-btn-secondary !min-h-[36px] !px-3 text-xs"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Anteriores</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekWindowStartOffset(-1)}
+                className="siscom-btn siscom-btn-gold !min-h-[36px] !px-3 text-xs"
+              >
+                Semana atual
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekWindowStartOffset((o) => o + 4)}
+                className="siscom-btn siscom-btn-secondary !min-h-[36px] !px-3 text-xs"
+              >
+                <span>Próximas</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {visibleWeekPeriods.map((period) => {
+                const selected = activeDoc.periodoCabecalho === period.headerLabel;
+                return (
+                  <button
+                    key={period.id}
+                    type="button"
+                    onClick={() => {
+                      handlePickPeriodForActiveReport(period.headerLabel);
+                      setTabletDrawer(null);
+                    }}
+                    className={`p-3 rounded-lg border text-left transition-all active:scale-[0.98] cursor-pointer ${
+                      selected
+                        ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
+                        : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/45'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[10px] font-medium text-[#E5C17B]">
+                        {period.relativeTag}
+                      </span>
+                      {selected && <Check className="w-3 h-3 text-[#83B499] shrink-0" />}
+                    </div>
+                    <div className="text-xs font-semibold text-[#E4EAE6] mt-0.5">
+                      {period.weekdayRange}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'diversos') {
+      return {
+        title: `5. Diversos (${activeDoc.diversosEventos.length})`,
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={() => {
+              handleStartAddEvent();
+              setTabletDrawer('wizard');
+            }}
+            className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs font-medium bg-[#2D5A43]/80 hover:bg-[#3A7456] text-white border border-[#8AC0A3]/40 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Incluir</span>
+          </button>
+        ),
+        content:
+          activeDoc.diversosEventos.length === 0 ? (
+            <p className="text-xs text-[#98A89F] py-2">Nenhum evento.</p>
+          ) : (
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {activeDoc.diversosEventos.map((ev, idx) => (
+                <li
+                  key={ev.id}
+                  className="siscom-liquid-subcard rounded-lg p-3 space-y-2"
+                >
+                  <p className="text-xs text-[#E4EAE6] leading-relaxed">
+                    {formatRelatorioEventText(ev)}
+                  </p>
+                  <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/6">
+                    <span className="text-[10px] font-mono text-[#98A89F] truncate">
+                      {ev.providencias.join(' · ') || 'Sem marcação'}
+                    </span>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveEvent(idx, -1)}
+                        title="Mover para cima"
+                        aria-label="Mover para cima"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-white hover:bg-white/6 disabled:opacity-30 transition-colors cursor-pointer"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === activeDoc.diversosEventos.length - 1}
+                        onClick={() => handleMoveEvent(idx, 1)}
+                        title="Mover para baixo"
+                        aria-label="Mover para baixo"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-white hover:bg-white/6 disabled:opacity-30 transition-colors cursor-pointer"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleEditEvent(ev);
+                          setTabletDrawer('wizard');
+                        }}
+                        title="Editar evento"
+                        aria-label="Editar evento"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#E5C17B] hover:bg-white/8 transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEvent(ev.id)}
+                        title="Remover evento"
+                        aria-label="Remover evento"
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-red-950/40 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ),
+      };
+    }
+
+    return {
+      title: 'Textos fixos do modelo',
+      anchor: 'bottom',
+      onClose: () => setTabletDrawer(null),
+      headerAction: (
+        <button
+          type="button"
+          onClick={() => {
+            const fresh = createDefaultRelatorioDocument({
+              id: activeDoc.id,
+              diversosEventos: activeDoc.diversosEventos,
+            });
+            updateActiveReport(() => fresh, 'immediate');
+            setNotice('Campos do modelo restaurados.');
+          }}
+          className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Padrão</span>
+        </button>
+      ),
+      content: (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2 space-y-1">
+            <label htmlFor="tablet-adv-periodo" className="siscom-field-label !text-[11px]">
+              Período no cabeçalho
+            </label>
+            <input
+              id="tablet-adv-periodo"
+              type="text"
+              value={activeDoc.periodoCabecalho}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateActiveReport(
+                  (doc) => ({
+                    ...doc,
+                    periodoCabecalho: val,
+                    title: `Relatório Semanal – ${val}`,
+                  }),
+                  'debounced'
+                );
+              }}
+              className="siscom-input !min-h-[38px] text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="tablet-adv-1" className="siscom-field-label !text-[11px]">
+              1. Preparo e Emprego
+            </label>
+            <input
+              id="tablet-adv-1"
+              type="text"
+              value={activeDoc.preparoEmprego}
+              onChange={(e) =>
+                updateActiveReport(
+                  (doc) => ({ ...doc, preparoEmprego: e.target.value }),
+                  'debounced'
+                )
+              }
+              className="siscom-input !min-h-[36px] text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="tablet-adv-2" className="siscom-field-label !text-[11px]">
+              2. Estado Sanitário
+            </label>
+            <input
+              id="tablet-adv-2"
+              type="text"
+              value={activeDoc.estadoSanitario}
+              onChange={(e) =>
+                updateActiveReport(
+                  (doc) => ({ ...doc, estadoSanitario: e.target.value }),
+                  'debounced'
+                )
+              }
+              className="siscom-input !min-h-[36px] text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="tablet-adv-3" className="siscom-field-label !text-[11px]">
+              3. Problemas Disciplinares
+            </label>
+            <input
+              id="tablet-adv-3"
+              type="text"
+              value={activeDoc.problemasDisciplinares}
+              onChange={(e) =>
+                updateActiveReport(
+                  (doc) => ({ ...doc, problemasDisciplinares: e.target.value }),
+                  'debounced'
+                )
+              }
+              className="siscom-input !min-h-[36px] text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="tablet-adv-412" className="siscom-field-label !text-[11px]">
+              4.1.2. Gêneros Alimentícios
+            </label>
+            <input
+              id="tablet-adv-412"
+              type="text"
+              value={activeDoc.generosAlimenticios}
+              onChange={(e) =>
+                updateActiveReport(
+                  (doc) => ({ ...doc, generosAlimenticios: e.target.value }),
+                  'debounced'
+                )
+              }
+              className="siscom-input !min-h-[36px] text-xs"
+            />
+          </div>
+        </div>
+      ),
+    };
+  })();
+
   return (
     <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[325px] xl:w-[350px]"
       rightSidebarWidthClass="lg:w-[295px] xl:w-[320px]"
+      tabletDrawer={activeTabletDrawer}
+      tabletTopBar={
+        <TabletRibbonRow>
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              variant="primary"
+              open={tabletDrawer === 'wizard' && wizardMode === 'new-report'}
+              onClick={() => {
+                handleStartNewReport();
+                setTabletDrawer('wizard');
+              }}
+              icon={<FilePlus2 className="w-3.5 h-3.5" />}
+            >
+              Novo
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              variant="gold"
+              open={tabletDrawer === 'wizard' && wizardMode !== 'new-report'}
+              onClick={() => {
+                handleStartAddEvent();
+                setTabletDrawer('wizard');
+              }}
+              icon={<Plus className="w-3.5 h-3.5" />}
+            >
+              Evento
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            {state.reports.length > 0 && (
+              <select
+                aria-label="Selecionar relatório salvo"
+                value={activeDoc.id}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  const target = state.reports.find((r) => r.id === nextId);
+                  setState((prev) => ({ ...prev, activeId: nextId }));
+                  const isEmpty = (target?.diversosEventos.length ?? 0) === 0;
+                  setWizardMode(isEmpty ? 'new-report' : 'add-event');
+                  setWizardStep(isEmpty ? 'period' : 'date');
+                  setNewReportPeriodo(target?.periodoCabecalho || currentWeekDefault.headerLabel);
+                  setWizardOpen(isEmpty);
+                  setQuickPeriodPickerOpen(false);
+                  resetWizardFields();
+                }}
+                className="siscom-input !w-auto max-w-[230px] !min-h-[40px] !px-2.5 !rounded-xl text-xs shrink-0"
+              >
+                {state.reports.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.periodoCabecalho || r.title} ({r.diversosEventos.length})
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'periodo'}
+              onClick={() => toggleTabletDrawer('periodo')}
+              icon={<Calendar className="w-3.5 h-3.5 text-[#E5C17B]" />}
+            >
+              Período
+            </TabletRibbonButton>
+
+            {state.reports.length > 0 && (
+              <TabletRibbonIconButton
+                onClick={handleDeleteCurrentReport}
+                aria-label="Limpar ou remover este relatório"
+                title="Limpar ou remover este relatório"
+                className="!text-red-300 hover:!bg-red-950/60"
+              >
+                <Trash2 className="w-4 h-4" />
+              </TabletRibbonIconButton>
+            )}
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            {notice && (
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                className={`min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border whitespace-nowrap cursor-pointer ${
+                  notice.startsWith('Erro')
+                    ? 'bg-red-950/60 border-red-400/35 text-red-200'
+                    : 'bg-[#2D5A43]/40 border-[#8AC0A3]/35 text-[#D8F0E2]'
+                }`}
+              >
+                {notice}
+              </button>
+            )}
+
+            <TabletRibbonButton
+              variant="primary"
+              disabled={exporting !== null}
+              onClick={handleDownloadPdf}
+              icon={
+                exporting === 'pdf' ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )
+              }
+            >
+              PDF
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              variant="gold"
+              disabled={exporting !== null}
+              onClick={handleDownloadWord}
+              icon={
+                exporting === 'word' ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5" />
+                )
+              }
+            >
+              Word
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              onClick={() => window.print()}
+              icon={<Printer className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              Imprimir
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
+      tabletBottomBar={
+        <TabletRibbonRow className="justify-between">
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'diversos'}
+              onClick={() => toggleTabletDrawer('diversos')}
+              icon={<ListChecks className="w-3.5 h-3.5 text-[#E5C17B]" />}
+              badge={activeDoc.diversosEventos.length}
+            >
+              5. Diversos
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              onClick={() => {
+                handleStartAddEvent();
+                setTabletDrawer('wizard');
+              }}
+              icon={<Plus className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              Incluir evento
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'fixos'}
+              onClick={() => toggleTabletDrawer('fixos')}
+              icon={<SlidersHorizontal className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              Textos fixos
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
       sidebar={
         <div className="space-y-4">
         {/* Saved Reports Switcher + Primary Actions */}
@@ -1114,426 +2017,7 @@ export const RelatorioGenerator: React.FC = () => {
                 )}
               </div>
 
-              {/* Stepper Progress Bar */}
-              <nav
-                aria-label="Etapas do relatório"
-                className="grid gap-1.5"
-                style={{ gridTemplateColumns: `repeat(${wizardSteps.length}, minmax(0, 1fr))` }}
-              >
-                {wizardSteps.map((step, idx) => {
-                  const isActive = idx === activeStepIndex;
-                  const isDone = idx < activeStepIndex;
-                  return (
-                    <button
-                      key={step.id}
-                      type="button"
-                      onClick={() => handleJumpToStep(idx)}
-                      className={`min-h-[46px] rounded-lg px-2.5 py-1.5 border text-left transition-all active:scale-[0.98] flex flex-col justify-center gap-0.5 ${
-                        isActive
-                          ? 'bg-[#241E12]/65 backdrop-blur-md border-[#C29B56]/75 text-[#F4E6C4]'
-                          : isDone
-                            ? 'bg-[#2D5A43]/28 backdrop-blur-md border-[#83B499]/45 text-[#B4D8C5] hover:border-[#83B499]/70'
-                            : 'bg-[#0A110E]/45 backdrop-blur-md border-white/10 text-[#98A89F] hover:border-white/22'
-                      }`}
-                    >
-                      <span className="flex items-center justify-between text-[10px] font-mono">
-                        <span>{idx + 1}</span>
-                        {isDone && <Check className="w-3 h-3 text-[#83B499]" />}
-                      </span>
-                      <span className="text-[11px] font-medium truncate">{step.shortLabel}</span>
-                    </button>
-                  );
-                })}
-              </nav>
-
-              <form onSubmit={handleSubmitForm} className="space-y-4">
-                <AnimatePresence mode="wait">
-                  {/* STEP: PERIOD (Friday to Thursday) */}
-                  {wizardStep === 'period' && (
-                    <motion.div
-                      key="step-period"
-                      variants={stepSlideVariants}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                      className="space-y-3"
-                    >
-                  <h4 className="text-xs font-semibold text-[#F4E6C4]">
-                    Período (Sexta a Quinta)
-                  </h4>
-
-                  <div className="flex items-center justify-between gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setWeekWindowStartOffset((o) => o - 4)}
-                      className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px]"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                      <span>Anteriores</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setWeekWindowStartOffset(-1)}
-                      className="siscom-btn siscom-btn-gold !min-h-[34px] !px-2.5 text-[11px]"
-                    >
-                      Semana atual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setWeekWindowStartOffset((o) => o + 4)}
-                      className="siscom-btn siscom-btn-secondary !min-h-[34px] !px-2.5 text-[11px]"
-                    >
-                      <span>Próximas</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {visibleWeekPeriods.map((period) => {
-                      const selected = newReportPeriodo === period.headerLabel;
-                      return (
-                        <button
-                          key={period.id}
-                          type="button"
-                          onClick={() => handlePickPeriodInWizard(period.headerLabel)}
-                          aria-pressed={selected}
-                          className={`p-3 rounded-lg border text-left transition-all active:scale-[0.98] space-y-1 ${
-                            selected
-                              ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
-                              : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1.5">
-                            <span
-                              className={`text-[10px] font-medium uppercase tracking-wide ${
-                                period.weekOffset === 0
-                                  ? 'text-[#83B499]'
-                                  : selected
-                                    ? 'text-[#E5C17B]'
-                                    : 'text-[#98A89F]'
-                              }`}
-                            >
-                              {period.relativeTag}
-                            </span>
-                            {selected && <Check className="w-3.5 h-3.5 text-[#83B499] shrink-0" />}
-                          </div>
-                          <div className="text-xs font-semibold text-[#E4EAE6]">
-                            {period.weekdayRange}
-                          </div>
-                          <div className="text-[10px] font-mono text-[#98A89F] truncate">
-                            {period.headerLabel}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowCustomPeriodInput((v) => !v)}
-                      className="text-[11px] text-[#98A89F] hover:text-[#E5C17B] underline underline-offset-2 transition-colors"
-                    >
-                      {showCustomPeriodInput ? 'Fechar' : 'Editar manualmente'}
-                    </button>
-                    {showCustomPeriodInput && (
-                      <input
-                        id="rel-periodo-cab"
-                        type="text"
-                        value={newReportPeriodo}
-                        onChange={(e) => handlePickPeriodInWizard(e.target.value)}
-                        placeholder="14 A 20 AGOSTO 26"
-                        className="siscom-input mt-2 !min-h-[40px] text-xs"
-                      />
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STEP: EVENT DATE (7 clickable days from Friday to Thursday) */}
-              {wizardStep === 'date' && (
-                <motion.div
-                  key="step-date"
-                  variants={stepSlideVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  className="space-y-3"
-                >
-                  <div className="siscom-liquid-subcard rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
-                    <span className="text-[#98A89F]">Semana selecionada:</span>
-                    <span className="font-semibold text-[#E5C17B] truncate">
-                      {activePeriodHeaderForDays}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label htmlFor="rel-q-data" className="block text-xs font-semibold text-[#F4E6C4]">
-                      Quando aconteceu o evento?
-                    </label>
-                    <SiscomSegmentedTabs
-                      layoutId="relatorio-date-mode"
-                      size="sm"
-                      ariaLabel="Tipo de data do evento"
-                      value={dateSelectionMode}
-                      onChange={(mode) => {
-                        setDateSelectionMode(mode);
-                        setRangeStartDay(null);
-                      }}
-                      options={[
-                        { value: 'single', label: '1 dia' },
-                        { value: 'range', label: 'Vários dias' },
-                      ]}
-                    />
-                  </div>
-
-                  {dateSelectionMode === 'range' && rangeStartDay && (
-                    <p className="text-[11px] text-[#E5C17B]">
-                      {rangeStartDay.weekdayShort} {rangeStartDay.dayMonth} → ...
-                    </p>
-                  )}
-
-                  {/* 7 Clickable Days of the Selected Friday→Thursday Period */}
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {activePeriodDays.map((day) => {
-                      const isPicked =
-                        qDataPeriodo === day.fullDate || rangeStartDay?.iso === day.iso;
-                      return (
-                        <button
-                          key={day.iso}
-                          type="button"
-                          onClick={() => handleDayButtonClick(day)}
-                          className={`min-h-[48px] py-2 px-1.5 rounded-lg border text-center transition-all active:scale-[0.97] ${
-                            isPicked
-                              ? 'bg-[#2D5A43]/45 border-[#83B499] text-[#F4E6C4]'
-                              : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/50'
-                          }`}
-                        >
-                          <span className="block text-[10px] uppercase text-[#98A89F]">
-                            {day.weekdayShort}
-                          </span>
-                          <span className="block text-xs font-semibold text-[#E4EAE6] mt-0.5">
-                            {day.dayMonth}
-                          </span>
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRangeStartDay(null);
-                        if (activePeriodDays.length >= 7) {
-                          setQDataPeriodo(
-                            formatEventDateRange(
-                              activePeriodDays[0].date,
-                              activePeriodDays[6].date
-                            )
-                          );
-                        }
-                      }}
-                      className="min-h-[48px] py-2 px-1.5 rounded-lg border border-[#C29B56]/40 bg-[#241E12]/60 hover:bg-[#2F2717]/70 backdrop-blur-md text-center transition-all active:scale-[0.97]"
-                    >
-                      <span className="block text-[10px] uppercase text-[#E5C17B]">
-                        Sex→Qui
-                      </span>
-                      <span className="block text-[11px] font-semibold text-[#F4E6C4] mt-0.5">
-                        Semana toda
-                      </span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-[#98A89F]">
-                        Data
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRangeStartDay(null);
-                          setQDataPeriodo(formatDdMmYyyy(new Date()));
-                        }}
-                        className="inline-flex items-center gap-1 text-[11px] text-[#E5C17B] hover:underline"
-                      >
-                        <Calendar className="w-3 h-3" />
-                        <span>Hoje</span>
-                      </button>
-                    </div>
-                    <input
-                      id="rel-q-data"
-                      type="text"
-                      value={qDataPeriodo}
-                      onChange={(e) => {
-                        setRangeStartDay(null);
-                        setQDataPeriodo(e.target.value);
-                      }}
-                      placeholder="dd/mm/aaaa"
-                      className="siscom-input !min-h-[40px] text-xs"
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STEP: EVENT DESCRIPTION */}
-              {wizardStep === 'event' && (
-                <motion.div
-                  key="step-event"
-                  variants={stepSlideVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  className="space-y-3"
-                >
-                  <div className="siscom-liquid-subcard rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <span className="text-[#98A89F]">Data do evento:</span>
-                    <span className="font-semibold text-[#83B499]">{qDataPeriodo}</span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="rel-q-evento" className="block text-xs font-semibold text-[#F4E6C4]">
-                      Qual foi o evento?
-                    </label>
-                    <textarea
-                      id="rel-q-evento"
-                      rows={3}
-                      autoFocus
-                      value={qEvento}
-                      onChange={(e) => setQEvento(e.target.value)}
-                      placeholder="Descrição do evento"
-                      className="siscom-input !min-h-[84px] py-2.5 text-xs resize-y"
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {/* STEP: COM SOC PROVIDÊNCIAS + LIVE PREVIEW */}
-              {wizardStep === 'providencias' && (
-                <motion.div
-                  key="step-providencias"
-                  variants={stepSlideVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  className="space-y-3"
-                >
-                  <div className="siscom-liquid-subcard rounded-lg px-3 py-2 space-y-0.5 text-[11px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[#98A89F]">Data:</span>
-                      <span className="font-semibold text-[#83B499]">{qDataPeriodo}</span>
-                    </div>
-                    <p className="text-[#C6D4CC] truncate" title={qEvento}>
-                      <span className="text-[#98A89F]">Evento: </span>
-                      {qEvento}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <span className="block text-xs font-semibold text-[#F4E6C4]">
-                      Providências da Seção de Comunicação Social
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {COM_SOC_PROVIDENCIA_OPTIONS.map((opt) => {
-                        const selected = qProvidencias.includes(opt);
-                        return (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => toggleProvidencia(opt)}
-                            aria-pressed={selected}
-                            className={`min-h-[42px] px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center justify-between gap-1.5 transition-all active:scale-[0.98] text-left ${
-                              selected
-                                ? 'bg-[#2D5A43]/42 border-[#83B499] text-[#F4E6C4]'
-                                : 'bg-[#0A110E]/48 backdrop-blur-md border-white/12 text-[#C6D4CC] hover:border-[#C29B56]/45'
-                            }`}
-                          >
-                            <span>{opt}</span>
-                            {selected && <Check className="w-3.5 h-3.5 text-[#83B499] shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <input
-                      type="text"
-                      aria-label="Observação complementar opcional"
-                      value={qObservacao}
-                      onChange={(e) => setQObservacao(e.target.value)}
-                      placeholder="Complemento (opcional)"
-                      className="siscom-input !min-h-[40px] text-xs"
-                    />
-                  </div>
-
-                  {/* Formatted Line Preview */}
-                  {(qProvidencias.length > 0 || qObservacao.trim()) && (
-                    <div className="rounded-lg bg-[#16271F]/55 backdrop-blur-md border border-[#83B499]/32 p-3 space-y-1">
-                      <span className="block text-[10px] uppercase tracking-wider text-[#83B499]">
-                        Prévia
-                      </span>
-                      <p className="text-xs text-[#E4EAE6] leading-relaxed">
-                        {formatRelatorioEventText({
-                          id: 'preview',
-                          dataPeriodo: qDataPeriodo,
-                          evento: qEvento,
-                          providencias: qProvidencias,
-                          observacao: qObservacao,
-                        })}
-                      </p>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                  {formError && <SiscomAlert tone="error">{formError}</SiscomAlert>}
-                </AnimatePresence>
-
-                {/* Step Navigation Footer */}
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/8">
-                  {activeStepIndex > 0 && (
-                    <button
-                      type="button"
-                      onClick={handlePrevStep}
-                      className="siscom-btn siscom-btn-secondary !min-h-[42px] !px-3.5 text-xs"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>Voltar</span>
-                    </button>
-                  )}
-
-                  {activeStepIndex < wizardSteps.length - 1 ? (
-                    <button
-                      type="submit"
-                      className="siscom-btn siscom-btn-primary flex-1 !min-h-[42px] text-xs"
-                    >
-                      <span>Avançar</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="submit"
-                        className="siscom-btn siscom-btn-primary flex-1 !min-h-[42px] text-xs"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>
-                          {wizardMode === 'edit-event' ? 'Salvar alterações' : 'Concluir e salvar'}
-                        </span>
-                      </button>
-                      {wizardMode !== 'edit-event' && (
-                        <button
-                          type="button"
-                          onClick={() => handleFinalizeWizard(true)}
-                          className="siscom-btn siscom-btn-gold !min-h-[42px] !px-3.5 text-xs"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Salvar e +1</span>
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </form>
+              {wizardFormContent}
             </motion.section>
           )}
         </AnimatePresence>

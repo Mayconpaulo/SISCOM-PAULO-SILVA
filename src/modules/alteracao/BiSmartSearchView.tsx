@@ -22,7 +22,17 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useAuth } from '../../core/auth/AuthContext';
 import { auth } from '../../core/auth/firebase';
-import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletWorkspaceDrawer,
+  WorkspaceSplitLayout,
+} from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonRow,
+} from '../../shared/TabletRibbonPrimitives';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
 import { SiscomAlert, SiscomModal, SiscomSpinner } from '../../shared/ui';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
 import {
@@ -147,6 +157,8 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
     occurrence: BiOccurrenceItem;
     pages: BiBulletinPage[];
   } | null>(null);
+  const [tabletDrawer, setTabletDrawer] = useState<'militar' | 'boletins' | null>(null);
+  const isTabletPortrait = useTabletPortrait();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -991,10 +1003,340 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
     );
   };
 
+  const militaryFieldsContent = (
+    <div className="space-y-3">
+      {archivedSuggestions.length > 0 && (
+        <div className="space-y-1">
+          <label htmlFor="bi-archived-suggest" className="block text-[11px] text-[#98A89F]">
+            Arquivo
+          </label>
+          <select
+            id="bi-archived-suggest"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) handleApplySuggestion(e.target.value);
+            }}
+            className="siscom-input w-full !min-h-[36px] !px-2.5 text-xs"
+          >
+            <option value="">Selecionar militar...</option>
+            {archivedSuggestions.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <label htmlFor="bi-mil-nome" className="block text-[11px] font-medium text-[#E5C17B]">
+          Nome do militar *
+        </label>
+        <input
+          id="bi-mil-nome"
+          type="text"
+          value={military.nomeCompleto}
+          onChange={(e) => updateMilitary('nomeCompleto', e.target.value)}
+          placeholder="Ex.: EDSON DA SILVA CARDOSO"
+          className="siscom-input w-full !min-h-[40px] px-3 text-xs"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label htmlFor="bi-mil-posto" className="block text-[11px] text-[#98A89F]">
+            Posto / Grad.
+          </label>
+          <input
+            id="bi-mil-posto"
+            type="text"
+            value={military.postoGraduacao}
+            onChange={(e) => updateMilitary('postoGraduacao', e.target.value)}
+            placeholder="Ex.: 2º Sgt"
+            className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="bi-mil-guerra" className="block text-[11px] text-[#98A89F]">
+            Nome de guerra
+          </label>
+          <input
+            id="bi-mil-guerra"
+            type="text"
+            value={military.nomeGuerra}
+            onChange={(e) => updateMilitary('nomeGuerra', e.target.value)}
+            placeholder="Ex.: CARDOSO"
+            className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="bi-mil-su" className="block text-[11px] text-[#98A89F]">
+            Subunidade / Cia
+          </label>
+          <input
+            id="bi-mil-su"
+            type="text"
+            value={military.subunidade}
+            onChange={(e) => updateMilitary('subunidade', e.target.value)}
+            placeholder="Ex.: Cia C Ap"
+            className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="bi-mil-idt" className="block text-[11px] text-[#98A89F]">
+            Identidade
+          </label>
+          <input
+            id="bi-mil-idt"
+            type="text"
+            value={military.identidade}
+            onChange={(e) => updateMilitary('identidade', e.target.value)}
+            placeholder="Opcional"
+            className="siscom-input w-full !min-h-[36px] px-2.5 font-mono text-xs"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label htmlFor="bi-mil-qms" className="block text-[11px] text-[#98A89F]">
+          QAS / QMS
+        </label>
+        <input
+          id="bi-mil-qms"
+          type="text"
+          value={military.qasQms}
+          onChange={(e) => updateMilitary('qasQms', e.target.value)}
+          placeholder="QAS / QMS"
+          className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
+        />
+      </div>
+
+      <label className="flex items-center gap-2 text-[11px] text-[#98A89F] cursor-pointer select-none pt-1">
+        <input
+          type="checkbox"
+          checked={includeFirstPart}
+          onChange={(e) => setIncludeFirstPart(e.target.checked)}
+          className="h-3.5 w-3.5 accent-[#C9A961] cursor-pointer"
+        />
+        <span>Incluir 1ª Parte (Serviços Diários / Escala)</span>
+      </label>
+    </div>
+  );
+
+  const bulletinsQueueContent = (
+    <div className="space-y-3">
+      <button
+        type="button"
+        disabled={isSearching}
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDropFiles}
+        className="w-full rounded-xl border border-dashed border-[#C8A461]/45 bg-[#121C16]/55 hover:bg-[#1A2820]/65 backdrop-blur-md hover:border-[#C8A461]/75 px-4 py-4 flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-50 cursor-pointer"
+      >
+        <Upload className="w-5 h-5 text-[#E5C17B]" />
+        <span className="text-xs font-semibold text-[#F4E6C4]">
+          Importar Boletins
+        </span>
+      </button>
+
+      {queuedFiles.length > 0 && (
+        <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
+          {queuedFiles.map((f) => (
+            <div
+              key={f.id}
+              className="siscom-liquid-subcard rounded-lg px-2.5 py-2 flex items-start justify-between gap-2 text-xs"
+            >
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
+                  <span className="font-medium text-[#E8EEEA] truncate" title={f.fileName}>
+                    {f.fileName}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#8EA196]">
+                  <span className="font-mono">{formatBytes(f.fileSize)}</span>
+                  {f.bulletinNumber && (
+                    <span className="font-mono text-[#E5C17B]">BI Nº {f.bulletinNumber}</span>
+                  )}
+                  {f.status === 'reading' || f.status === 'ocr' || f.status === 'analyzing' ? (
+                    <span className="inline-flex items-center gap-1 text-[#E5C17B]">
+                      <SiscomSpinner tone="gold" className="w-3 h-3" />
+                      <span>{f.progressText || 'Processando...'}</span>
+                    </span>
+                  ) : f.status === 'done' ? (
+                    <span className="text-[#78C29B]">
+                      {f.occurrencesCount ?? 0} ocorrência
+                      {(f.occurrencesCount ?? 0) !== 1 ? 's' : ''}
+                    </span>
+                  ) : f.status === 'error' ? (
+                    <span className="text-[#E68A8A]">{f.errorMessage || 'Erro'}</span>
+                  ) : (
+                    <span>Aguardando pesquisa</span>
+                  )}
+                </div>
+              </div>
+              {!isSearching && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFile(f.id)}
+                  aria-label={`Remover ${f.fileName}`}
+                  className="p-1 text-[#8EA196] hover:text-[#E68A8A] transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const activeTabletDrawer: TabletWorkspaceDrawer | null =
+    tabletDrawer === 'militar'
+      ? {
+          title: 'Dados do Militar',
+          anchor: 'bottom',
+          onClose: () => setTabletDrawer(null),
+          content: militaryFieldsContent,
+        }
+      : tabletDrawer === 'boletins'
+        ? {
+            title: `Boletins (${queuedFiles.length})`,
+            anchor: 'bottom',
+            onClose: () => setTabletDrawer(null),
+            headerAction:
+              queuedFiles.length > 0 && !isSearching ? (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="text-xs text-[#98A89F] hover:text-white hover:underline cursor-pointer"
+                >
+                  Limpar
+                </button>
+              ) : undefined,
+            content: bulletinsQueueContent,
+          }
+        : null;
+
   return (
     <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.docx,.txt"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       <WorkspaceSplitLayout
         sidebarWidthClass="lg:w-[340px] xl:w-[370px]"
+        tabletSingleBarPosition="bottom"
+        tabletDrawer={activeTabletDrawer}
+        tabletBottomBar={
+          <TabletRibbonRow>
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                icon={<User className="w-4 h-4 text-[#E5C17B]" />}
+                variant={tabletDrawer === 'militar' ? 'active' : 'default'}
+                chevron
+                open={tabletDrawer === 'militar'}
+                onClick={() => setTabletDrawer((prev) => (prev === 'militar' ? null : 'militar'))}
+              >
+                {military.nomeGuerra.trim() || military.nomeCompleto.trim() || 'Militar'}
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                icon={<Upload className="w-4 h-4 text-[#E5C17B]" />}
+                disabled={isSearching}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Importar BI
+              </TabletRibbonButton>
+              <TabletRibbonButton
+                icon={<FileSearch className="w-4 h-4 text-[#83B499]" />}
+                variant={tabletDrawer === 'boletins' ? 'active' : 'default'}
+                badge={queuedFiles.length}
+                chevron
+                open={tabletDrawer === 'boletins'}
+                onClick={() => setTabletDrawer((prev) => (prev === 'boletins' ? null : 'boletins'))}
+              >
+                Boletins
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <select
+                aria-label="Semestre da Folha"
+                value={semester.half}
+                onChange={(e) => {
+                  semesterTouchedRef.current = true;
+                  setSemester((prev) => ({
+                    ...prev,
+                    half: e.target.value === '2' ? '2' : '1',
+                  }));
+                }}
+                className="siscom-input !h-9 !min-h-[36px] !py-0 !px-2.5 text-xs w-auto"
+              >
+                <option value="1">1º Sem.</option>
+                <option value="2">2º Sem.</option>
+              </select>
+              <input
+                aria-label="Ano da Folha"
+                type="number"
+                min={2000}
+                max={2100}
+                value={semester.year}
+                onChange={(e) => {
+                  semesterTouchedRef.current = true;
+                  setSemester((prev) => ({
+                    ...prev,
+                    year: Math.max(2000, Math.min(2100, Number(e.target.value) || prev.year)),
+                  }));
+                }}
+                className="siscom-input !h-9 !min-h-[36px] !py-0 !px-2 font-mono text-xs w-[74px] text-center"
+              />
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                variant="primary"
+                icon={
+                  isSearching ? (
+                    <SiscomSpinner tone="gold" className="w-4 h-4" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-[#E5C17B]" />
+                  )
+                }
+                disabled={isSearching || queuedFiles.length === 0 || !military.nomeCompleto.trim()}
+                onClick={() => {
+                  setTabletDrawer(null);
+                  handleStartSearch();
+                }}
+              >
+                {isSearching ? 'Pesquisando...' : 'Pesquisar'}
+              </TabletRibbonButton>
+              {isSearching && (
+                <TabletRibbonButton
+                  variant="danger"
+                  icon={<X className="w-4 h-4" />}
+                  onClick={handleCancelSearch}
+                >
+                  Parar
+                </TabletRibbonButton>
+              )}
+            </TabletRibbonGroup>
+          </TabletRibbonRow>
+        }
         sidebar={
           <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
             {/* Step 1: Militar Pesquisado */}
@@ -1006,111 +1348,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                 </span>
               </div>
 
-              {archivedSuggestions.length > 0 && (
-                <div className="space-y-1">
-                  <label htmlFor="bi-archived-suggest" className="block text-[11px] text-[#98A89F]">
-                    Arquivo
-                  </label>
-                  <select
-                    id="bi-archived-suggest"
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) handleApplySuggestion(e.target.value);
-                    }}
-                    className="siscom-input w-full !min-h-[36px] !px-2.5 text-xs"
-                  >
-                    <option value="">Selecionar militar...</option>
-                    {archivedSuggestions.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label htmlFor="bi-mil-nome" className="block text-[11px] font-medium text-[#E5C17B]">
-                  Nome do militar *
-                </label>
-                <input
-                  id="bi-mil-nome"
-                  type="text"
-                  value={military.nomeCompleto}
-                  onChange={(e) => updateMilitary('nomeCompleto', e.target.value)}
-                  placeholder="Ex.: EDSON DA SILVA CARDOSO"
-                  className="siscom-input w-full !min-h-[40px] px-3 text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label htmlFor="bi-mil-posto" className="block text-[11px] text-[#98A89F]">
-                    Posto / Grad.
-                  </label>
-                  <input
-                    id="bi-mil-posto"
-                    type="text"
-                    value={military.postoGraduacao}
-                    onChange={(e) => updateMilitary('postoGraduacao', e.target.value)}
-                    placeholder="Ex.: 2º Sgt"
-                    className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="bi-mil-guerra" className="block text-[11px] text-[#98A89F]">
-                    Nome de guerra
-                  </label>
-                  <input
-                    id="bi-mil-guerra"
-                    type="text"
-                    value={military.nomeGuerra}
-                    onChange={(e) => updateMilitary('nomeGuerra', e.target.value)}
-                    placeholder="Ex.: CARDOSO"
-                    className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="bi-mil-su" className="block text-[11px] text-[#98A89F]">
-                    Subunidade / Cia
-                  </label>
-                  <input
-                    id="bi-mil-su"
-                    type="text"
-                    value={military.subunidade}
-                    onChange={(e) => updateMilitary('subunidade', e.target.value)}
-                    placeholder="Ex.: Cia C Ap"
-                    className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="bi-mil-idt" className="block text-[11px] text-[#98A89F]">
-                    Identidade
-                  </label>
-                  <input
-                    id="bi-mil-idt"
-                    type="text"
-                    value={military.identidade}
-                    onChange={(e) => updateMilitary('identidade', e.target.value)}
-                    placeholder="Opcional"
-                    className="siscom-input w-full !min-h-[36px] px-2.5 font-mono text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="bi-mil-qms" className="block text-[11px] text-[#98A89F]">
-                  QAS / QMS
-                </label>
-                <input
-                  id="bi-mil-qms"
-                  type="text"
-                  value={military.qasQms}
-                  onChange={(e) => updateMilitary('qasQms', e.target.value)}
-                  placeholder="QAS / QMS"
-                  className="siscom-input w-full !min-h-[36px] px-2.5 text-xs"
-                />
-              </div>
+              {militaryFieldsContent}
 
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div className="space-y-1">
@@ -1154,16 +1392,6 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                   />
                 </div>
               </div>
-
-              <label className="flex items-center gap-2 text-[11px] text-[#98A89F] cursor-pointer select-none pt-1">
-                <input
-                  type="checkbox"
-                  checked={includeFirstPart}
-                  onChange={(e) => setIncludeFirstPart(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-[#C9A961] cursor-pointer"
-                />
-                <span>Incluir 1ª Parte (Serviços Diários / Escala)</span>
-              </label>
             </div>
 
             {/* Step 2: Importar Boletins Internos */}
@@ -1184,79 +1412,7 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
                 )}
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".pdf,.docx,.txt"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-
-              <button
-                type="button"
-                disabled={isSearching}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDropFiles}
-                className="w-full rounded-xl border border-dashed border-[#C8A461]/45 bg-[#121C16]/55 hover:bg-[#1A2820]/65 backdrop-blur-md hover:border-[#C8A461]/75 px-4 py-4 flex flex-col items-center justify-center gap-1.5 text-center transition-all disabled:opacity-50 cursor-pointer"
-              >
-                <Upload className="w-5 h-5 text-[#E5C17B]" />
-                <span className="text-xs font-semibold text-[#F4E6C4]">
-                  Importar Boletins
-                </span>
-              </button>
-
-              {queuedFiles.length > 0 && (
-                <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1">
-                  {queuedFiles.map((f) => (
-                    <div
-                      key={f.id}
-                      className="siscom-liquid-subcard rounded-lg px-2.5 py-2 flex items-start justify-between gap-2 text-xs"
-                    >
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
-                          <span className="font-medium text-[#E8EEEA] truncate" title={f.fileName}>
-                            {f.fileName}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#8EA196]">
-                          <span className="font-mono">{formatBytes(f.fileSize)}</span>
-                          {f.bulletinNumber && (
-                            <span className="font-mono text-[#E5C17B]">BI Nº {f.bulletinNumber}</span>
-                          )}
-                          {f.status === 'reading' || f.status === 'ocr' || f.status === 'analyzing' ? (
-                            <span className="inline-flex items-center gap-1 text-[#E5C17B]">
-                              <SiscomSpinner tone="gold" className="w-3 h-3" />
-                              <span>{f.progressText || 'Processando...'}</span>
-                            </span>
-                          ) : f.status === 'done' ? (
-                            <span className="text-[#78C29B]">
-                              {f.occurrencesCount ?? 0} ocorrência
-                              {(f.occurrencesCount ?? 0) !== 1 ? 's' : ''}
-                            </span>
-                          ) : f.status === 'error' ? (
-                            <span className="text-[#E68A8A]">{f.errorMessage || 'Erro'}</span>
-                          ) : (
-                            <span>Aguardando pesquisa</span>
-                          )}
-                        </div>
-                      </div>
-                      {!isSearching && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFile(f.id)}
-                          aria-label={`Remover ${f.fileName}`}
-                          className="p-1 text-[#8EA196] hover:text-[#E68A8A] transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {bulletinsQueueContent}
 
               <div className="flex items-center gap-2 pt-1">
                 <button
@@ -1307,6 +1463,18 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
       >
         {/* Main Review Workspace */}
         <div className="w-full max-w-[960px] mx-auto space-y-4 pb-8">
+          {isTabletPortrait && isSearching && searchStatus && (
+            <p className="text-xs font-mono text-[#E5C17B] text-center">{searchStatus}</p>
+          )}
+          {isTabletPortrait && (
+            <AnimatePresence>
+              {notice && (
+                <SiscomAlert tone={notice.tone} onDismiss={() => setNotice(null)}>
+                  {notice.text}
+                </SiscomAlert>
+              )}
+            </AnimatePresence>
+          )}
           {/* Top Action & Summary Bar */}
           <div className="metal-surface rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-0.5 min-w-0">

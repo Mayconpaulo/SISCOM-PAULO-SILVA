@@ -15,6 +15,7 @@ interface HomeAgendaPreviewProps {
   onOpenAgenda: () => void;
   className?: string;
   compact?: boolean;
+  spacious?: boolean;
 }
 
 interface ParsedPreviewEvent {
@@ -52,6 +53,7 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
   onOpenAgenda,
   className = 'max-w-[368px] md:max-w-[548px]',
   compact = false,
+  spacious = false,
 }) => {
   const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,18 +165,20 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.08, ease: SISCOM_EASE }}
       className={`w-full rounded-2xl transition-colors ${
-        compact
-          ? 'siscom-home-panel px-4 sm:px-5 py-4'
-          : 'metal-surface border border-[#C29B56]/22 px-4 sm:px-5 py-4'
+        spacious
+          ? 'siscom-home-panel px-6 py-5'
+          : compact
+            ? 'siscom-home-panel px-4 sm:px-5 py-4'
+            : 'metal-surface border border-[#C29B56]/22 px-4 sm:px-5 py-4'
       } flex flex-col justify-between ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <h2 className="font-display text-[13px] font-semibold text-[#EEF3F0] tracking-[-0.01em] whitespace-nowrap">
+      <div className={`flex items-center justify-between gap-2 border-b border-white/[0.08] ${spacious ? 'pb-3.5' : 'pb-3'}`}>
+        <div className="flex items-baseline gap-2 min-w-0">
+          <h2 className={`font-display font-semibold text-[#EEF3F0] tracking-[-0.01em] whitespace-nowrap ${spacious ? 'text-[17px]' : 'text-[13px]'}`}>
             {headerTitle}
           </h2>
           {preview.mode === 'today' && (
-            <span className="text-[11px] font-mono text-[#9AA8A0] tabular-nums whitespace-nowrap">
+            <span className={`font-mono text-[#9AA8A0] tabular-nums whitespace-nowrap ${spacious ? 'text-xs' : 'text-[11px]'}`}>
               <span aria-hidden="true">· </span>
               {preview.todayLabel}
             </span>
@@ -184,28 +188,30 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         <button
           type="button"
           onClick={onOpenAgenda}
-          className="group inline-flex items-center gap-1 min-h-[32px] px-2 -mr-1 text-xs font-medium text-[#E7C580] hover:text-[#FAF0D7] hover:bg-white/[0.05] transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 rounded-lg"
+          className={`group inline-flex items-center gap-1.5 px-2.5 -mr-1 font-medium text-[#E7C580] hover:text-[#FAF0D7] hover:bg-white/[0.05] transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A961]/60 rounded-lg ${
+            spacious ? 'min-h-[40px] text-sm' : 'min-h-[32px] text-xs'
+          }`}
         >
           <span>Acessar agenda</span>
           <ArrowRight
-            className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+            className={`${spacious ? 'w-4 h-4' : 'w-3.5 h-3.5'} transition-transform duration-150 group-hover:translate-x-0.5`}
             aria-hidden="true"
           />
         </button>
       </div>
 
-      <div className="pt-2.5">
+      <div className={spacious ? 'pt-3.5 flex-1 flex flex-col justify-center' : 'pt-2.5'}>
         {loading ? (
           <div className="space-y-2 py-0.5" aria-busy="true" aria-label="Carregando prévia da agenda">
-            <div className="h-3.5 w-3/4 rounded-md bg-white/[0.06] animate-pulse" />
-            <div className="h-3 w-1/2 rounded-md bg-white/[0.04] animate-pulse" />
+            <div className="h-4 w-3/4 rounded-md bg-white/[0.06] animate-pulse" />
+            <div className="h-3.5 w-1/2 rounded-md bg-white/[0.04] animate-pulse" />
           </div>
         ) : hasError ? (
-          <p className="text-xs text-[#B8B3A6]">
+          <p className={spacious ? 'text-sm text-[#B8B3A6]' : 'text-xs text-[#B8B3A6]'}>
             Não foi possível carregar a prévia da agenda.
           </p>
         ) : preview.mode === 'empty' ? (
-          <p className="text-xs text-[#B8B3A6]">
+          <p className={spacious ? 'text-sm text-[#B8B3A6]' : 'text-xs text-[#B8B3A6]'}>
             Nenhuma atividade prevista nos próximos dias.
           </p>
         ) : (
@@ -228,6 +234,31 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
               }
               if (event.location?.trim()) {
                 detailParts.push(event.location.trim());
+              }
+
+              if (spacious) {
+                return (
+                  <li key={event.id} className="py-2.5 first:pt-1 last:pb-0 space-y-1.5">
+                    <p className="text-[16px] font-semibold text-[#F1F5F2] leading-snug line-clamp-2">
+                      {event.title}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+                      <span className="font-mono tabular-nums text-[#E7C580] font-medium whitespace-nowrap">
+                        {dateTimeLabel}
+                      </span>
+                      {detailParts.length > 0 && (
+                        <>
+                          <span aria-hidden="true" className="text-[#7E7A70]">
+                            ·
+                          </span>
+                          <span className="text-[#C4CFC8] truncate">
+                            {detailParts.join(' · ')}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
               }
 
               if (compact) {
@@ -281,7 +312,7 @@ export const HomeAgendaPreview: React.FC<HomeAgendaPreviewProps> = ({
         )}
 
         {!loading && !hasError && preview.extraCount > 0 && (
-          <p className="text-[11px] text-[#B8B3A6] tabular-nums pt-1.5 mt-1.5 border-t border-white/[0.06]">
+          <p className={`${spacious ? 'text-xs pt-2 mt-2' : 'text-[11px] pt-1.5 mt-1.5'} text-[#B8B3A6] tabular-nums border-t border-white/[0.06]`}>
             +{preview.extraCount}{' '}
             {preview.extraCount === 1 ? 'atividade hoje' : 'atividades hoje'}
           </p>

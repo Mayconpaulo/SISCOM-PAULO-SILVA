@@ -37,11 +37,13 @@ function readInitialMode(): WidgetLayoutMode {
 interface HomeDemandasWidgetsProps {
   className?: string;
   compact?: boolean;
+  spacious?: boolean;
 }
 
 export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
   className = 'max-w-[368px] md:max-w-[548px]',
   compact = false,
+  spacious = false,
 }) => {
   const {
     demandas,
@@ -73,7 +75,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
   };
 
   const nextCritical = pendingDemandas[0] || null;
-  const visibleItems = pendingDemandas.slice(0, 3);
+  const visibleItems = pendingDemandas.slice(0, spacious ? 4 : 3);
   const extraPending = Math.max(0, pendingDemandas.length - visibleItems.length);
 
   const completionRatio = useMemo(() => {
@@ -149,20 +151,22 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, delay: 0.1, ease: SISCOM_EASE }}
       className={`w-full rounded-2xl transition-colors ${
-        compact
-          ? 'siscom-home-panel px-4 sm:px-5 py-4'
-          : 'metal-surface border border-[#C29B56]/22 px-4 sm:px-5 py-4'
-      } flex flex-col justify-between gap-3 ${className}`}
+        spacious
+          ? 'siscom-home-panel px-6 py-5'
+          : compact
+            ? 'siscom-home-panel px-4 sm:px-5 py-4'
+            : 'metal-surface border border-[#C29B56]/22 px-4 sm:px-5 py-4'
+      } flex flex-col justify-between ${spacious ? 'gap-4' : 'gap-3'} ${className}`}
     >
       <div>
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
-          <div className="flex items-baseline gap-1.5 min-w-0">
-            <h2 className="font-display text-[13px] font-semibold text-[#EEF3F0] tracking-[-0.01em] whitespace-nowrap">
+        <div className={`flex items-center justify-between gap-2 border-b border-white/[0.08] ${spacious ? 'pb-3.5' : 'pb-3'}`}>
+          <div className="flex items-baseline gap-2 min-w-0">
+            <h2 className={`font-display font-semibold text-[#EEF3F0] tracking-[-0.01em] whitespace-nowrap ${spacious ? 'text-[17px]' : 'text-[13px]'}`}>
               Demandas
             </h2>
-            {!loading && summaryParts.length > 0 && !compact && (
-              <span className="text-xs tabular-nums flex items-center gap-1.5 flex-wrap">
+            {!loading && summaryParts.length > 0 && (!compact || spacious) && (
+              <span className={`${spacious ? 'text-xs' : 'text-xs'} tabular-nums flex items-center gap-1.5 flex-wrap`}>
                 {summaryParts.map((part) => (
                   <React.Fragment key={part.text}>
                     <span aria-hidden="true" className="text-[#56665E]">
@@ -180,20 +184,24 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
               type="button"
               onClick={() => setQuickAddOpen(true)}
               title="Nova demanda rápida"
-              className="inline-flex items-center gap-1 min-h-[30px] px-2.5 rounded-lg text-[11px] font-medium text-[#A6DBC0] hover:text-[#E2F6EB] bg-[#2D5A43]/30 hover:bg-[#2D5A43]/52 border border-[#4E8C6B]/28 transition-colors cursor-pointer whitespace-nowrap"
+              className={`inline-flex items-center gap-1.5 rounded-lg font-medium text-[#A6DBC0] hover:text-[#E2F6EB] bg-[#2D5A43]/30 hover:bg-[#2D5A43]/52 border border-[#4E8C6B]/28 transition-colors cursor-pointer whitespace-nowrap ${
+                spacious ? 'min-h-[38px] px-3.5 text-xs' : 'min-h-[30px] px-2.5 text-[11px]'
+              }`}
             >
-              <Plus className="w-3 h-3" aria-hidden="true" />
+              <Plus className={spacious ? 'w-3.5 h-3.5' : 'w-3 h-3'} aria-hidden="true" />
               <span>Nova</span>
             </button>
 
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
-              className="group inline-flex items-center gap-1 min-h-[30px] px-2 -mr-1 rounded-lg text-xs font-medium text-[#E7C580] hover:text-[#FAF0D7] hover:bg-white/[0.05] transition-colors cursor-pointer whitespace-nowrap"
+              className={`group inline-flex items-center gap-1.5 -mr-1 rounded-lg font-medium text-[#E7C580] hover:text-[#FAF0D7] hover:bg-white/[0.05] transition-colors cursor-pointer whitespace-nowrap ${
+                spacious ? 'min-h-[38px] px-2.5 text-sm' : 'min-h-[30px] px-2 text-xs'
+              }`}
             >
               <span>Gerenciar</span>
               <ArrowRight
-                className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+                className={`${spacious ? 'w-4 h-4' : 'w-3.5 h-3.5'} transition-transform duration-150 group-hover:translate-x-0.5`}
                 aria-hidden="true"
               />
             </button>
@@ -201,7 +209,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
         </div>
 
         {/* Compact summary line when in rail mode */}
-        {compact && !loading && summaryParts.length > 0 && (
+        {compact && !spacious && !loading && summaryParts.length > 0 && (
           <div className="pt-2.5 text-[11px] font-mono tabular-nums flex items-center gap-1.5 flex-wrap">
             {summaryParts.map((part, idx) => (
               <React.Fragment key={part.text}>
@@ -217,8 +225,8 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
         )}
 
         {/* Mode Switcher + Notification Toggle */}
-        <div className="flex items-center justify-between gap-2 pt-2.5 pb-1.5 text-[11px]">
-          <div className="inline-flex items-center rounded-[9px] bg-[#070B09]/85 border border-white/[0.08] p-0.5">
+        <div className={`flex items-center justify-between gap-2 ${spacious ? 'pt-3.5 pb-2.5 text-xs' : 'pt-2.5 pb-1.5 text-[11px]'}`}>
+          <div className="inline-flex items-center rounded-[10px] bg-[#070B09]/85 border border-white/[0.08] p-0.5">
             {(
               [
                 { id: 'completo', label: 'Completo' },
@@ -232,7 +240,9 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => handleModeChange(tab.id)}
-                  className={`relative px-2.5 py-1 rounded-[7px] text-[11px] font-medium transition-colors cursor-pointer ${
+                  className={`relative rounded-[7px] font-medium transition-colors cursor-pointer ${
+                    spacious ? 'px-3.5 py-1.5 text-xs' : 'px-2.5 py-1 text-[11px]'
+                  } ${
                     active ? 'text-[#FAF3E3]' : 'text-[#A6B3AC] hover:text-[#EDF2EE]'
                   }`}
                 >
@@ -253,19 +263,21 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             <button
               type="button"
               onClick={() => void enableBrowserNotifications()}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#E5C17B] hover:text-[#F4E6C4] transition-colors cursor-pointer"
+              className={`inline-flex items-center gap-1.5 font-medium text-[#E5C17B] hover:text-[#F4E6C4] transition-colors cursor-pointer ${
+                spacious ? 'text-xs' : 'text-[11px]'
+              }`}
             >
-              <Bell className="w-3 h-3" />
+              <Bell className={spacious ? 'w-3.5 h-3.5' : 'w-3 h-3'} />
               <span>Ativar avisos</span>
             </button>
           ) : notificationPermission === 'granted' ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-[#83B499]">
-              <Bell className="w-3 h-3" />
+            <span className={`inline-flex items-center gap-1.5 text-[#83B499] ${spacious ? 'text-xs' : 'text-[11px]'}`}>
+              <Bell className={spacious ? 'w-3.5 h-3.5' : 'w-3 h-3'} />
               <span>Avisos ativos</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[11px] text-[#B8B3A6]">
-              <BellOff className="w-3 h-3" />
+            <span className={`inline-flex items-center gap-1.5 text-[#B8B3A6] ${spacious ? 'text-xs' : 'text-[11px]'}`}>
+              <BellOff className={spacious ? 'w-3.5 h-3.5' : 'w-3 h-3'} />
               <span>No app</span>
             </span>
           )}
@@ -276,13 +288,13 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
           <div className="pt-0.5">
             {loading ? (
               <div className="space-y-2 py-1" aria-busy="true">
-                <div className="h-3.5 w-3/4 rounded bg-white/[0.06]" />
-                <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
+                <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
+                <div className="h-3.5 w-1/2 rounded bg-white/[0.04]" />
               </div>
             ) : error ? (
-              <p className="text-xs text-[#B8B3A6] py-1">{error}</p>
+              <p className={`${spacious ? 'text-sm' : 'text-xs'} text-[#B8B3A6] py-1`}>{error}</p>
             ) : visibleItems.length === 0 ? (
-              <p className="text-xs text-[#B8B3A6] py-1">
+              <p className={`${spacious ? 'text-sm' : 'text-xs'} text-[#B8B3A6] py-2`}>
                 Nenhuma demanda pendente.
               </p>
             ) : (
@@ -299,15 +311,15 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                   return (
                     <li
                       key={item.id}
-                      className="py-1.5 first:pt-0.5 last:pb-0.5 flex items-center gap-2"
+                      className={`${spacious ? 'py-2.5 gap-3' : 'py-1.5 gap-2'} first:pt-1 last:pb-0.5 flex items-center`}
                     >
                       <button
                         type="button"
                         onClick={() => void toggleComplete(item)}
                         aria-label={`Concluir demanda ${item.title}`}
-                        className="w-4 h-4 rounded-full border border-[#C29B56]/45 hover:border-[#83B499] hover:bg-[#2D5A43]/35 flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+                        className={`${spacious ? 'w-5 h-5' : 'w-4 h-4'} rounded-full border border-[#C29B56]/45 hover:border-[#83B499] hover:bg-[#2D5A43]/35 flex items-center justify-center shrink-0 transition-colors cursor-pointer`}
                       >
-                        <Check className="w-2.5 h-2.5 text-transparent hover:text-[#83B499]" />
+                        <Check className={`${spacious ? 'w-3 h-3' : 'w-2.5 h-2.5'} text-transparent hover:text-[#83B499]`} />
                       </button>
 
                       <button
@@ -318,13 +330,13 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
                         }}
                         className="min-w-0 flex-1 text-left group cursor-pointer"
                       >
-                        <p className="text-xs font-medium text-[#E9EFEA] group-hover:text-[#F4E6C4] truncate transition-colors">
+                        <p className={`${spacious ? 'text-[15px]' : 'text-xs'} font-medium text-[#E9EFEA] group-hover:text-[#F4E6C4] truncate transition-colors`}>
                           {item.title}
                         </p>
                       </button>
 
                       <span
-                        className={`text-[11px] font-mono tabular-nums whitespace-nowrap shrink-0 ${countdownTone}`}
+                        className={`${spacious ? 'text-xs' : 'text-[11px]'} font-mono tabular-nums whitespace-nowrap shrink-0 ${countdownTone}`}
                       >
                         {formatDemandaCountdown(item)}
                       </span>
@@ -338,7 +350,7 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
               <button
                 type="button"
                 onClick={() => setPanelOpen(true)}
-                className="w-full text-left text-[11px] text-[#DFBC75] hover:text-[#F4E6C4] tabular-nums pt-1.5 mt-1 border-t border-white/[0.06] cursor-pointer"
+                className={`w-full text-left ${spacious ? 'text-xs pt-2 mt-1.5' : 'text-[11px] pt-1.5 mt-1'} text-[#DFBC75] hover:text-[#F4E6C4] tabular-nums border-t border-white/[0.06] cursor-pointer`}
               >
                 +{extraPending}{' '}
                 {extraPending === 1 ? 'demanda pendente' : 'demandas pendentes'}
@@ -350,12 +362,12 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
 
       {/* Clean Hairline-Separated Summary Footer (Nearest Deadline + Progress) */}
       {mode !== 'lista' && !loading && (
-        <div className="pt-2.5 border-t border-white/[0.08] grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <div className={`${spacious ? 'pt-3.5 gap-5' : 'pt-2.5 gap-3 sm:gap-4'} border-t border-white/[0.08] grid grid-cols-1 sm:grid-cols-2`}>
           {/* Nearest Deadline */}
-          <div className="flex flex-col justify-between gap-1 min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-[#9AA8A0]">
-              <span className="inline-flex items-center gap-1 font-medium text-[#D8E0DB]">
-                <Clock className="w-3 h-3 text-[#C9A961] shrink-0" />
+          <div className="flex flex-col justify-between gap-1.5 min-w-0">
+            <div className={`flex flex-wrap items-center justify-between gap-1 ${spacious ? 'text-xs' : 'text-[11px]'} text-[#9AA8A0]`}>
+              <span className="inline-flex items-center gap-1.5 font-medium text-[#D8E0DB]">
+                <Clock className={`${spacious ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-[#C9A961] shrink-0`} />
                 <span>Prazo mais próximo</span>
               </span>
               {focusHeadline && (
@@ -366,53 +378,53 @@ export const HomeDemandasWidgets: React.FC<HomeDemandasWidgetsProps> = ({
             </div>
 
             {nextCritical && focusHeadline ? (
-              <div className="flex items-center justify-between gap-1.5">
-                <p className="text-xs font-medium text-[#F4E6C4] truncate flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className={`${spacious ? 'text-sm' : 'text-xs'} font-medium text-[#F4E6C4] truncate flex-1`}>
                   {nextCritical.title}
                 </p>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => void toggleComplete(nextCritical)}
                     title="Concluir demanda"
-                    className="text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer p-0.5"
+                    className="text-[#9DD1B3] hover:text-[#D6EEE0] cursor-pointer p-1"
                   >
-                    <Check className="w-3.5 h-3.5" />
+                    <Check className={spacious ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
                   </button>
                   <button
                     type="button"
                     onClick={() => void postponeOneDay(nextCritical)}
                     title="Adiar 1 dia"
-                    className="text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer p-0.5"
+                    className="text-[#DFBC75] hover:text-[#F4E6C4] cursor-pointer p-1"
                   >
-                    <CalendarPlus className="w-3.5 h-3.5" />
+                    <CalendarPlus className={spacious ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
                   </button>
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-[#9AA8A0] leading-snug">
+              <p className={`${spacious ? 'text-xs' : 'text-[11px]'} text-[#9AA8A0] leading-snug`}>
                 Em dia.
               </p>
             )}
           </div>
 
           {/* Progress */}
-          <div className="flex flex-col justify-between gap-1.5 min-w-0 sm:border-l sm:border-white/[0.07] sm:pl-4">
+          <div className="flex flex-col justify-between gap-2 min-w-0 sm:border-l sm:border-white/[0.07] sm:pl-4">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] font-medium text-[#D8E0DB]">Andamento</span>
-              <span className="text-xs font-mono font-semibold tabular-nums text-[#F4E6C4]">
+              <span className={`${spacious ? 'text-xs' : 'text-[11px]'} font-medium text-[#D8E0DB]`}>Andamento</span>
+              <span className={`${spacious ? 'text-sm' : 'text-xs'} font-mono font-semibold tabular-nums text-[#F4E6C4]`}>
                 {completionRatio}%
               </span>
             </div>
 
-            <div className="space-y-1">
-              <div className="h-1 w-full rounded-full bg-white/[0.09] overflow-hidden">
+            <div className="space-y-1.5">
+              <div className={`${spacious ? 'h-1.5' : 'h-1'} w-full rounded-full bg-white/[0.09] overflow-hidden`}>
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[#2D5A43] to-[#C9A961] transition-all duration-300"
                   style={{ width: `${completionRatio}%` }}
                 />
               </div>
-              <p className="text-[11px] text-[#9AA8A0] tabular-nums leading-snug">
+              <p className={`${spacious ? 'text-xs' : 'text-[11px]'} text-[#9AA8A0] tabular-nums leading-snug`}>
                 {completedDemandas.length}/{demandas.length}{' '}
                 {demandas.length === 1 ? 'concluída' : 'concluídas'} · {pendingDemandas.length}{' '}
                 {pendingDemandas.length === 1 ? 'aberta' : 'abertas'}

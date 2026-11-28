@@ -263,67 +263,48 @@
 .siscom-tablet-bar {
   position: relative;
   z-index: 20;
-  max-height: 162px;
+  min-height: 58px;
   overflow-x: auto;
   overflow-y: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
   background: linear-gradient(
     180deg,
-    rgba(255, 250, 236, 0.045) 0%,
-    rgba(10, 16, 13, 0.8) 46%,
-    rgba(7, 11, 9, 0.9) 100%
+    rgba(255, 250, 236, 0.05) 0%,
+    rgba(10, 16, 13, 0.84) 46%,
+    rgba(7, 11, 9, 0.94) 100%
   );
   -webkit-backdrop-filter: blur(26px) saturate(165%);
   backdrop-filter: blur(26px) saturate(165%);
 }
 
+.siscom-tablet-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.siscom-tablet-bar button,
+.siscom-tablet-bar select,
+.siscom-tablet-bar input,
+.siscom-tablet-bar label,
+.siscom-tablet-bar a {
+  touch-action: pan-x;
+}
+
 .siscom-tablet-bar-top {
   box-shadow:
     inset 0 -1px 0 rgba(255, 250, 236, 0.08),
-    0 10px 26px -16px rgba(0, 0, 0, 0.82);
+    0 10px 24px -16px rgba(0, 0, 0, 0.82);
 }
 
 .siscom-tablet-bar-bottom {
   box-shadow:
     inset 0 1px 0 rgba(255, 250, 236, 0.1),
-    0 -10px 26px -16px rgba(0, 0, 0, 0.82);
-}
-
-.siscom-tablet-bar > div,
-.siscom-tablet-bar > form {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: stretch !important;
-  gap: 0.65rem !important;
-  width: max-content !important;
-  min-width: 100% !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
-
-.siscom-tablet-bar > div > *,
-.siscom-tablet-bar > form > * {
-  flex: 0 0 auto;
-  min-width: 210px;
-  max-width: 310px;
-  max-height: 142px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-  padding: 0.55rem 0.7rem !important;
-  border-radius: 0.75rem !important;
-  border: 1px solid rgba(235, 224, 200, 0.11) !important;
-  background: rgba(11, 18, 15, 0.54) !important;
+    0 -10px 24px -16px rgba(0, 0, 0, 0.82);
 }
 
 @media (min-width: 600px) and (max-width: 1366px) and (orientation: portrait) {

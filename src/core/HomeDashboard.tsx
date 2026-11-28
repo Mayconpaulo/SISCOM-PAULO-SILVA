@@ -196,10 +196,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         className="no-print siscom-liquid-bar sticky top-0 z-20 w-full border-b border-white/[0.09]"
       >
         <div
-          className={`w-full max-w-[1340px] mx-auto flex items-center justify-between gap-2 ${
+          className={`w-full flex items-center justify-between gap-2 ${
             isTabletPortrait
-              ? 'px-4 h-[54px]'
-              : 'px-4 sm:px-6 lg:px-8 h-[58px] sm:h-[64px] sm:gap-4'
+              ? 'max-w-none px-4 h-[62px]'
+              : 'max-w-[1340px] mx-auto px-4 sm:px-6 lg:px-8 h-[58px] sm:h-[64px] sm:gap-4'
           }`}
         >
           {/* Left: Institutional identity & crests */}
@@ -209,7 +209,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 layoutId="siscom-crest"
                 transition={CREST_LAYOUT_TRANSITION}
                 className={`${
-                  isTabletPortrait ? 'w-8 h-8' : 'w-8 h-8 sm:w-10 sm:h-10'
+                  isTabletPortrait ? 'w-10 h-10' : 'w-8 h-8 sm:w-10 sm:h-10'
                 } flex items-center justify-center shrink-0`}
               >
                 <motion.img
@@ -228,7 +228,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   layoutId="siscom-wordmark"
                   transition={CREST_LAYOUT_TRANSITION}
                   className={`metallic-wordmark font-display font-extrabold tracking-[0.16em] uppercase ${
-                    isTabletPortrait ? 'text-[17px]' : 'text-[17px] sm:text-[21px]'
+                    isTabletPortrait ? 'text-[21px]' : 'text-[17px] sm:text-[21px]'
                   }`}
                 >
                   SISCOM
@@ -236,7 +236,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 <span
                   className={`text-[#AEBEB5] tracking-[0.01em] mt-0.5 truncate ${
                     isTabletPortrait
-                      ? 'text-[10px]'
+                      ? 'text-[11px]'
                       : 'text-[10px] sm:text-[11px] max-w-[132px] sm:max-w-none'
                   }`}
                 >
@@ -255,7 +255,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 src={BATTALION_CREST_SRC}
                 alt="Brasão do 1º Batalhão de Infantaria Mecanizado (Escola)"
                 className={`${
-                  isTabletPortrait ? 'h-7' : 'h-7 sm:h-9'
+                  isTabletPortrait ? 'h-9' : 'h-7 sm:h-9'
                 } w-auto object-contain shrink-0 select-none`}
               />
               {!isTabletPortrait && (
@@ -323,17 +323,17 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* Main Content */}
       <main
-        className={`relative z-10 flex-1 w-full mx-auto flex flex-col ${
+        className={`relative z-10 flex-1 w-full flex flex-col ${
           isTabletPortrait
-            ? 'max-w-[780px] px-5 pt-4 pb-4 gap-4 justify-between'
-            : 'max-w-[1340px] px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-10 pb-8 sm:pb-12 gap-6 sm:gap-8'
+            ? 'max-w-none px-4 pt-5 pb-5 gap-5'
+            : 'max-w-[1340px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-10 pb-8 sm:pb-12 gap-6 sm:gap-8'
         }`}
       >
         {/* Greeting + Modern Command Search */}
         <div
           className={`flex flex-col ${
             isTabletPortrait
-              ? 'gap-3'
+              ? 'gap-3.5'
               : 'md:flex-row md:items-end md:justify-between gap-4 md:gap-8'
           }`}
         >
@@ -344,14 +344,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             className="min-w-0 space-y-1"
           >
             {todayLabel && (
-              <p className="text-xs font-medium text-[#A2B2A9] capitalize tracking-wide tabular-nums">
+              <p className={`${isTabletPortrait ? 'text-sm' : 'text-xs'} font-medium text-[#A2B2A9] capitalize tracking-wide tabular-nums`}>
                 {todayLabel}
               </p>
             )}
             <h2
               className={`font-display font-bold tracking-[-0.025em] leading-[1.15] text-[#F3F7F4] ${
                 isTabletPortrait
-                  ? 'text-[24px]'
+                  ? 'text-[32px]'
                   : 'text-[25px] sm:text-[29px] lg:text-[34px]'
               }`}
             >
@@ -413,7 +413,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <div
               className={
                 isTabletPortrait
-                  ? 'grid grid-cols-2 gap-3'
+                  ? 'grid grid-cols-2 gap-4'
                   : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-4.5'
               }
             >
@@ -432,16 +432,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       {/* Subtle top-right directional affordance */}
                       <span
                         aria-hidden="true"
-                        className={`absolute top-3 right-3 z-10 transition-all duration-200 ${
+                        className={`absolute top-3.5 right-3.5 z-10 transition-all duration-200 ${
                           card.externalUrl
                             ? 'text-[#84958C] group-hover:text-[#E7C580]'
                             : 'text-[#84958C]/0 -translate-x-0.5 translate-y-0.5 group-hover:text-[#E7C580]/85 group-hover:translate-x-0 group-hover:translate-y-0'
                         }`}
                       >
                         {card.externalUrl ? (
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <ExternalLink className={isTabletPortrait ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
                         ) : (
-                          <ArrowUpRight className="w-4 h-4" />
+                          <ArrowUpRight className={isTabletPortrait ? 'w-5 h-5' : 'w-4 h-4'} />
                         )}
                       </span>
 
@@ -450,12 +450,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                         transition={MODULE_LOCKUP_TRANSITION}
                         className={`relative z-10 siscom-icon-vessel rounded-2xl shrink-0 flex items-center justify-center text-[#DFBC75] group-hover:text-[#F5D896] ${
                           isTabletPortrait
-                            ? 'w-11 h-11'
+                            ? 'w-16 h-16'
                             : 'w-12 h-12 sm:w-[54px] sm:h-[54px] lg:w-14 lg:h-14'
                         }`}
                       >
                         {card.renderIcon(
-                          isTabletPortrait ? 'w-6 h-6' : 'w-7 h-7 sm:w-[30px] sm:h-[30px]'
+                          isTabletPortrait ? 'w-9 h-9' : 'w-7 h-7 sm:w-[30px] sm:h-[30px]'
                         )}
                       </motion.div>
 
@@ -465,7 +465,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                           transition={MODULE_LOCKUP_TRANSITION}
                           className={`block font-display font-semibold tracking-[-0.01em] text-[#F2F6F3] group-hover:text-[#FAF0D7] transition-colors duration-150 leading-snug text-center ${
                             isTabletPortrait
-                              ? 'text-[15px]'
+                              ? 'text-[19px]'
                               : 'text-[15px] sm:text-[16.5px] lg:text-[17.5px]'
                           }`}
                         >
@@ -476,7 +476,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   );
 
                   const cardClasses = isTabletPortrait
-                    ? 'p-3.5 flex flex-col items-center justify-center text-center gap-2.5 min-h-[108px]'
+                    ? 'p-6 flex flex-col items-center justify-center text-center gap-4 min-h-[168px]'
                     : 'p-4 sm:p-5 lg:p-6 flex flex-col items-center justify-center text-center gap-3 sm:gap-3.5 min-h-[124px] sm:min-h-[138px] lg:min-h-[148px]';
 
                   if (card.externalUrl) {
@@ -515,21 +515,39 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     highlighted={
                       Boolean(normalizedQuery) && highlightedIdx === filteredCards.length
                     }
-                    className="p-4 sm:p-5 lg:p-6 flex flex-col items-center justify-center text-center gap-3 sm:gap-3.5 min-h-[124px] sm:min-h-[138px] lg:min-h-[148px]"
+                    className={
+                      isTabletPortrait
+                        ? 'p-6 flex flex-col items-center justify-center text-center gap-4 min-h-[168px]'
+                        : 'p-4 sm:p-5 lg:p-6 flex flex-col items-center justify-center text-center gap-3 sm:gap-3.5 min-h-[124px] sm:min-h-[138px] lg:min-h-[148px]'
+                    }
                   >
                     <span
                       aria-hidden="true"
-                      className="absolute top-3 right-3 z-10 text-[#84958C]/0 -translate-x-0.5 translate-y-0.5 group-hover:text-[#E7C580]/85 group-hover:translate-x-0 group-hover:translate-y-0 transition-all duration-200"
+                      className="absolute top-3.5 right-3.5 z-10 text-[#84958C]/0 -translate-x-0.5 translate-y-0.5 group-hover:text-[#E7C580]/85 group-hover:translate-x-0 group-hover:translate-y-0 transition-all duration-200"
                     >
-                      <ArrowUpRight className="w-4 h-4" />
+                      <ArrowUpRight className={isTabletPortrait ? 'w-5 h-5' : 'w-4 h-4'} />
                     </span>
 
-                    <div className="relative z-10 siscom-icon-vessel w-12 h-12 sm:w-[54px] sm:h-[54px] lg:w-14 lg:h-14 rounded-2xl shrink-0 flex items-center justify-center text-[#DFBC75] group-hover:text-[#F5D896]">
-                      <ListTodo className="w-7 h-7 sm:w-[30px] sm:h-[30px]" />
+                    <div
+                      className={`relative z-10 siscom-icon-vessel rounded-2xl shrink-0 flex items-center justify-center text-[#DFBC75] group-hover:text-[#F5D896] ${
+                        isTabletPortrait
+                          ? 'w-16 h-16'
+                          : 'w-12 h-12 sm:w-[54px] sm:h-[54px] lg:w-14 lg:h-14'
+                      }`}
+                    >
+                      <ListTodo
+                        className={isTabletPortrait ? 'w-9 h-9' : 'w-7 h-7 sm:w-[30px] sm:h-[30px]'}
+                      />
                     </div>
 
                     <div className="relative z-10 w-full min-w-0 px-1">
-                      <span className="block font-display text-[15px] sm:text-[16.5px] lg:text-[17.5px] font-semibold tracking-[-0.01em] text-[#F2F6F3] group-hover:text-[#FAF0D7] transition-colors duration-150 leading-snug text-center">
+                      <span
+                        className={`block font-display font-semibold tracking-[-0.01em] text-[#F2F6F3] group-hover:text-[#FAF0D7] transition-colors duration-150 leading-snug text-center ${
+                          isTabletPortrait
+                            ? 'text-[19px]'
+                            : 'text-[15px] sm:text-[16.5px] lg:text-[17.5px]'
+                        }`}
+                      >
                         Demandas
                       </span>
                     </div>
@@ -543,24 +561,31 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         {/* Quiet Secondary Operational Strip: Agenda & Demandas */}
         <section
           aria-label="Agenda e Demandas"
-          className={`${isTabletPortrait ? 'pt-3.5' : 'pt-5 sm:pt-6'} border-t border-white/[0.08]`}
+          className={`${
+            isTabletPortrait ? 'pt-4 flex-1 flex flex-col' : 'pt-5 sm:pt-6'
+          } border-t border-white/[0.08]`}
         >
           <div
             className={`grid grid-cols-1 items-stretch ${
               isTabletPortrait
-                ? 'gap-3'
+                ? 'gap-4 flex-1'
                 : `gap-4 lg:gap-4.5 ${hasAgendaAccess ? 'md:grid-cols-2' : ''}`
             }`}
           >
             {hasAgendaAccess && (
               <HomeAgendaPreview
                 onOpenAgenda={() => onNavigate('agenda')}
-                className="max-w-none"
-                compact
+                className={isTabletPortrait ? 'max-w-none min-h-[168px]' : 'max-w-none'}
+                compact={!isTabletPortrait}
+                spacious={isTabletPortrait}
               />
             )}
 
-            <HomeDemandasWidgets className="max-w-none" compact />
+            <HomeDemandasWidgets
+              className={isTabletPortrait ? 'max-w-none min-h-[250px]' : 'max-w-none'}
+              compact={!isTabletPortrait}
+              spacious={isTabletPortrait}
+            />
           </div>
         </section>
       </main>
@@ -568,10 +593,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       {/* Minimalist Institutional Glass Footer */}
       <footer className="no-print siscom-liquid-bar relative z-10 mt-auto border-t border-white/[0.09]">
         <div
-          className={`w-full max-w-[1340px] mx-auto flex items-center justify-between gap-2 text-xs text-[#95A49B] ${
+          className={`w-full flex items-center justify-between gap-2 text-xs text-[#95A49B] ${
             isTabletPortrait
-              ? 'px-5 py-2.5 pr-20 flex-row'
-              : 'px-4 sm:px-6 lg:px-8 pt-4 pb-24 md:py-3.5 flex-col md:flex-row'
+              ? 'max-w-none px-4 py-3 pr-20 flex-row'
+              : 'max-w-[1340px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-24 md:py-3.5 flex-col md:flex-row'
           }`}
         >
           <div className="flex items-center gap-2.5">

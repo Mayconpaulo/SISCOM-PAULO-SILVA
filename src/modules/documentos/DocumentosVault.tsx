@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Columns3,
   Copy,
   Download,
+  Eraser,
   FilePlus2,
   FileSpreadsheet,
   FileText,
@@ -11,6 +13,7 @@ import {
   Printer,
   RotateCcw,
   Trash2,
+  Type,
   Upload,
 } from 'lucide-react';
 import {
@@ -31,7 +34,16 @@ import { AnimatePresence, motion } from 'motion/react';
 import { extractCrachaDocumentData } from './documentoFileParser';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
-import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonRow,
+} from '../../shared/TabletRibbonPrimitives';
 import { SiscomAlert, SiscomSpinner } from '../../shared/ui';
 import { logActivity } from '../../core/audit/activityLogger';
 
@@ -126,6 +138,11 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
   const [isImporting, setIsImporting] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [tabletDrawer, setTabletDrawer] = useState<'colunas' | 'textos' | null>(null);
+
+  const toggleTabletDrawer = (key: 'colunas' | 'textos') => {
+    setTabletDrawer((prev) => (prev === key ? null : key));
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -576,6 +593,204 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
     setNotice('Padrão restaurado.');
   };
 
+  const activeTabletDrawer: TabletWorkspaceDrawer | null = (() => {
+    if (!tabletDrawer) return null;
+    if (tabletDrawer === 'colunas') {
+      return {
+        title: `Colunas (${activeDoc.columns.length})`,
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={handleAddColumn}
+            className="min-h-[34px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs font-medium bg-[#2D5A43]/80 hover:bg-[#3A7456] text-white border border-[#8AC0A3]/40 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Coluna</span>
+          </button>
+        ),
+        content: (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {activeDoc.columns.map((col, idx) => (
+              <div
+                key={col.id}
+                className="siscom-liquid-subcard rounded-lg p-3 space-y-2.5"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] text-[#83B499] w-5 shrink-0">
+                    {idx + 1}.
+                  </span>
+                  <input
+                    type="text"
+                    aria-label={`Nome da coluna ${idx + 1}`}
+                    value={col.label}
+                    onChange={(e) => handleUpdateColumn(col.id, { label: e.target.value })}
+                    className="siscom-input flex-1 min-h-[36px] px-2.5 text-xs"
+                  />
+                  {activeDoc.columns.length > 1 && (
+                    <button
+                      type="button"
+                      title="Remover coluna"
+                      aria-label={`Remover coluna ${col.label}`}
+                      onClick={() => handleRemoveColumn(col.id)}
+                      className="siscom-btn siscom-btn-danger min-h-[36px] min-w-[36px] px-0 shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <label className="flex flex-col gap-1 text-[#98A89F]">
+                    <span>Largura</span>
+                    <input
+                      type="number"
+                      min={2}
+                      max={60}
+                      value={col.widthWeight}
+                      onChange={(e) =>
+                        handleUpdateColumn(col.id, {
+                          widthWeight: Math.max(2, Math.min(60, Number(e.target.value) || 10)),
+                        })
+                      }
+                      className="siscom-input min-h-[34px] px-2 font-mono text-xs"
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-[#98A89F]">
+                    <span>Alinhamento</span>
+                    <select
+                      value={col.align || 'left'}
+                      onChange={(e) =>
+                        handleUpdateColumn(col.id, {
+                          align: e.target.value as 'left' | 'center' | 'right',
+                        })
+                      }
+                      className="siscom-input min-h-[34px] px-1.5 text-xs"
+                    >
+                      <option value="left">Esquerda</option>
+                      <option value="center">Centro</option>
+                      <option value="right">Direita</option>
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 text-[#98A89F] pt-4 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(col.autoNumber)}
+                      onChange={(e) =>
+                        handleUpdateColumn(col.id, { autoNumber: e.target.checked })
+                      }
+                      className="h-4 w-4 accent-[#2D5A43] rounded"
+                    />
+                    <span>Auto 1..N</span>
+                  </label>
+                </div>
+
+                {!col.autoNumber && (
+                  <input
+                    type="text"
+                    aria-label={`Texto padrão da coluna ${col.label}`}
+                    value={col.defaultCellText}
+                    onChange={(e) =>
+                      handleUpdateColumn(col.id, { defaultCellText: e.target.value })
+                    }
+                    placeholder="Texto padrão"
+                    className="siscom-input w-full min-h-[34px] px-2.5 text-[11px]"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ),
+      };
+    }
+
+    return {
+      title: 'Textos da Página',
+      anchor: 'bottom',
+      onClose: () => setTabletDrawer(null),
+      content: (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label htmlFor="tablet-doc-title" className="block text-[11px] text-[#B8B3A6]">
+              Título
+            </label>
+            <input
+              id="tablet-doc-title"
+              type="text"
+              value={activeDoc.title}
+              onChange={(e) => updateActiveDoc((d) => ({ ...d, title: e.target.value }))}
+              className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="tablet-doc-subtitle" className="block text-[11px] text-[#B8B3A6]">
+              Subtítulo
+            </label>
+            <input
+              id="tablet-doc-subtitle"
+              type="text"
+              value={activeDoc.subtitle}
+              onChange={(e) => updateActiveDoc((d) => ({ ...d, subtitle: e.target.value }))}
+              placeholder="Opcional"
+              className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="tablet-doc-date" className="block text-[11px] text-[#B8B3A6]">
+              Data
+            </label>
+            <input
+              id="tablet-doc-date"
+              type="text"
+              value={activeDoc.dateText}
+              onChange={(e) => updateActiveDoc((d) => ({ ...d, dateText: e.target.value }))}
+              className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2 space-y-1">
+              <label htmlFor="tablet-doc-sig" className="block text-[11px] text-[#B8B3A6]">
+                Assinatura
+              </label>
+              <input
+                id="tablet-doc-sig"
+                type="text"
+                value={activeDoc.signatureText}
+                onChange={(e) => updateActiveDoc((d) => ({ ...d, signatureText: e.target.value }))}
+                className="siscom-input w-full !min-h-[38px] px-2.5 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="tablet-doc-sig-lines" className="block text-[11px] text-[#B8B3A6]">
+                Linhas
+              </label>
+              <input
+                id="tablet-doc-sig-lines"
+                type="number"
+                min={1}
+                max={4}
+                value={activeDoc.signatureLines}
+                onChange={(e) =>
+                  updateActiveDoc((d) => ({
+                    ...d,
+                    signatureLines: Math.max(1, Math.min(4, Number(e.target.value) || 1)),
+                  }))
+                }
+                className="siscom-input w-full !min-h-[38px] px-2 font-mono text-xs"
+              />
+            </div>
+          </div>
+        </div>
+      ),
+    };
+  })();
+
   return (
     <>
       {/* Ensure browser print dialog opens in A4 Landscape while this view is active */}
@@ -584,6 +799,193 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
       <WorkspaceSplitLayout
         sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
         rightSidebarWidthClass="lg:w-[268px] xl:w-[292px]"
+        tabletDrawer={activeTabletDrawer}
+        tabletTopBar={
+          <TabletRibbonRow className="justify-between">
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                onClick={() => {
+                  setTabletDrawer(null);
+                  closeDocumentToFolder();
+                }}
+                icon={<ArrowLeft className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                Pasta
+              </TabletRibbonButton>
+
+              {activeDoc.isBuiltIn && (
+                <TabletRibbonButton
+                  onClick={handleRestoreBuiltIn}
+                  icon={<RotateCcw className="w-3.5 h-3.5 text-[#83B499]" />}
+                >
+                  Padrão
+                </TabletRibbonButton>
+              )}
+
+              <TabletRibbonDivider />
+
+              <label className="inline-flex items-center gap-1.5 bg-black/35 border border-white/[0.11] rounded-xl px-2.5 min-h-[40px] shrink-0">
+                <span className="text-[11px] text-[#A2B1A8]">Linhas</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="Quantidade de linhas"
+                  min={1}
+                  max={100}
+                  value={rowCountDraft}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setRowCountDraft(raw);
+                    if (raw.trim() === '') return;
+                    const parsed = Math.floor(Number(raw));
+                    if (Number.isFinite(parsed) && parsed >= 1) {
+                      const clamped = Math.max(1, Math.min(100, parsed));
+                      updateActiveDoc((d) => ({ ...d, rowCount: clamped }));
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = Math.floor(Number(rowCountDraft));
+                    const clamped = Number.isFinite(parsed)
+                      ? Math.max(1, Math.min(100, parsed))
+                      : activeDoc.rowCount;
+                    updateActiveDoc((d) => ({ ...d, rowCount: clamped }));
+                    setRowCountDraft(String(clamped));
+                  }}
+                  className="w-12 bg-transparent font-mono text-xs text-[#F4E6C4] text-center focus:outline-none"
+                />
+              </label>
+
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'colunas'}
+                onClick={() => toggleTabletDrawer('colunas')}
+                icon={<Columns3 className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                badge={activeDoc.columns.length}
+              >
+                Colunas
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+
+            <TabletRibbonGroup>
+              {notice && (
+                <button
+                  type="button"
+                  onClick={() => setNotice(null)}
+                  className={`min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border whitespace-nowrap cursor-pointer ${
+                    notice.toLowerCase().includes('erro')
+                      ? 'bg-red-950/60 border-red-400/35 text-red-200'
+                      : 'bg-[#2D5A43]/40 border-[#8AC0A3]/35 text-[#D8F0E2]'
+                  }`}
+                >
+                  {notice}
+                </button>
+              )}
+
+              <TabletRibbonButton
+                variant="primary"
+                disabled={exporting !== null}
+                onClick={handleDownloadPdf}
+                icon={
+                  exporting === 'pdf' ? (
+                    <SiscomSpinner tone="light" className="w-3.5 h-3.5" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )
+                }
+              >
+                {exporting === 'pdf' ? 'Gerando...' : 'PDF'}
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                disabled={exporting !== null}
+                onClick={handleDownloadWord}
+                icon={
+                  exporting === 'word' ? (
+                    <SiscomSpinner tone="olive" className="w-3.5 h-3.5" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 text-[#83B499]" />
+                  )
+                }
+              >
+                Word
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                onClick={() => window.print()}
+                icon={<Printer className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                Imprimir
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                disabled={exporting !== null}
+                onClick={handleDownloadCsv}
+                icon={<FileSpreadsheet className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                CSV
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+          </TabletRibbonRow>
+        }
+        tabletBottomBar={
+          <TabletRibbonRow className="justify-between">
+            <TabletRibbonGroup>
+              <select
+                aria-label="Fonte do documento"
+                value={activeDoc.fontFamily}
+                onChange={(e) =>
+                  updateActiveDoc((d) => ({
+                    ...d,
+                    fontFamily: e.target.value as StoredTableDocument['fontFamily'],
+                  }))
+                }
+                className="siscom-input !w-auto min-w-[138px] !min-h-[40px] !px-2.5 !rounded-xl text-xs shrink-0"
+              >
+                <option value="Arial">Arial</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Open Sans">Open Sans</option>
+              </select>
+
+              <TabletRibbonButton
+                variant={activeDoc.headerBold ? 'active' : 'default'}
+                onClick={() => updateActiveDoc((d) => ({ ...d, headerBold: !d.headerBold }))}
+              >
+                B Negrito
+              </TabletRibbonButton>
+
+              <select
+                aria-label="Zoom da folha A4"
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="siscom-input !w-auto min-w-[106px] !min-h-[40px] !px-2.5 !rounded-xl font-mono text-xs shrink-0"
+              >
+                <option value={65}>Zoom 65%</option>
+                <option value={85}>Zoom 85%</option>
+                <option value={100}>Zoom 100%</option>
+              </select>
+            </TabletRibbonGroup>
+
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'textos'}
+                onClick={() => toggleTabletDrawer('textos')}
+                icon={<Type className="w-3.5 h-3.5 text-[#E5C17B]" />}
+              >
+                Textos da Página
+              </TabletRibbonButton>
+
+              {Object.keys(activeDoc.cellValues).length > 0 && (
+                <TabletRibbonButton
+                  onClick={() => updateActiveDoc((d) => ({ ...d, cellValues: {} }))}
+                  icon={<Eraser className="w-3.5 h-3.5 text-[#83B499]" />}
+                >
+                  Limpar células
+                </TabletRibbonButton>
+              )}
+            </TabletRibbonGroup>
+          </TabletRibbonRow>
+        }
         sidebar={
           <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] pb-3.5">

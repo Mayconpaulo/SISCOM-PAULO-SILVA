@@ -5,11 +5,16 @@ import {
   Copy,
   Download,
   FileSpreadsheet,
+  IdCard,
   Image as ImageIcon,
   ListOrdered,
+  Palette,
   Printer,
   RotateCcw,
+  Ruler,
   Search,
+  SlidersHorizontal,
+  Type,
   Upload,
   X,
 } from 'lucide-react';
@@ -46,7 +51,17 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
-import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../shared/TabletRibbonPrimitives';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 import { logActivity } from '../../core/audit/activityLogger';
@@ -860,6 +875,14 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
   const [isDraggingDoc, setIsDraggingDoc] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [crachaSearch, setCrachaSearch] = useState<string>('');
+  const [tabletDrawer, setTabletDrawer] = useState<
+    'mapeamento' | 'medidas' | 'crachas' | 'faixas' | 'cores' | null
+  >(null);
+  const toggleTabletDrawer = (
+    key: 'mapeamento' | 'medidas' | 'crachas' | 'faixas' | 'cores'
+  ) => {
+    setTabletDrawer((prev) => (prev === key ? null : key));
+  };
   const docInputRef = useRef<HTMLInputElement>(null);
   const crachasStripRef = useRef<HTMLDivElement>(null);
   const sheetRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -1244,31 +1267,976 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
     }
   };
 
-  return (
-    <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
-      rightSidebarWidthClass="lg:w-[295px] xl:w-[320px]"
-      sidebar={
-        <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
-        {/* Top Primary Document Upload & Field Mapping */}
-        <div className="space-y-3 pb-4 border-b border-white/[0.07]">
+  const mappingPanelBody =
+    importedDocs.length > 0 && fieldMapping ? (
+      <div className="space-y-3">
+        <div className="space-y-2 border-b border-white/[0.07] pb-2.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-[#E5C17B]">
-              Importar arquivos
+            <span className="text-[11px] font-medium text-[#E5C17B]">
+              {importedDocs.length === 1
+                ? 'Arquivo carregado'
+                : `${importedDocs.length} arquivos carregados`}
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                setImportedDocs([]);
+                setFieldMapping(null);
+                setCrossLinkSummary(null);
+                setImportError(null);
+                if (tabletDrawer === 'mapeamento') setTabletDrawer(null);
+              }}
+              className="min-h-[30px] px-2 -mr-2 rounded text-[11px] text-[#98A89F] hover:text-white hover:bg-white/[0.04] transition-colors cursor-pointer"
+            >
+              Limpar tudo
+            </button>
           </div>
 
-          <input
-            ref={docInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = e.target.files ? Array.from(e.target.files) : [];
-              e.target.value = '';
-              if (files.length > 0) void handleUploadDocuments(files);
-            }}
-          />
+          <div className="space-y-2">
+            {importedDocs.map((src, idx) => (
+              <div
+                key={src.id}
+                className="rounded-lg bg-white/[0.04] border border-white/[0.10] px-2.5 py-2 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[#E8EEEA] truncate">
+                        {importedDocs.length > 1 ? `Arq. ${idx + 1}: ` : ''}
+                        {src.fileName}
+                      </p>
+                      <p className="text-[10px] text-[#83B499]">
+                        {src.rows.length}{' '}
+                        {src.rows.length === 1 ? 'registro' : 'registros'} ·{' '}
+                        {src.columns.length}{' '}
+                        {src.columns.length === 1 ? 'coluna' : 'colunas'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImportedDoc(src.id)}
+                    title={`Remover ${src.fileName}`}
+                    aria-label={`Remover ${src.fileName}`}
+                    className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-white/[0.06] transition-colors shrink-0 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 border-t border-white/[0.06]">
+                  {src.columns.map((col) => (
+                    <div
+                      key={col.id}
+                      className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2 py-1.5 min-w-0"
+                    >
+                      <div className="flex items-center justify-between gap-1.5 min-w-0">
+                        <span
+                          className="text-[11px] font-semibold text-[#E8EEEA] truncate"
+                          title={col.label}
+                        >
+                          {col.label}
+                        </span>
+                        {col.detectedRole !== 'outro' && (
+                          <span className="text-[9px] font-medium text-[#E5C17B] shrink-0">
+                            {col.detectedRoleLabel}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        className="text-[10px] font-mono text-[#98A89F] truncate mt-0.5"
+                        title={col.sample || '(vazio)'}
+                      >
+                        ex: {col.sample || '(vazio)'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {importedDocs.length > 1 && (
+            <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor="cracha-cross-link-mode-shared"
+                className="text-[11px] text-[#98A89F]"
+              >
+                Cruzar arquivos por:
+              </label>
+              <select
+                id="cracha-cross-link-mode-shared"
+                value={crossLinkMode}
+                onChange={(e) =>
+                  handleCrossLinkModeChange(e.target.value as CrachaCrossLinkMode)
+                }
+                className="siscom-input min-h-[34px] px-2.5 text-[11px]"
+              >
+                <option value="auto">Automático (Nome ou ordem)</option>
+                <option value="name">Nome do militar</option>
+                <option value="index">Ordem das linhas</option>
+              </select>
+            </div>
+          )}
+
+          {crossLinkSummary && (
+            <p className="text-[10px] text-[#83B499]">{crossLinkSummary}</p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-medium text-[#E5C17B]">
+            Mapeamento dos campos do crachá:
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              applyMultiMappingToMode(
+                importedDocs,
+                fieldMapping,
+                activeMode,
+                crossLinkMode
+              )
+            }
+            className="min-h-[30px] px-2 -mr-2 rounded text-[11px] text-[#83B499] hover:text-[#A8D8BE] hover:bg-white/[0.04] whitespace-nowrap transition-colors cursor-pointer"
+          >
+            Reaplicar
+          </button>
+        </div>
+
+        {activeMode === 'identificacao' ? (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
+                Nome
+              </span>
+              <SlotSourcePicker
+                label="Prefixo"
+                emptyLabel="Nenhum"
+                slot={fieldMapping.identPrefixo}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('identPrefixo', next)}
+              />
+              <SlotSourcePicker
+                label="Principal"
+                emptyLabel="Nenhum"
+                slot={fieldMapping.identPrincipal}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('identPrincipal', next)}
+              />
+              {(() => {
+                const prefSrc = importedDocs.find(
+                  (d) => d.id === fieldMapping.identPrefixo.docId
+                );
+                const mainSrc = importedDocs.find(
+                  (d) => d.id === fieldMapping.identPrincipal.docId
+                );
+                const prefSample =
+                  prefSrc?.columns.find(
+                    (c) => c.id === fieldMapping.identPrefixo.colId
+                  )?.sample || '';
+                const mainSample =
+                  mainSrc?.columns.find(
+                    (c) => c.id === fieldMapping.identPrincipal.colId
+                  )?.sample || '';
+                const composed = composePrefixedText(prefSample, mainSample);
+                const displayPreview = config.uppercase
+                  ? composed.toUpperCase()
+                  : composed;
+                return (
+                  <div className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
+                    <span className="text-[10px] text-[#83B499] shrink-0">
+                      Prévia (1º crachá):
+                    </span>
+                    <span className="font-mono text-xs font-semibold text-[#F4E6C4] truncate">
+                      {displayPreview || '—'}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <SlotSourcePicker
+              label="Documento"
+              emptyLabel="Nenhum"
+              slot={fieldMapping.identSecundario}
+              sources={importedDocs}
+              onChange={(next) => handleMappingSlotChange('identSecundario', next)}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <SlotSourcePicker
+                label="Faixa superior"
+                emptyLabel={`Padrão (${config.topText || 'Superior'})`}
+                slot={fieldMapping.identTop}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('identTop', next)}
+              />
+              <SlotSourcePicker
+                label="Faixa inferior"
+                emptyLabel={`Padrão (${config.bottomText || 'Inferior'})`}
+                slot={fieldMapping.identBottom}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('identBottom', next)}
+              />
+            </div>
+
+            {config.sidedness === 'frente_verso' && (
+              <SlotSourcePicker
+                label="Verso do crachá"
+                emptyLabel="Igual à frente"
+                slot={fieldMapping.identBack}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('identBack', next)}
+              />
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
+                Texto central
+              </span>
+              <SlotSourcePicker
+                label="Prefixo"
+                emptyLabel="Nenhum"
+                slot={fieldMapping.rpPrefixo}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('rpPrefixo', next)}
+              />
+              <SlotSourcePicker
+                label="Principal"
+                emptyLabel="Nenhum"
+                slot={fieldMapping.rpPrincipal}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('rpPrincipal', next)}
+              />
+              {(() => {
+                const prefSrc = importedDocs.find(
+                  (d) => d.id === fieldMapping.rpPrefixo.docId
+                );
+                const mainSrc = importedDocs.find(
+                  (d) => d.id === fieldMapping.rpPrincipal.docId
+                );
+                const prefSample =
+                  prefSrc?.columns.find(
+                    (c) => c.id === fieldMapping.rpPrefixo.colId
+                  )?.sample || '';
+                const mainSample =
+                  mainSrc?.columns.find(
+                    (c) => c.id === fieldMapping.rpPrincipal.colId
+                  )?.sample || '';
+                const composed = composePrefixedText(prefSample, mainSample);
+                const displayPreview = config.uppercase
+                  ? composed.toUpperCase()
+                  : composed;
+                return (
+                  <div className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
+                    <span className="text-[10px] text-[#83B499] shrink-0">
+                      Prévia (1º crachá):
+                    </span>
+                    <span className="font-mono text-xs font-semibold text-[#F4E6C4] truncate">
+                      {displayPreview || '—'}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <SlotSourcePicker
+                label="Superior"
+                emptyLabel="Padrão"
+                slot={fieldMapping.rpTop}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('rpTop', next)}
+              />
+              <SlotSourcePicker
+                label="Faixa inferior"
+                emptyLabel={`Padrão (${config.bottomText || 'Inferior'})`}
+                slot={fieldMapping.rpBottom}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('rpBottom', next)}
+              />
+            </div>
+
+            {config.sidedness === 'frente_verso' && (
+              <SlotSourcePicker
+                label="Verso do crachá"
+                emptyLabel="Igual à frente"
+                slot={fieldMapping.rpBack}
+                sources={importedDocs}
+                onChange={(next) => handleMappingSlotChange('rpBack', next)}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  const activeTabletDrawer: TabletWorkspaceDrawer | null = (() => {
+    if (!tabletDrawer) return null;
+    if (tabletDrawer === 'mapeamento') {
+      if (!mappingPanelBody) return null;
+      return {
+        title: 'Mapeamento de Arquivos',
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        content: mappingPanelBody,
+      };
+    }
+
+    if (tabletDrawer === 'medidas') {
+      return {
+        title: 'Tamanho do Crachá (mm)',
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={() =>
+              updateCurrentConfig((prev) => ({ ...prev, widthMm: 95, heightMm: 70 }))
+            }
+            className="min-h-[32px] px-2.5 rounded-lg text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+          >
+            Padrão 95×70
+          </button>
+        ),
+        content: (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label htmlFor="tablet-cracha-width" className="block text-[11px] text-[#98A89F]">
+                  Largura (mm)
+                </label>
+                <input
+                  id="tablet-cracha-width"
+                  type="number"
+                  min={30}
+                  max={200}
+                  step={1}
+                  value={config.widthMm}
+                  onChange={(e) =>
+                    updateCurrentConfig((prev) => ({
+                      ...prev,
+                      widthMm: Math.max(30, Math.min(200, Number(e.target.value) || 95)),
+                    }))
+                  }
+                  className="siscom-input w-full min-h-[40px] px-3 font-mono text-sm"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="tablet-cracha-height" className="block text-[11px] text-[#98A89F]">
+                  Altura (mm)
+                </label>
+                <input
+                  id="tablet-cracha-height"
+                  type="number"
+                  min={25}
+                  max={280}
+                  step={1}
+                  value={config.heightMm}
+                  onChange={(e) =>
+                    updateCurrentConfig((prev) => ({
+                      ...prev,
+                      heightMm: Math.max(25, Math.min(280, Number(e.target.value) || 70)),
+                    }))
+                  }
+                  className="siscom-input w-full min-h-[40px] px-3 font-mono text-sm"
+                />
+              </div>
+            </div>
+            {layout.oversizedWarning && (
+              <SiscomAlert tone="warning" className="text-[11px]">
+                {layout.oversizedWarning}
+              </SiscomAlert>
+            )}
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'faixas') {
+      return {
+        title: 'Faixas Superior e Inferior',
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        content: (
+          <div className="grid grid-cols-2 gap-3">
+            {activeMode === 'identificacao' ? (
+              <div className="space-y-1">
+                <label htmlFor="tablet-cracha-top-text" className="block text-[11px] text-[#98A89F]">
+                  Superior
+                </label>
+                <input
+                  id="tablet-cracha-top-text"
+                  type="text"
+                  value={config.topText}
+                  onChange={(e) =>
+                    updateCurrentConfig((prev) => ({ ...prev, topText: e.target.value }))
+                  }
+                  placeholder="OBRA"
+                  className="siscom-input w-full min-h-[38px] px-3 text-sm"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label htmlFor="tablet-cracha-rp-header" className="block text-[11px] text-[#98A89F]">
+                  Superior
+                </label>
+                <input
+                  id="tablet-cracha-rp-header"
+                  type="text"
+                  value={config.rpHeaderText}
+                  onChange={(e) =>
+                    updateCurrentConfig((prev) => ({ ...prev, rpHeaderText: e.target.value }))
+                  }
+                  placeholder="1º BI MEC (ES)"
+                  className="siscom-input w-full min-h-[38px] px-3 text-sm"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label htmlFor="tablet-cracha-bottom-text" className="block text-[11px] text-[#98A89F]">
+                Inferior
+              </label>
+              <input
+                id="tablet-cracha-bottom-text"
+                type="text"
+                value={config.bottomText}
+                onChange={(e) =>
+                  updateCurrentConfig((prev) => ({ ...prev, bottomText: e.target.value }))
+                }
+                placeholder={
+                  activeMode === 'identificacao' ? 'PERMISSIONÁRIO' : 'MILITAR ATIVA'
+                }
+                className="siscom-input w-full min-h-[38px] px-3 text-sm"
+              />
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'cores') {
+      return {
+        title: 'Cores do Crachá',
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={handleRestoreColors}
+            className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Restaurar</span>
+          </button>
+        ),
+        content: (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <ColorField
+              id="tablet-color-top-bg"
+              label={activeMode === 'identificacao' ? 'Fundo cima' : 'Fundo superior'}
+              value={config.colors.topBg}
+              onChange={(v) => updateColor('topBg', v)}
+            />
+            <ColorField
+              id="tablet-color-top-text"
+              label={activeMode === 'identificacao' ? 'Texto cima' : 'Texto superior'}
+              value={config.colors.topText}
+              onChange={(v) => updateColor('topText', v)}
+            />
+            <ColorField
+              id="tablet-color-divider"
+              label="Divisória"
+              value={config.colors.divider}
+              onChange={(v) => updateColor('divider', v)}
+            />
+            {activeMode === 'identificacao' && (
+              <ColorField
+                id="tablet-color-center-bg"
+                label="Fundo central"
+                value={config.colors.centerBg}
+                onChange={(v) => updateColor('centerBg', v)}
+              />
+            )}
+            <ColorField
+              id="tablet-color-center-text"
+              label={activeMode === 'identificacao' ? 'Texto central' : 'Texto principal'}
+              value={config.colors.centerText}
+              onChange={(v) => updateColor('centerText', v)}
+            />
+            <ColorField
+              id="tablet-color-bottom-bg"
+              label="Fundo baixo"
+              value={config.colors.bottomBg}
+              onChange={(v) => updateColor('bottomBg', v)}
+            />
+            <ColorField
+              id="tablet-color-bottom-text"
+              label="Texto baixo"
+              value={config.colors.bottomText}
+              onChange={(v) => updateColor('bottomText', v)}
+            />
+          </div>
+        ),
+      };
+    }
+
+    return {
+      title: `Crachás (${indexedEntries.length}/${config.perPage})`,
+      anchor: 'bottom',
+      onClose: () => setTabletDrawer(null),
+      headerAction: (
+        <div className="flex items-center gap-1.5">
+          {activeMode === 'rp' && config.perPage > 1 && (
+            <button
+              type="button"
+              onClick={handleSequenceRpNumbers}
+              className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+            >
+              <ListOrdered className="w-3.5 h-3.5" />
+              <span>Seq.</span>
+            </button>
+          )}
+          {config.perPage > 1 && (
+            <button
+              type="button"
+              onClick={handleCopyFirstToAll}
+              className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copiar 1º</span>
+            </button>
+          )}
+        </div>
+      ),
+      content: (
+        <div className="space-y-3">
+          {config.perPage > 1 && (
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 text-[#83B499] absolute left-3 pointer-events-none" />
+              <input
+                type="text"
+                value={crachaSearch}
+                onChange={(e) => setCrachaSearch(e.target.value)}
+                placeholder="Pesquisar crachá por nome, CPF ou nº..."
+                aria-label="Pesquisar crachá por nome, CPF ou número"
+                className="siscom-input w-full min-h-[38px] !pl-8 !pr-16 text-xs"
+              />
+              {crachaSearch.trim() !== '' && (
+                <div className="absolute right-1.5 flex items-center gap-1">
+                  <span className="font-mono text-[10px] text-[#E5C17B]">
+                    {indexedEntries.length}/{config.perPage}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCrachaSearch('')}
+                    aria-label="Limpar pesquisa"
+                    className="h-6 w-6 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {indexedEntries.length === 0 ? (
+            <div className="siscom-liquid-subcard w-full rounded-lg px-3 py-5 text-center text-xs text-[#98A89F]">
+              Nenhum crachá encontrado.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {indexedEntries.map(({ entry, idx }) => {
+                void fontsTick;
+                const diag = getCrachaTextDiagnostics(config, entry);
+                return (
+                  <div
+                    key={`tablet-entry-${idx}`}
+                    className="siscom-liquid-subcard rounded-lg p-3 space-y-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            scrollToEntryPreview(idx);
+                            setTabletDrawer(null);
+                          }}
+                          title={`Ver crachá #${idx + 1} na folha`}
+                          className="font-mono text-xs font-medium text-[#83B499] hover:text-[#E5C17B] transition-colors cursor-pointer"
+                        >
+                          #{idx + 1}
+                        </button>
+                        <span
+                          className={`font-mono text-[11px] ${
+                            diag.adjusted ? 'text-[#E5C17B]' : 'text-[#6E7E75]'
+                          }`}
+                        >
+                          {diag.label}
+                        </span>
+                      </div>
+                      {config.sidedness === 'frente_verso' && (
+                        <label className="inline-flex items-center gap-1.5 min-h-[28px] text-[11px] text-[#98A89F] cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={entry.versoIgual}
+                            onChange={(e) =>
+                              handleEntryChange(idx, 'versoIgual', e.target.checked)
+                            }
+                            className="h-4 w-4 accent-[#2D5A43] rounded cursor-pointer"
+                          />
+                          <span>Verso igual</span>
+                        </label>
+                      )}
+                    </div>
+
+                    {activeMode === 'identificacao' ? (
+                      <div className="grid grid-cols-1 gap-2">
+                        <input
+                          type="text"
+                          aria-label={`Texto principal do crachá ${idx + 1}`}
+                          value={entry.nomeCompleto}
+                          onChange={(e) =>
+                            handleEntryChange(idx, 'nomeCompleto', e.target.value)
+                          }
+                          placeholder="Nome / Principal"
+                          className="siscom-input w-full min-h-[36px] px-3 text-xs"
+                        />
+                        <input
+                          type="text"
+                          aria-label={`Identidade ou CPF do crachá ${idx + 1}`}
+                          value={entry.cpf}
+                          onChange={(e) => handleEntryChange(idx, 'cpf', e.target.value)}
+                          placeholder="Identidade / CPF"
+                          className="siscom-input w-full min-h-[36px] px-3 font-mono text-xs"
+                        />
+                      </div>
+                    ) : (
+                      <textarea
+                        rows={2}
+                        aria-label={`Texto do crachá RP ${idx + 1}`}
+                        value={entry.rpTexto}
+                        onChange={(e) => handleEntryChange(idx, 'rpTexto', e.target.value)}
+                        placeholder="Número ou texto"
+                        className="siscom-input w-full px-3 py-2 text-xs resize-y"
+                      />
+                    )}
+
+                    {config.sidedness === 'frente_verso' && !entry.versoIgual && (
+                      <textarea
+                        rows={2}
+                        aria-label={`Texto do verso do crachá ${idx + 1}`}
+                        value={entry.versoTexto}
+                        onChange={(e) =>
+                          handleEntryChange(idx, 'versoTexto', e.target.value)
+                        }
+                        placeholder="Texto do verso"
+                        className="siscom-input w-full border-[#83B499]/30 px-3 py-2 text-xs resize-y"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ),
+    };
+  })();
+
+  return (
+    <>
+      <input
+        ref={docInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files ? Array.from(e.target.files) : [];
+          e.target.value = '';
+          if (files.length > 0) void handleUploadDocuments(files);
+        }}
+      />
+
+      <WorkspaceSplitLayout
+        sidebarWidthClass="lg:w-[300px] xl:w-[325px]"
+        rightSidebarWidthClass="lg:w-[295px] xl:w-[320px]"
+        tabletDrawer={activeTabletDrawer}
+        tabletTopBar={
+          <TabletRibbonRow>
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                variant="gold"
+                disabled={isImportingDoc}
+                onClick={() => docInputRef.current?.click()}
+                icon={
+                  isImportingDoc ? (
+                    <SiscomSpinner tone="gold" className="w-3.5 h-3.5" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )
+                }
+              >
+                {isImportingDoc
+                  ? 'Importando...'
+                  : importedDocs.length > 0
+                    ? '+ Arquivo'
+                    : 'Subir arquivo'}
+              </TabletRibbonButton>
+
+              {importedDocs.length > 0 && fieldMapping && (
+                <TabletRibbonButton
+                  chevron
+                  open={tabletDrawer === 'mapeamento'}
+                  onClick={() => toggleTabletDrawer('mapeamento')}
+                  icon={<SlidersHorizontal className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                  badge={importedDocs.length}
+                >
+                  Mapeamento
+                </TabletRibbonButton>
+              )}
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <TabletRibbonSegment
+                ariaLabel="Modelo de crachá"
+                value={activeMode}
+                onChange={(val) => {
+                  setActiveMode(val as CrachaMode);
+                  setNotice(null);
+                }}
+                options={[
+                  { value: 'identificacao', label: 'Identificação' },
+                  { value: 'rp', label: 'RP' },
+                ]}
+              />
+
+              <label className="inline-flex items-center gap-1.5 bg-black/35 border border-white/[0.11] rounded-xl px-2.5 min-h-[40px] shrink-0">
+                <span className="text-[11px] text-[#A2B1A8]">Qtd</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="Quantidade de crachás"
+                  min={1}
+                  max={200}
+                  value={perPageDraft}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setPerPageDraft(raw);
+                    if (raw.trim() === '') return;
+                    const parsed = Math.floor(Number(raw));
+                    if (Number.isFinite(parsed) && parsed >= 1) {
+                      handlePerPageChange(parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = Math.floor(Number(perPageDraft));
+                    const clamped = Number.isFinite(parsed)
+                      ? Math.max(1, Math.min(200, parsed))
+                      : config.perPage;
+                    handlePerPageChange(clamped);
+                    setPerPageDraft(String(clamped));
+                  }}
+                  className="w-12 bg-transparent font-mono text-xs text-[#F4E6C4] text-center focus:outline-none"
+                />
+              </label>
+
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'medidas'}
+                onClick={() => toggleTabletDrawer('medidas')}
+                icon={<Ruler className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                {config.widthMm}×{config.heightMm}mm
+              </TabletRibbonButton>
+
+              <TabletRibbonSegment
+                ariaLabel="Lados da impressão"
+                value={config.sidedness}
+                onChange={(val) =>
+                  updateCurrentConfig((prev) => ({
+                    ...prev,
+                    sidedness: val as CrachaSidedness,
+                  }))
+                }
+                options={[
+                  { value: 'frente', label: 'Frente' },
+                  { value: 'frente_verso', label: 'Frente/Verso' },
+                ]}
+              />
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              {(importError || notice) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportError(null);
+                    setNotice(null);
+                  }}
+                  className={`min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border whitespace-nowrap cursor-pointer ${
+                    importError || notice?.toLowerCase().includes('erro')
+                      ? 'bg-red-950/60 border-red-400/35 text-red-200'
+                      : 'bg-[#2D5A43]/40 border-[#8AC0A3]/35 text-[#D8F0E2]'
+                  }`}
+                >
+                  {importError || notice}
+                </button>
+              )}
+
+              <TabletRibbonButton
+                variant="primary"
+                disabled={exporting !== null}
+                onClick={handleDownloadPdf}
+                icon={
+                  exporting === 'pdf' ? (
+                    <SiscomSpinner tone="light" className="w-3.5 h-3.5" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )
+                }
+              >
+                PDF
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                disabled={exporting !== null}
+                onClick={handleDownloadPng}
+                icon={
+                  exporting === 'png' ? (
+                    <SiscomSpinner tone="olive" className="w-3.5 h-3.5" />
+                  ) : (
+                    <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
+                  )
+                }
+              >
+                PNG
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                onClick={handlePrint}
+                icon={<Printer className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                Imprimir
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+          </TabletRibbonRow>
+        }
+        tabletBottomBar={
+          <TabletRibbonRow>
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'crachas'}
+                onClick={() => toggleTabletDrawer('crachas')}
+                icon={<IdCard className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                badge={config.perPage}
+              >
+                Crachás
+              </TabletRibbonButton>
+
+              {config.perPage > 1 && (
+                <div className="relative flex items-center shrink-0">
+                  <Search className="w-3.5 h-3.5 text-[#83B499] absolute left-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={crachaSearch}
+                    onFocus={() => setTabletDrawer('crachas')}
+                    onChange={(e) => {
+                      setCrachaSearch(e.target.value);
+                      if (tabletDrawer !== 'crachas') setTabletDrawer('crachas');
+                    }}
+                    placeholder="Pesquisar crachá..."
+                    aria-label="Pesquisar crachá"
+                    className="siscom-input !w-[190px] !min-h-[40px] !pl-8 !pr-7 !rounded-xl text-xs"
+                  />
+                  {crachaSearch.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setCrachaSearch('')}
+                      aria-label="Limpar pesquisa"
+                      className="absolute right-1.5 w-6 h-6 inline-flex items-center justify-center rounded text-[#98A89F] hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'faixas'}
+                onClick={() => toggleTabletDrawer('faixas')}
+                icon={<Type className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                Faixas
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                variant={config.uppercase ? 'active' : 'default'}
+                onClick={() =>
+                  updateCurrentConfig((prev) => ({ ...prev, uppercase: !prev.uppercase }))
+                }
+              >
+                AA Maiúsculas
+              </TabletRibbonButton>
+
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'cores'}
+                onClick={() => toggleTabletDrawer('cores')}
+                icon={<Palette className="w-3.5 h-3.5 text-[#E5C17B]" />}
+              >
+                Cores
+              </TabletRibbonButton>
+            </TabletRibbonGroup>
+
+            {config.perPage > 1 && (
+              <>
+                <TabletRibbonDivider />
+                <TabletRibbonGroup>
+                  {activeMode === 'rp' && (
+                    <TabletRibbonButton
+                      onClick={handleSequenceRpNumbers}
+                      icon={<ListOrdered className="w-3.5 h-3.5 text-[#83B499]" />}
+                    >
+                      Seq.
+                    </TabletRibbonButton>
+                  )}
+                  <TabletRibbonButton
+                    onClick={handleCopyFirstToAll}
+                    icon={<Copy className="w-3.5 h-3.5 text-[#83B499]" />}
+                  >
+                    Copiar 1º
+                  </TabletRibbonButton>
+                </TabletRibbonGroup>
+              </>
+            )}
+          </TabletRibbonRow>
+        }
+        sidebar={
+          <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
+          {/* Top Primary Document Upload & Field Mapping */}
+          <div className="space-y-3 pb-4 border-b border-white/[0.07]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-[#E5C17B]">
+                Importar arquivos
+              </span>
+            </div>
 
           <button
             type="button"
@@ -1314,7 +2282,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
           </AnimatePresence>
 
           <AnimatePresence>
-            {importedDocs.length > 0 && fieldMapping && (
+            {mappingPanelBody && (
               <motion.div
                 key="cracha-mapping"
                 variants={fadeSlideVariants}
@@ -1322,321 +2290,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
                 animate="animate"
                 exit="exit"
                 transition={UI_TRANSITION}
-                className="siscom-liquid-subcard rounded-xl !border-[#C8A461]/30 p-3.5 space-y-3"
+                className="siscom-liquid-subcard rounded-xl !border-[#C8A461]/30 p-3.5"
               >
-                {/* Uploaded files list */}
-                <div className="space-y-2 border-b border-white/[0.07] pb-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium text-[#E5C17B]">
-                      {importedDocs.length === 1
-                        ? 'Arquivo carregado'
-                        : `${importedDocs.length} arquivos carregados`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImportedDocs([]);
-                        setFieldMapping(null);
-                        setCrossLinkSummary(null);
-                        setImportError(null);
-                      }}
-                      className="min-h-[30px] px-2 -mr-2 rounded text-[11px] text-[#98A89F] hover:text-white hover:bg-white/[0.04] transition-colors"
-                    >
-                      Limpar tudo
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {importedDocs.map((src, idx) => (
-                      <div
-                        key={src.id}
-                        className="rounded-lg bg-white/[0.04] border border-white/[0.10] px-2.5 py-2 space-y-2"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <FileSpreadsheet className="w-3.5 h-3.5 text-[#E5C17B] shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-[#E8EEEA] truncate">
-                                {importedDocs.length > 1 ? `Arq. ${idx + 1}: ` : ''}
-                                {src.fileName}
-                              </p>
-                              <p className="text-[10px] text-[#83B499]">
-                                {src.rows.length}{' '}
-                                {src.rows.length === 1 ? 'registro' : 'registros'} ·{' '}
-                                {src.columns.length}{' '}
-                                {src.columns.length === 1 ? 'coluna' : 'colunas'}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImportedDoc(src.id)}
-                            title={`Remover ${src.fileName}`}
-                            aria-label={`Remover ${src.fileName}`}
-                            className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center rounded-md text-[#98A89F] hover:text-red-300 hover:bg-white/[0.06] transition-colors shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        {/* Mandatory preview of every extracted column + row-below example */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 border-t border-white/[0.06]">
-                          {src.columns.map((col) => (
-                            <div
-                              key={col.id}
-                              className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2 py-1.5 min-w-0"
-                            >
-                              <div className="flex items-center justify-between gap-1.5 min-w-0">
-                                <span
-                                  className="text-[11px] font-semibold text-[#E8EEEA] truncate"
-                                  title={col.label}
-                                >
-                                  {col.label}
-                                </span>
-                                {col.detectedRole !== 'outro' && (
-                                  <span className="text-[9px] font-medium text-[#E5C17B] shrink-0">
-                                    {col.detectedRoleLabel}
-                                  </span>
-                                )}
-                              </div>
-                              <p
-                                className="text-[10px] font-mono text-[#98A89F] truncate mt-0.5"
-                                title={col.sample || '(vazio)'}
-                              >
-                                ex: {col.sample || '(vazio)'}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {importedDocs.length > 1 && (
-                    <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
-                      <label
-                        htmlFor="cracha-cross-link-mode"
-                        className="text-[11px] text-[#98A89F]"
-                      >
-                        Cruzar arquivos por:
-                      </label>
-                      <select
-                        id="cracha-cross-link-mode"
-                        value={crossLinkMode}
-                        onChange={(e) =>
-                          handleCrossLinkModeChange(e.target.value as CrachaCrossLinkMode)
-                        }
-                        className="siscom-input min-h-[34px] px-2.5 text-[11px]"
-                      >
-                        <option value="auto">Automático (Nome ou ordem)</option>
-                        <option value="name">Nome do militar</option>
-                        <option value="index">Ordem das linhas</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {crossLinkSummary && (
-                    <p className="text-[10px] text-[#83B499]">{crossLinkSummary}</p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-[#E5C17B]">
-                    Mapeamento dos campos do crachá:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      applyMultiMappingToMode(
-                        importedDocs,
-                        fieldMapping,
-                        activeMode,
-                        crossLinkMode
-                      )
-                    }
-                    className="min-h-[30px] px-2 -mr-2 rounded text-[11px] text-[#83B499] hover:text-[#A8D8BE] hover:bg-white/[0.04] whitespace-nowrap transition-colors"
-                  >
-                    Reaplicar
-                  </button>
-                </div>
-
-                {activeMode === 'identificacao' ? (
-                  <div className="space-y-3">
-                    {/* Flexible Prefix + Main Name Assembly */}
-                    <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
-                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
-                        Nome
-                      </span>
-
-                      <SlotSourcePicker
-                        label="Prefixo"
-                        emptyLabel="Nenhum"
-                        slot={fieldMapping.identPrefixo}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('identPrefixo', next)}
-                      />
-
-                      <SlotSourcePicker
-                        label="Principal"
-                        emptyLabel="Nenhum"
-                        slot={fieldMapping.identPrincipal}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('identPrincipal', next)}
-                      />
-
-                      {(() => {
-                        const prefSrc = importedDocs.find(
-                          (d) => d.id === fieldMapping.identPrefixo.docId
-                        );
-                        const mainSrc = importedDocs.find(
-                          (d) => d.id === fieldMapping.identPrincipal.docId
-                        );
-                        const prefSample =
-                          prefSrc?.columns.find(
-                            (c) => c.id === fieldMapping.identPrefixo.colId
-                          )?.sample || '';
-                        const mainSample =
-                          mainSrc?.columns.find(
-                            (c) => c.id === fieldMapping.identPrincipal.colId
-                          )?.sample || '';
-                        const composed = composePrefixedText(prefSample, mainSample);
-                        const displayPreview = config.uppercase
-                          ? composed.toUpperCase()
-                          : composed;
-                        return (
-                          <div className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
-                            <span className="text-[10px] text-[#83B499] shrink-0">
-                              Prévia (1º crachá):
-                            </span>
-                            <span className="font-mono text-xs font-semibold text-[#F4E6C4] truncate">
-                              {displayPreview || '—'}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    <SlotSourcePicker
-                      label="Documento"
-                      emptyLabel="Nenhum"
-                      slot={fieldMapping.identSecundario}
-                      sources={importedDocs}
-                      onChange={(next) => handleMappingSlotChange('identSecundario', next)}
-                    />
-
-                    <div className="grid grid-cols-1 gap-2">
-                      <SlotSourcePicker
-                        label="Faixa superior"
-                        emptyLabel={`Padrão (${config.topText || 'Superior'})`}
-                        slot={fieldMapping.identTop}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('identTop', next)}
-                      />
-
-                      <SlotSourcePicker
-                        label="Faixa inferior"
-                        emptyLabel={`Padrão (${config.bottomText || 'Inferior'})`}
-                        slot={fieldMapping.identBottom}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('identBottom', next)}
-                      />
-                    </div>
-
-                    {config.sidedness === 'frente_verso' && (
-                      <SlotSourcePicker
-                        label="Verso do crachá"
-                        emptyLabel="Igual à frente"
-                        slot={fieldMapping.identBack}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('identBack', next)}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Flexible Prefix + Main Text Assembly (RP) */}
-                    <div className="rounded-lg bg-[#0E1813]/52 backdrop-blur-md border border-[#C8A461]/24 p-2.5 space-y-2.5">
-                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#E5C17B]">
-                        Texto central
-                      </span>
-
-                      <SlotSourcePicker
-                        label="Prefixo"
-                        emptyLabel="Nenhum"
-                        slot={fieldMapping.rpPrefixo}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('rpPrefixo', next)}
-                      />
-
-                      <SlotSourcePicker
-                        label="Principal"
-                        emptyLabel="Nenhum"
-                        slot={fieldMapping.rpPrincipal}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('rpPrincipal', next)}
-                      />
-
-                      {(() => {
-                        const prefSrc = importedDocs.find(
-                          (d) => d.id === fieldMapping.rpPrefixo.docId
-                        );
-                        const mainSrc = importedDocs.find(
-                          (d) => d.id === fieldMapping.rpPrincipal.docId
-                        );
-                        const prefSample =
-                          prefSrc?.columns.find(
-                            (c) => c.id === fieldMapping.rpPrefixo.colId
-                          )?.sample || '';
-                        const mainSample =
-                          mainSrc?.columns.find(
-                            (c) => c.id === fieldMapping.rpPrincipal.colId
-                          )?.sample || '';
-                        const composed = composePrefixedText(prefSample, mainSample);
-                        const displayPreview = config.uppercase
-                          ? composed.toUpperCase()
-                          : composed;
-                        return (
-                          <div className="rounded-md bg-[#080E0B]/55 border border-white/[0.08] px-2.5 py-1.5 flex items-baseline justify-between gap-2">
-                            <span className="text-[10px] text-[#83B499] shrink-0">
-                              Prévia (1º crachá):
-                            </span>
-                            <span className="font-mono text-xs font-semibold text-[#F4E6C4] truncate">
-                              {displayPreview || '—'}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2">
-                      <SlotSourcePicker
-                        label="Superior"
-                        emptyLabel="Padrão"
-                        slot={fieldMapping.rpTop}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('rpTop', next)}
-                      />
-
-                      <SlotSourcePicker
-                        label="Faixa inferior"
-                        emptyLabel={`Padrão (${config.bottomText || 'Inferior'})`}
-                        slot={fieldMapping.rpBottom}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('rpBottom', next)}
-                      />
-                    </div>
-
-                    {config.sidedness === 'frente_verso' && (
-                      <SlotSourcePicker
-                        label="Verso do crachá"
-                        emptyLabel="Igual à frente"
-                        slot={fieldMapping.rpBack}
-                        sources={importedDocs}
-                        onChange={(next) => handleMappingSlotChange('rpBack', next)}
-                      />
-                    )}
-                  </div>
-                )}
+                {mappingPanelBody}
               </motion.div>
             )}
           </AnimatePresence>
@@ -2197,5 +2853,6 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
         ))}
       </div>
     </WorkspaceSplitLayout>
+    </>
   );
 };

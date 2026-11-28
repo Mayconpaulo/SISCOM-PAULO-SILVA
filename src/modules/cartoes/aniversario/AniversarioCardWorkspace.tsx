@@ -4,8 +4,13 @@ import { logActivity } from '../../../core/audit/activityLogger';
 import {
   Archive,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileUp,
+  List,
+  MessageSquareText,
+  PencilLine,
   Plus,
   RotateCcw,
   Trash2,
@@ -34,7 +39,18 @@ import {
 import { CARTOES_ASSETS } from '../shared/cartoesAssets';
 import { getSecureVaultItem, setSecureVaultItem } from '../../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../../shared/PinchZoomSheetFrame';
-import { WorkspaceSplitLayout } from '../../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonIconButton,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../../shared/TabletRibbonPrimitives';
 import { stepSlideVariants } from '../../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../../shared/ui';
 
@@ -173,6 +189,14 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
   const [individual, setIndividual] = useState<IndividualCardForm>(initial.individual);
 
   const [parseProgress, setParseProgress] = useState<{ pct: number; label: string } | null>(null);
+  const [tabletDrawer, setTabletDrawer] = useState<
+    'lista' | 'periodo' | 'militar' | 'individual' | 'mensagem' | null
+  >(null);
+  const toggleTabletDrawer = (
+    key: 'lista' | 'periodo' | 'militar' | 'individual' | 'mensagem'
+  ) => {
+    setTabletDrawer((prev) => (prev === key ? null : key));
+  };
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [zipProgress, setZipProgress] = useState<{ current: number; total: number } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -458,12 +482,644 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
   }, [externalDownloadSignal]);
 
   const m = ANIV_METRICS;
+  const selectedEntryIdx = selectedEntry
+    ? entries.findIndex((e) => e.id === selectedEntry.id)
+    : -1;
+
+  const stepSelectedEntry = (delta: -1 | 1) => {
+    if (entries.length === 0) return;
+    const base = selectedEntryIdx < 0 ? 0 : selectedEntryIdx;
+    const nextIdx = (base + delta + entries.length) % entries.length;
+    setSelectedEntryId(entries[nextIdx].id);
+  };
+
+  const activeTabletDrawer: TabletWorkspaceDrawer | null = (() => {
+    if (!tabletDrawer) return null;
+
+    if (tabletDrawer === 'lista') {
+      return {
+        title: `Lista de Aniversariantes (${entries.length})`,
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={handleAddManualEntry}
+            className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs font-medium bg-[#2D5A43]/80 hover:bg-[#3A7456] text-white border border-[#8AC0A3]/40 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Adicionar</span>
+          </button>
+        ),
+        content:
+          entries.length === 0 ? (
+            <p className="text-xs text-[#98A89F] py-2">Nenhum militar na relação.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {entries.map((entry, idx) => {
+                const isSel = entry.id === selectedEntry?.id;
+                const formatted = formatAniversarianteRecipientLine(
+                  entry.sigla,
+                  entry.qualificacao,
+                  entry.nome,
+                  resolveEntryPrefix(entry)
+                );
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedEntryId(entry.id);
+                      setTabletDrawer(null);
+                    }}
+                    className={`min-h-[42px] rounded-lg border text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                      isSel
+                        ? 'bg-[#1D3B2C]/85 border-[#83B499]/60 text-white'
+                        : 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.07] text-[#C6D4CC]'
+                    }`}
+                  >
+                    <span className="text-xs font-medium truncate">
+                      {idx + 1}. {formatted}
+                    </span>
+                    <span className="shrink-0 font-mono text-[11px] text-[#83B499]">
+                      Dia {entry.dia.padStart(2, '0')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ),
+      };
+    }
+
+    if (tabletDrawer === 'periodo') {
+      return {
+        title: 'Mês, Ano e Prefixo da Relação',
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        content: (
+          <div className="grid grid-cols-3 gap-3">
+            <label className="space-y-1">
+              <span className="siscom-field-label !text-[11px]">Mês</span>
+              <select
+                value={relationMonth}
+                onChange={(e) => setRelationMonth(e.target.value)}
+                className="siscom-input !min-h-[38px] !px-2 text-xs"
+              >
+                {MONTHS_PT.map((mName) => (
+                  <option key={mName} value={mName}>
+                    {mName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="siscom-field-label !text-[11px]">Ano</span>
+              <input
+                type="number"
+                min={2000}
+                max={2100}
+                value={relationYear}
+                onChange={(e) =>
+                  setRelationYear(Math.max(2000, parseInt(e.target.value, 10) || 2026))
+                }
+                className="siscom-input !min-h-[38px] !px-2 text-xs font-mono"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="siscom-field-label !text-[11px]">Prefixo</span>
+              <select
+                value={relationPrefix}
+                onChange={(e) => setRelationPrefix(e.target.value)}
+                className="siscom-input !min-h-[38px] !px-2 text-xs"
+              >
+                <option value="AUTO">Auto (AO / A)</option>
+                <option value="AO">Sempre AO</option>
+                <option value="A">Sempre A</option>
+              </select>
+            </label>
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'militar' && selectedEntry) {
+      return {
+        title: `Militar #${selectedEntryIdx + 1}`,
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={() => handleRemoveEntry(selectedEntry.id)}
+            className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-red-300 bg-red-950/50 border border-red-400/30 cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Remover</span>
+          </button>
+        ),
+        content: (
+          <div className="space-y-3">
+            <div className="grid grid-cols-4 gap-2.5">
+              <label className="space-y-1">
+                <span className="block text-[10px] text-[#98A89F]">Prefixo</span>
+                <input
+                  type="text"
+                  value={selectedEntry.prefix ?? ''}
+                  onChange={(e) => handleUpdateSelectedEntry({ prefix: e.target.value })}
+                  placeholder={inferPortugueseRecipientPrefix(selectedEntry.nome)}
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="block text-[10px] text-[#98A89F]">Sigla</span>
+                <input
+                  type="text"
+                  value={selectedEntry.sigla}
+                  onChange={(e) => handleUpdateSelectedEntry({ sigla: e.target.value })}
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="block text-[10px] text-[#98A89F]">Qualif.</span>
+                <input
+                  type="text"
+                  value={selectedEntry.qualificacao}
+                  onChange={(e) =>
+                    handleUpdateSelectedEntry({ qualificacao: e.target.value })
+                  }
+                  placeholder="Vazio p/ RS"
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="block text-[10px] text-[#98A89F]">Dia</span>
+                <input
+                  type="text"
+                  value={selectedEntry.dia}
+                  onChange={(e) => handleUpdateSelectedEntry({ dia: e.target.value })}
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs font-mono"
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="block text-[10px] text-[#98A89F]">Nome</span>
+              <input
+                type="text"
+                value={selectedEntry.nome}
+                onChange={(e) => handleUpdateSelectedEntry({ nome: e.target.value })}
+                className="siscom-input !min-h-[38px] !px-3 text-xs"
+              />
+            </label>
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'individual') {
+      return {
+        title: 'Destinatário e Data',
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        content: (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2.5">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-1">
+                  <label htmlFor="tablet-aniv-prefix" className="siscom-field-label !text-[10px]">
+                    Prefixo
+                  </label>
+                  {individual.prefixAuto === false && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIndividual((prev) => ({
+                          ...prev,
+                          prefixAuto: true,
+                          prefix: inferPortugueseRecipientPrefix(prev.nome),
+                        }))
+                      }
+                      className="text-[10px] text-[#83B499] hover:text-[#A8D6BC] cursor-pointer"
+                    >
+                      Auto
+                    </button>
+                  )}
+                </div>
+                <input
+                  id="tablet-aniv-prefix"
+                  type="text"
+                  value={individual.prefix}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      prefixAuto: false,
+                      prefix: e.target.value,
+                    }))
+                  }
+                  placeholder="AO / A"
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
+                />
+              </div>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Sigla</span>
+                <input
+                  type="text"
+                  value={individual.sigla}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({ ...prev, sigla: e.target.value }))
+                  }
+                  placeholder="SD, CB, SGT"
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Qualif.</span>
+                <input
+                  type="text"
+                  value={individual.qualificacao}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({ ...prev, qualificacao: e.target.value }))
+                  }
+                  placeholder="INF, INT"
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs uppercase"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <label className="block space-y-1">
+                <span className="siscom-field-label !text-[10px]">Nome</span>
+                <input
+                  type="text"
+                  value={individual.nome}
+                  onChange={(e) => {
+                    const nextNome = e.target.value;
+                    setIndividual((prev) => ({
+                      ...prev,
+                      nome: nextNome,
+                      prefix:
+                        prev.prefixAuto !== false
+                          ? inferPortugueseRecipientPrefix(nextNome)
+                          : prev.prefix,
+                    }));
+                  }}
+                  placeholder="JOSUE GAIBA COELHO"
+                  className="siscom-input !min-h-[38px] text-xs uppercase"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="siscom-field-label !text-[10px]">Data livre</span>
+                <input
+                  type="text"
+                  value={individual.customDateOverride}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      customDateOverride: e.target.value,
+                    }))
+                  }
+                  placeholder={formatBirthdayCardDate(
+                    individual.dia,
+                    individual.mes,
+                    individual.ano
+                  )}
+                  className="siscom-input !min-h-[38px] text-xs"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-[90px_1fr_100px] gap-2.5">
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Dia</span>
+                <input
+                  type="text"
+                  value={individual.dia}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      dia: e.target.value,
+                      customDateOverride: '',
+                    }))
+                  }
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs font-mono"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Mês</span>
+                <select
+                  value={individual.mes}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      mes: e.target.value,
+                      customDateOverride: '',
+                    }))
+                  }
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs"
+                >
+                  {MONTHS_PT.map((mName) => (
+                    <option key={mName} value={mName}>
+                      {mName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[10px]">Ano</span>
+                <input
+                  type="number"
+                  min={2000}
+                  max={2100}
+                  value={individual.ano}
+                  onChange={(e) =>
+                    setIndividual((prev) => ({
+                      ...prev,
+                      ano: Math.max(2000, parseInt(e.target.value, 10) || 2026),
+                      customDateOverride: '',
+                    }))
+                  }
+                  className="siscom-input !min-h-[38px] !px-2.5 text-xs font-mono"
+                />
+              </label>
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'mensagem') {
+      return {
+        title: 'Mensagem do Cartão',
+        anchor: 'bottom',
+        onClose: () => setTabletDrawer(null),
+        headerAction:
+          customBodyText !== null ? (
+            <button
+              type="button"
+              onClick={() => setCustomBodyText(null)}
+              className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Padrão</span>
+            </button>
+          ) : undefined,
+        content: (
+          <textarea
+            rows={4}
+            aria-label="Mensagem do cartão de aniversário"
+            value={activeBodyText}
+            onChange={(e) => setCustomBodyText(e.target.value)}
+            className="siscom-input !min-h-[110px] py-2.5 text-xs sm:text-sm leading-relaxed resize-y"
+          />
+        ),
+      };
+    }
+
+    return null;
+  })();
 
   return (
-    <WorkspaceSplitLayout
-      sidebarWidthClass="lg:w-[305px] xl:w-[330px]"
-      rightSidebarWidthClass="lg:w-[285px] xl:w-[310px]"
-      sidebar={
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleUploadPdf(file);
+        }}
+      />
+
+      <WorkspaceSplitLayout
+        sidebarWidthClass="lg:w-[305px] xl:w-[330px]"
+        rightSidebarWidthClass="lg:w-[285px] xl:w-[310px]"
+        tabletDrawer={activeTabletDrawer}
+        tabletTopBar={
+          <TabletRibbonRow>
+            <TabletRibbonGroup>
+              <TabletRibbonSegment
+                ariaLabel="Modelo de cartão"
+                value="aniversario"
+                onChange={(val) => {
+                  if (val === 'boas_vindas') onSwitchToBoasVindas();
+                  if (val === 'pesames') onSwitchToPesames();
+                }}
+                options={[
+                  { value: 'boas_vindas', label: 'Boas-Vindas' },
+                  { value: 'aniversario', label: 'Aniversário' },
+                  { value: 'pesames', label: 'Pêsames' },
+                ]}
+              />
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <TabletRibbonSegment
+                ariaLabel="Destinatário"
+                value={audience}
+                onChange={setAudience}
+                options={[
+                  { value: 'batalhao', label: 'Militares' },
+                  { value: 'eterno_comandante', label: 'Eterno Cmt' },
+                ]}
+              />
+
+              <TabletRibbonSegment
+                ariaLabel="Modo de preenchimento"
+                value={inputMode}
+                onChange={(next) => {
+                  setInputMode(next);
+                  setTabletDrawer(null);
+                }}
+                options={[
+                  { value: 'relacao', label: 'Relação' },
+                  { value: 'individual', label: 'Individual' },
+                ]}
+              />
+
+              {inputMode === 'relacao' && (
+                <>
+                  <TabletRibbonButton
+                    variant="gold"
+                    disabled={Boolean(parseProgress)}
+                    onClick={() => fileInputRef.current?.click()}
+                    icon={
+                      parseProgress ? (
+                        <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
+                      ) : (
+                        <FileUp className="w-3.5 h-3.5" />
+                      )
+                    }
+                  >
+                    {parseProgress ? `${parseProgress.pct}%` : 'PDF Relação'}
+                  </TabletRibbonButton>
+
+                  <TabletRibbonButton
+                    chevron
+                    open={tabletDrawer === 'lista'}
+                    onClick={() => toggleTabletDrawer('lista')}
+                    icon={<List className="w-3.5 h-3.5 text-[#83B499]" />}
+                    badge={entries.length}
+                  >
+                    Lista
+                  </TabletRibbonButton>
+                </>
+              )}
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              {errorMsg && (
+                <button
+                  type="button"
+                  onClick={() => setErrorMsg(null)}
+                  className="min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border bg-red-950/60 border-red-400/35 text-red-200 whitespace-nowrap cursor-pointer"
+                >
+                  {errorMsg}
+                </button>
+              )}
+
+              <TabletRibbonButton
+                variant="primary"
+                onClick={handleDownloadCurrentPng}
+                disabled={isExportingPng || Boolean(zipProgress)}
+                icon={
+                  isExportingPng ? (
+                    <SiscomSpinner className="w-3.5 h-3.5" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )
+                }
+              >
+                PNG
+              </TabletRibbonButton>
+
+              {inputMode === 'relacao' && entries.length > 0 && (
+                <TabletRibbonButton
+                  variant="gold"
+                  onClick={handleDownloadAllZip}
+                  disabled={Boolean(zipProgress) || isExportingPng}
+                  icon={
+                    zipProgress ? (
+                      <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
+                    ) : (
+                      <Archive className="w-3.5 h-3.5" />
+                    )
+                  }
+                  badge={zipProgress ? `${zipProgress.current}/${zipProgress.total}` : entries.length}
+                >
+                  ZIP
+                </TabletRibbonButton>
+              )}
+            </TabletRibbonGroup>
+          </TabletRibbonRow>
+        }
+        tabletBottomBar={
+          <TabletRibbonRow className="justify-between">
+            {inputMode === 'relacao' ? (
+              <>
+                <TabletRibbonGroup>
+                  {entries.length > 1 && (
+                    <TabletRibbonIconButton
+                      aria-label="Militar anterior"
+                      onClick={() => stepSelectedEntry(-1)}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </TabletRibbonIconButton>
+                  )}
+
+                  {selectedEntry ? (
+                    <TabletRibbonButton
+                      chevron
+                      open={tabletDrawer === 'militar'}
+                      onClick={() => toggleTabletDrawer('militar')}
+                      icon={<PencilLine className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                      badge={
+                        entries.length > 0
+                          ? `${selectedEntryIdx + 1}/${entries.length}`
+                          : undefined
+                      }
+                    >
+                      <span className="max-w-[200px] truncate inline-block align-bottom">
+                        {selectedEntry.nome || 'Editar militar'}
+                      </span>
+                    </TabletRibbonButton>
+                  ) : (
+                    <TabletRibbonButton
+                      onClick={handleAddManualEntry}
+                      icon={<Plus className="w-3.5 h-3.5 text-[#83B499]" />}
+                    >
+                      Adicionar militar
+                    </TabletRibbonButton>
+                  )}
+
+                  {entries.length > 1 && (
+                    <TabletRibbonIconButton
+                      aria-label="Próximo militar"
+                      onClick={() => stepSelectedEntry(1)}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </TabletRibbonIconButton>
+                  )}
+                </TabletRibbonGroup>
+
+                <TabletRibbonGroup>
+                  <TabletRibbonButton
+                    chevron
+                    open={tabletDrawer === 'periodo'}
+                    onClick={() => toggleTabletDrawer('periodo')}
+                    icon={<Calendar className="w-3.5 h-3.5 text-[#83B499]" />}
+                    badge={`${relationMonth.slice(0, 3)}/${relationYear}`}
+                  >
+                    Mês / Prefixo
+                  </TabletRibbonButton>
+
+                  <TabletRibbonButton
+                    chevron
+                    open={tabletDrawer === 'mensagem'}
+                    onClick={() => toggleTabletDrawer('mensagem')}
+                    icon={<MessageSquareText className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                  >
+                    Mensagem
+                  </TabletRibbonButton>
+                </TabletRibbonGroup>
+              </>
+            ) : (
+              <>
+                <TabletRibbonGroup>
+                  <TabletRibbonButton
+                    chevron
+                    open={tabletDrawer === 'individual'}
+                    onClick={() => toggleTabletDrawer('individual')}
+                    icon={<PencilLine className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                  >
+                    {individual.nome.trim()
+                      ? `${individual.sigla ? individual.sigla + ' ' : ''}${individual.nome.trim().slice(0, 22)}`
+                      : 'Destinatário e Data'}
+                  </TabletRibbonButton>
+                </TabletRibbonGroup>
+
+                <TabletRibbonGroup>
+                  <TabletRibbonButton
+                    chevron
+                    open={tabletDrawer === 'mensagem'}
+                    onClick={() => toggleTabletDrawer('mensagem')}
+                    icon={<MessageSquareText className="w-3.5 h-3.5 text-[#83B499]" />}
+                  >
+                    Mensagem
+                  </TabletRibbonButton>
+                </TabletRibbonGroup>
+              </>
+            )}
+          </TabletRibbonRow>
+        }
+        sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* Card Model Switcher */}
         <div className="space-y-2">
@@ -533,17 +1189,6 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 exit="exit"
                 className="space-y-3"
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void handleUploadPdf(file);
-                  }}
-                />
-
                 <button
                   type="button"
                   disabled={Boolean(parseProgress)}
@@ -1150,5 +1795,6 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
         </div>
       </div>
     </WorkspaceSplitLayout>
+    </>
   );
 };

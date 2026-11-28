@@ -254,8 +254,8 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
 
       <div
         className={`no-print fixed right-4 sm:right-5 z-40 flex flex-col items-end ${
-          isTabletPortrait && activeScreen !== 'home'
-            ? 'bottom-[176px]'
+          isTabletPortrait && activeScreen !== 'home' && activeScreen !== 'agenda'
+            ? 'bottom-[72px]'
             : 'bottom-4 sm:bottom-5'
         }`}
       >

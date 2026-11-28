@@ -6,11 +6,23 @@ import {
   Download,
   Image as ImageIcon,
   Layers,
+  MessageSquareText,
   Printer,
   RotateCcw,
+  Ruler,
 } from 'lucide-react';
 import { PinchZoomSheetFrame } from '../../../shared/PinchZoomSheetFrame';
-import { WorkspaceSplitLayout } from '../../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../../shared/TabletRibbonPrimitives';
 import { SiscomAlert, SiscomSpinner } from '../../../shared/ui';
 import { BOAS_VINDAS_TITLE_PATH, BOAS_VINDAS_TITLE_VIEWBOX } from './boasVindasVectorTitle';
 import {
@@ -336,6 +348,12 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [capNotice, setCapNotice] = useState<string | null>(null);
+  const [tabletDrawer, setTabletDrawer] = useState<
+    'medidas' | 'quantidade' | 'mensagem' | null
+  >(null);
+  const toggleTabletDrawer = (key: 'medidas' | 'quantidade' | 'mensagem') => {
+    setTabletDrawer((prev) => (prev === key ? null : key));
+  };
 
   useEffect(() => {
     try {
@@ -472,10 +490,301 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
   const allVerticalXs = [bx0, ...layout.sharedVerticalSeamsMm, bx1];
   const allHorizontalYs = [by0, ...layout.sharedHorizontalSeamsMm, by1];
 
+  const activeTabletDrawer: TabletWorkspaceDrawer | null = (() => {
+    if (!tabletDrawer) return null;
+
+    if (tabletDrawer === 'medidas') {
+      return {
+        title: 'Tamanho do Cartão (mm)',
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        headerAction: (
+          <button
+            type="button"
+            onClick={() => {
+              setCapNotice(null);
+              setConfig((prev) => ({
+                ...prev,
+                cardWidthMm: DEFAULT_BOAS_VINDAS_CONFIG.cardWidthMm,
+                cardHeightMm: DEFAULT_BOAS_VINDAS_CONFIG.cardHeightMm,
+                countPerPage: 4,
+              }));
+            }}
+            className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Padrão</span>
+          </button>
+        ),
+        content: (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3 items-end">
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[11px]">Largura (mm)</span>
+                <input
+                  type="number"
+                  min={45}
+                  max={290}
+                  step={1}
+                  value={config.cardWidthMm}
+                  onChange={(e) => handleSizeChange('cardWidthMm', e.target.value)}
+                  className="siscom-input !min-h-[40px] font-mono text-sm"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="siscom-field-label !text-[11px]">Altura (mm)</span>
+                <input
+                  type="number"
+                  min={35}
+                  max={290}
+                  step={1}
+                  value={config.cardHeightMm}
+                  onChange={(e) => handleSizeChange('cardHeightMm', e.target.value)}
+                  className="siscom-input !min-h-[40px] font-mono text-sm"
+                />
+              </label>
+
+              <div className="siscom-liquid-subcard flex items-center justify-between rounded-lg px-3 min-h-[40px] text-xs">
+                <span className="text-[#98A89F]">Máx. A4</span>
+                <span className="font-mono font-semibold text-[#83B499]">
+                  {layout.maxPerPage}
+                </span>
+              </div>
+            </div>
+
+            {layout.oversizedWarning && (
+              <SiscomAlert tone="warning">{layout.oversizedWarning}</SiscomAlert>
+            )}
+          </div>
+        ),
+      };
+    }
+
+    if (tabletDrawer === 'quantidade') {
+      return {
+        title: `Cartões por Página (${layout.effectiveCount} / ${layout.maxPerPage})`,
+        anchor: 'top',
+        onClose: () => setTabletDrawer(null),
+        content: (
+          <div className="space-y-3">
+            {layout.maxPerPage <= 6 ? (
+              <div className="grid grid-cols-6 gap-2">
+                {Array.from({ length: layout.maxPerPage }, (_, idx) => idx + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => handleCountChange(n)}
+                    className={`min-h-[42px] rounded-lg text-sm font-mono font-semibold transition-all active:scale-[0.96] border cursor-pointer ${
+                      layout.effectiveCount === n
+                        ? 'bg-[#2D5A43]/80 border-[#83B499]/65 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]'
+                        : 'bg-[#0A110E]/45 backdrop-blur-md border-white/12 text-[#B8B3A6] hover:text-[#E4EAE6] hover:border-white/25'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={layout.maxPerPage}
+                  value={layout.effectiveCount}
+                  onChange={(e) => handleCountChange(Number(e.target.value))}
+                  className="flex-1 accent-[#2D5A43]"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={layout.maxPerPage}
+                  value={layout.effectiveCount}
+                  onChange={(e) => handleCountChange(Number(e.target.value))}
+                  className="siscom-input !w-20 !min-h-[40px] !px-2 font-mono text-center text-sm"
+                />
+              </div>
+            )}
+            {capNotice && <SiscomAlert tone="warning">{capNotice}</SiscomAlert>}
+          </div>
+        ),
+      };
+    }
+
+    return {
+      title: 'Mensagem do Cartão',
+      anchor: 'bottom',
+      onClose: () => setTabletDrawer(null),
+      headerAction: (
+        <button
+          type="button"
+          onClick={() =>
+            setConfig((prev) => ({ ...prev, bodyText: DEFAULT_BOAS_VINDAS_TEXT }))
+          }
+          className="min-h-[32px] px-2.5 rounded-lg inline-flex items-center gap-1 text-xs text-[#83B499] hover:text-[#F4E6C4] bg-white/[0.05] border border-white/[0.1] cursor-pointer"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Padrão</span>
+        </button>
+      ),
+      content: (
+        <div className="space-y-2">
+          <textarea
+            rows={5}
+            aria-label="Mensagem de boas-vindas"
+            value={config.bodyText}
+            onChange={(e) => setConfig((prev) => ({ ...prev, bodyText: e.target.value }))}
+            className="siscom-input !min-h-[120px] py-2.5 text-xs sm:text-sm leading-relaxed resize-y"
+          />
+          {bodyFitInfo.shrunk && (
+            <p className="text-[11px] text-[#83B499]">
+              Ajustado ({bodyFitInfo.lineCount} linhas)
+            </p>
+          )}
+        </div>
+      ),
+    };
+  })();
+
   return (
     <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[295px] xl:w-[315px]"
       rightSidebarWidthClass="lg:w-[278px] xl:w-[300px]"
+      tabletDrawer={activeTabletDrawer}
+      tabletTopBar={
+        <TabletRibbonRow className="justify-between">
+          <TabletRibbonGroup>
+            <TabletRibbonSegment
+              ariaLabel="Modelo de cartão"
+              value="boas_vindas"
+              onChange={(val) => {
+                if (val === 'aniversario') onSwitchToAniversario();
+                if (val === 'pesames') onSwitchToPesames();
+              }}
+              options={[
+                { value: 'boas_vindas', label: 'Boas-Vindas' },
+                { value: 'aniversario', label: 'Aniversário' },
+                { value: 'pesames', label: 'Pêsames' },
+              ]}
+            />
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'medidas'}
+              onClick={() => toggleTabletDrawer('medidas')}
+              icon={<Ruler className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              {config.cardWidthMm}×{config.cardHeightMm}mm
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'quantidade'}
+              onClick={() => toggleTabletDrawer('quantidade')}
+              icon={<Layers className="w-3.5 h-3.5 text-[#E5C17B]" />}
+              badge={`${layout.effectiveCount}/${layout.maxPerPage}`}
+            >
+              Por pág.
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonGroup>
+            {errorMsg && (
+              <button
+                type="button"
+                onClick={() => setErrorMsg(null)}
+                className="min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border bg-red-950/60 border-red-400/35 text-red-200 whitespace-nowrap cursor-pointer"
+              >
+                {errorMsg}
+              </button>
+            )}
+
+            <TabletRibbonButton
+              variant="primary"
+              onClick={handleDownloadPdf}
+              disabled={isExportingPdf}
+              icon={
+                isExportingPdf ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )
+              }
+            >
+              PDF
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              onClick={handleDownloadPng}
+              disabled={isExportingPng}
+              icon={
+                isExportingPng ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" tone="olive" />
+                ) : (
+                  <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
+                )
+              }
+            >
+              PNG
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              onClick={() => window.print()}
+              icon={<Printer className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              Imprimir
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
+      tabletBottomBar={
+        <TabletRibbonRow className="justify-between">
+          <TabletRibbonGroup>
+            <div className="inline-flex items-center gap-2 shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-[#83B499] shrink-0" />
+              <input
+                type="text"
+                aria-label="Data do cartão"
+                value={config.dateText}
+                onChange={(e) => setConfig((prev) => ({ ...prev, dateText: e.target.value }))}
+                placeholder={DEFAULT_BOAS_VINDAS_DATE}
+                className="siscom-input !w-[240px] !min-h-[40px] !rounded-xl text-xs"
+              />
+            </div>
+
+            <TabletRibbonButton
+              variant="gold"
+              onClick={() =>
+                setConfig((prev) => ({ ...prev, dateText: formatTodayQuartelDate() }))
+              }
+            >
+              Hoje
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'mensagem'}
+              onClick={() => toggleTabletDrawer('mensagem')}
+              icon={<MessageSquareText className="w-3.5 h-3.5 text-[#E5C17B]" />}
+            >
+              Mensagem
+            </TabletRibbonButton>
+
+            <TabletRibbonButton
+              onClick={() =>
+                setConfig((prev) => ({ ...prev, bodyText: DEFAULT_BOAS_VINDAS_TEXT }))
+              }
+              icon={<RotateCcw className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              Padrão
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         <div className="space-y-2">

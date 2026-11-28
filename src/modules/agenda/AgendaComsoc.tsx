@@ -42,6 +42,14 @@ import {
 } from '../../shared/ui';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
 import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../shared/TabletRibbonPrimitives';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
+import {
   AgendaEventModal,
   CategoryDotLabel,
   EventFormValues,
@@ -255,6 +263,8 @@ function GoogleGIcon({ className = 'w-4 h-4' }: { className?: string }) {
 export function AgendaComsoc() {
   const { account } = useAuth();
   const isAdmin = account?.role === 'admin';
+  const isTabletPortrait = useTabletPortrait();
+  const [tabletGoogleDrawerOpen, setTabletGoogleDrawerOpen] = useState(false);
 
   // View & Navigation state
   const [calendarScope, setCalendarScope] = useState<CalendarScopeView>('comsoc');
@@ -1572,10 +1582,253 @@ export function AgendaComsoc() {
     </div>
   );
 
+  const googleSyncCardContent = isAdmin ? (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg border border-[#C29B56]/35 bg-[#1B1810] flex items-center justify-center text-[#E5C17B] shrink-0">
+            <CalendarIcon className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h3 className="font-display text-xs font-semibold text-[#F4E6C4]">
+                {linkedCalendarSummary}
+              </h3>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                  googleSession.connected
+                    ? 'bg-[#2D5A43]/30 text-[#A7D3BA] border-[#83B499]/35'
+                    : 'bg-[#1D1B14] text-[#E5C17B] border-[#C29B56]/30'
+                }`}
+              >
+                {googleSession.connected ? 'Google ativo' : 'Espelhado'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#98A89F]">
+              <span className="font-mono text-[#C6D4CC]">
+                {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)}
+              </span>
+              {contactSuggestions.length > 0 && (
+                <span> · {contactSuggestions.length} contato(s)</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={syncingGoogle}
+            onClick={() => void handleAdminSyncGoogle()}
+            className="inline-flex items-center justify-center gap-2 min-h-[38px] px-3.5 rounded-lg bg-white text-[#1F1F1F] hover:bg-[#F3F4F6] font-medium text-xs transition-colors cursor-pointer disabled:opacity-60"
+          >
+            {syncingGoogle ? (
+              <SiscomSpinner className="w-3.5 h-3.5" tone="olive" />
+            ) : (
+              <GoogleGIcon className="w-3.5 h-3.5" />
+            )}
+            <span>
+              {syncingGoogle
+                ? 'Sincronizando...'
+                : googleSession.connected
+                  ? 'Sincronizar agora'
+                  : 'Sincronizar com Google'}
+            </span>
+          </button>
+
+          {pendingPushEvents.length > 0 && googleSession.connected && (
+            <button
+              type="button"
+              onClick={handleAdminRequestPushQueue}
+              className="siscom-btn siscom-btn-gold !min-h-[38px] !px-3 text-xs"
+            >
+              <CloudUpload className="w-3.5 h-3.5" />
+              <span>Fila ({pendingPushEvents.length})</span>
+            </button>
+          )}
+
+          {googleSession.connected && (
+            <button
+              type="button"
+              onClick={() => void handleAdminDisconnectGoogle()}
+              title="Encerrar sessão Google neste navegador"
+              className="siscom-btn siscom-btn-secondary !min-h-[38px] !px-3 text-xs"
+            >
+              <Unlink className="w-3.5 h-3.5" />
+              <span>Desconectar</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {pendingPushEvents.length > 0 && !googleSession.connected && (
+        <p className="text-xs text-[#E5C17B] border-t border-white/8 pt-2">
+          <strong>{pendingPushEvents.length} atividade(s)</strong> aguardando envio ao Google Calendar.
+        </p>
+      )}
+
+      {googleSession.connected && googleCalendars.length > 1 && (
+        <div className="pt-2.5 border-t border-white/8 space-y-1.5">
+          <label
+            htmlFor="tablet-admin-cal-select"
+            className="block text-[10px] font-mono uppercase tracking-wider text-[#C8A461]"
+          >
+            Calendário associado
+          </label>
+          <select
+            id="tablet-admin-cal-select"
+            value={linkedCalendarId}
+            disabled={syncingGoogle}
+            onChange={(e) => void handleAdminSwitchCalendar(e.target.value)}
+            className="siscom-input !min-h-[38px] text-xs w-full"
+          >
+            {googleCalendars.map((cal) => (
+              <option key={cal.id} value={cal.id}>
+                {cal.summary} {cal.primary ? '(Principal)' : '(Secundário)'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  ) : (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="w-8 h-8 rounded-lg border border-[#83B499]/30 bg-[#2D5A43]/25 flex items-center justify-center text-[#A7D3BA] shrink-0">
+          <Lock className="w-4 h-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-[#F4E6C4] truncate">{linkedCalendarSummary}</p>
+          <p className="text-[11px] text-[#98A89F]">
+            Sync {formatSyncTimestamp(savedGoogleConfig?.lastSyncAt)}
+          </p>
+        </div>
+      </div>
+      {pendingPushEvents.length > 0 && (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#C29B56]/30 bg-[#221D12] text-[11px] text-[#E5C17B]">
+          <CloudUpload className="w-3.5 h-3.5" />
+          {pendingPushEvents.length} aguardando envio
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <>
       <WorkspaceSplitLayout
         sidebarWidthClass="lg:w-[375px] xl:w-[405px]"
+        tabletSingleBarPosition="top"
+        tabletTopBar={
+          <TabletRibbonRow>
+            <TabletRibbonSegment
+              ariaLabel="Calendário"
+              value={calendarScope}
+              onChange={setCalendarScope}
+              options={[
+                {
+                  value: 'comsoc',
+                  label: 'COMSOC',
+                  badge: comsocEventsCount,
+                  icon: <CalendarIcon className="w-3.5 h-3.5" />,
+                },
+                {
+                  value: 'general',
+                  label: 'Geral',
+                  badge: events.length,
+                  icon: <Layers className="w-3.5 h-3.5" />,
+                },
+              ]}
+            />
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <TabletRibbonButton
+                variant="primary"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => openCreateModal(selectedDay)}
+              >
+                Nova atividade
+              </TabletRibbonButton>
+
+              {pendingTriageEvents.length > 0 && (
+                <TabletRibbonButton
+                  variant="gold"
+                  icon={<Layers className="w-3.5 h-3.5" />}
+                  badge={pendingTriageEvents.length}
+                  onClick={() => setTriageOpen(true)}
+                >
+                  Triagem
+                </TabletRibbonButton>
+              )}
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonGroup>
+              <div className="relative flex items-center w-[190px] shrink-0">
+                <Search className="w-3.5 h-3.5 text-[#7F9187] absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar..."
+                  aria-label="Buscar atividades"
+                  className="siscom-input !min-h-[40px] !pl-8 !pr-3 text-xs"
+                />
+              </div>
+
+              <select
+                aria-label="Filtrar por categoria"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as 'all' | AgendaCategory)}
+                className="siscom-input !w-[164px] !min-h-[40px] !px-2.5 text-xs shrink-0"
+              >
+                <option value="all">Todas categorias</option>
+                {AGENDA_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.shortLabel || cat.label}
+                  </option>
+                ))}
+              </select>
+            </TabletRibbonGroup>
+
+            <TabletRibbonDivider />
+
+            <TabletRibbonButton
+              variant={googleSession.connected ? 'gold' : 'default'}
+              icon={
+                syncingGoogle ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" tone="gold" />
+                ) : (
+                  <GoogleGIcon className="w-3.5 h-3.5" />
+                )
+              }
+              badge={
+                pendingPushEvents.length > 0
+                  ? pendingPushEvents.length
+                  : googleSession.connected
+                    ? 'Ativo'
+                    : undefined
+              }
+              chevron
+              open={tabletGoogleDrawerOpen}
+              onClick={() => setTabletGoogleDrawerOpen((v) => !v)}
+            >
+              Google
+            </TabletRibbonButton>
+          </TabletRibbonRow>
+        }
+        tabletDrawer={
+          tabletGoogleDrawerOpen
+            ? {
+                position: 'top',
+                title: 'Calendário Institucional · Google',
+                onClose: () => setTabletGoogleDrawerOpen(false),
+                content: googleSyncCardContent,
+              }
+            : null
+        }
         sidebar={
           <div className="space-y-4">
             {/* Dual Calendar Switch (COMSOC vs Geral) + Actions */}
@@ -2087,8 +2340,8 @@ export function AgendaComsoc() {
             </div>
           </section>
 
-          {/* Mobile Selected Day Panel (renders below calendar on touch screens; desktop uses fixed left sidebar) */}
-          <div className="lg:hidden">{selectedDayPanel}</div>
+          {/* Mobile & Tablet Portrait Selected Day Panel (renders below calendar) */}
+          <div className={isTabletPortrait ? 'block' : 'lg:hidden'}>{selectedDayPanel}</div>
         </div>
       ) : viewMode === 'week' ? (
         /* ── WEEKLY VIEW ──────────────────────────────────────────────────── */

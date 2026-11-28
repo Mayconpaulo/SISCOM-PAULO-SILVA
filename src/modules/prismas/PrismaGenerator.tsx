@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Download, Image as ImageIcon, Printer, RotateCcw } from 'lucide-react';
+import { Download, Image as ImageIcon, Minus, PencilLine, Plus, Printer, RotateCcw } from 'lucide-react';
 import {
   A4_HEIGHT_MM,
   A4_WIDTH_MM,
@@ -27,7 +27,18 @@ import {
 } from './prismaPdf';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { PinchZoomSheetFrame } from '../../shared/PinchZoomSheetFrame';
-import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import {
+  WorkspaceSplitLayout,
+  type TabletWorkspaceDrawer,
+} from '../../shared/WorkspaceSplitLayout';
+import {
+  TabletRibbonButton,
+  TabletRibbonDivider,
+  TabletRibbonGroup,
+  TabletRibbonIconButton,
+  TabletRibbonRow,
+  TabletRibbonSegment,
+} from '../../shared/TabletRibbonPrimitives';
 import { fadeSlideVariants } from '../../shared/motion';
 import { SiscomAlert, SiscomSegmentedTabs, SiscomSpinner } from '../../shared/ui';
 import { logActivity } from '../../core/audit/activityLogger';
@@ -352,6 +363,11 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
   const [exporting, setExporting] = useState<'pdf' | 'png' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fontsTick, setFontsTick] = useState(0);
+  const [tabletDrawer, setTabletDrawer] = useState<'prisma1' | 'prisma2' | null>(null);
+
+  const toggleTabletDrawer = (key: 'prisma1' | 'prisma2') => {
+    setTabletDrawer((prev) => (prev === key ? null : key));
+  };
 
   useEffect(() => {
     try {
@@ -488,10 +504,229 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
     window.print();
   };
 
+  const activeTabletDrawer: TabletWorkspaceDrawer | null = useMemo(() => {
+    if (!tabletDrawer) return null;
+    if (tabletDrawer === 'prisma2' && count === 1) return null;
+    const idx: 0 | 1 = tabletDrawer === 'prisma2' ? 1 : 0;
+    const diag = sizeDiagnostics[idx];
+    const diagLabel = diag
+      ? diag.sameSize
+        ? `${diag.nomePt} pt`
+        : `${diag.nomePt} / ${diag.funcaoPt} pt`
+      : `${fontSettings.nomePt} pt`;
+
+    return {
+      title: count === 1 ? 'Prisma' : idx === 0 ? 'Prisma 1' : 'Prisma 2',
+      anchor: 'bottom',
+      onClose: () => setTabletDrawer(null),
+      headerAction: (
+        <span className="font-mono text-[11px] text-[#83B499] px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.08]">
+          {diagLabel}
+        </span>
+      ),
+      content: (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor={`tablet-p${idx + 1}-nome`} className="siscom-field-label">
+              Nome
+            </label>
+            <input
+              id={`tablet-p${idx + 1}-nome`}
+              type="text"
+              value={prismas[idx].nome}
+              onChange={(e) => updatePrisma(idx, 'nome', e.target.value)}
+              placeholder={idx === 0 ? 'TEN NETO' : 'CEL SANSEVERINO'}
+              className="siscom-input"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor={`tablet-p${idx + 1}-funcao`} className="siscom-field-label">
+              Função
+            </label>
+            <input
+              id={`tablet-p${idx + 1}-funcao`}
+              type="text"
+              value={prismas[idx].funcao}
+              onChange={(e) => updatePrisma(idx, 'funcao', e.target.value)}
+              placeholder={idx === 0 ? 'CHEFE COMSOC' : 'ANTIGO COMANDANTE'}
+              className="siscom-input"
+            />
+          </div>
+        </div>
+      ),
+    };
+  }, [tabletDrawer, count, prismas, sizeDiagnostics, fontSettings.nomePt]);
+
   return (
     <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[285px] xl:w-[310px]"
       rightSidebarWidthClass="lg:w-[285px] xl:w-[315px]"
+      tabletDrawer={activeTabletDrawer}
+      tabletTopBar={
+        <TabletRibbonRow className="justify-between">
+          <TabletRibbonGroup>
+            <TabletRibbonSegment
+              ariaLabel="Quantidade de prismas por folha"
+              value={String(count) as '1' | '2'}
+              onChange={(val) => {
+                const next = val === '1' ? 1 : 2;
+                setCount(next);
+                if (next === 1 && tabletDrawer === 'prisma2') setTabletDrawer(null);
+              }}
+              options={[
+                { value: '1', label: '1 Prisma' },
+                { value: '2', label: '2 Prismas' },
+              ]}
+            />
+            {notice && (
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                className={`min-h-[34px] px-2.5 rounded-lg text-[11px] font-medium border whitespace-nowrap cursor-pointer ${
+                  notice.startsWith('Erro')
+                    ? 'bg-red-950/60 border-red-400/35 text-red-200'
+                    : 'bg-[#2D5A43]/40 border-[#8AC0A3]/35 text-[#D8F0E2]'
+                }`}
+              >
+                {notice}
+              </button>
+            )}
+          </TabletRibbonGroup>
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              variant="primary"
+              disabled={exporting !== null}
+              onClick={handleDownloadPdf}
+              icon={
+                exporting === 'pdf' ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )
+              }
+            >
+              {exporting === 'pdf' ? 'Gerando...' : 'PDF'}
+            </TabletRibbonButton>
+            <TabletRibbonButton
+              disabled={exporting !== null}
+              onClick={handleDownloadPng}
+              icon={
+                exporting === 'png' ? (
+                  <SiscomSpinner className="w-3.5 h-3.5" tone="olive" />
+                ) : (
+                  <ImageIcon className="w-3.5 h-3.5 text-[#83B499]" />
+                )
+              }
+            >
+              PNG
+            </TabletRibbonButton>
+            <TabletRibbonButton
+              onClick={handlePrint}
+              icon={<Printer className="w-3.5 h-3.5 text-[#83B499]" />}
+            >
+              Imprimir
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
+      tabletBottomBar={
+        <TabletRibbonRow>
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              chevron
+              open={tabletDrawer === 'prisma1'}
+              onClick={() => toggleTabletDrawer('prisma1')}
+              icon={<PencilLine className="w-3.5 h-3.5 text-[#E5C17B]" />}
+              badge={prismas[0].nome.trim().slice(0, 14) || 'Vazio'}
+            >
+              {count === 1 ? 'Prisma' : 'Prisma 1'}
+            </TabletRibbonButton>
+
+            {count === 2 && (
+              <TabletRibbonButton
+                chevron
+                open={tabletDrawer === 'prisma2'}
+                onClick={() => toggleTabletDrawer('prisma2')}
+                icon={<PencilLine className="w-3.5 h-3.5 text-[#E5C17B]" />}
+                badge={prismas[1].nome.trim().slice(0, 14) || 'Vazio'}
+              >
+                Prisma 2
+              </TabletRibbonButton>
+            )}
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <TabletRibbonButton
+              variant={uppercase ? 'active' : 'default'}
+              onClick={() => setUppercase((prev) => !prev)}
+            >
+              AA Maiúsculas
+            </TabletRibbonButton>
+          </TabletRibbonGroup>
+
+          <TabletRibbonDivider />
+
+          <TabletRibbonGroup>
+            <div className="inline-flex items-center gap-1 bg-black/35 border border-white/[0.11] rounded-xl px-2 py-1 shrink-0">
+              <span className="text-[11px] font-medium text-[#A2B1A8] px-1">Nome</span>
+              <TabletRibbonIconButton
+                className="!w-8 !h-8 !rounded-lg"
+                aria-label="Diminuir tamanho do nome"
+                disabled={fontSettings.nomePt <= MIN_CUSTOM_FONT_PT}
+                onClick={() => updateFontPt('nomePt', fontSettings.nomePt - 1)}
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </TabletRibbonIconButton>
+              <span className="font-mono text-xs text-[#F4E6C4] w-11 text-center">
+                {fontSettings.nomePt}pt
+              </span>
+              <TabletRibbonIconButton
+                className="!w-8 !h-8 !rounded-lg"
+                aria-label="Aumentar tamanho do nome"
+                disabled={fontSettings.nomePt >= MAX_CUSTOM_FONT_PT}
+                onClick={() => updateFontPt('nomePt', fontSettings.nomePt + 1)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </TabletRibbonIconButton>
+            </div>
+
+            <div className="inline-flex items-center gap-1 bg-black/35 border border-white/[0.11] rounded-xl px-2 py-1 shrink-0">
+              <span className="text-[11px] font-medium text-[#A2B1A8] px-1">Função</span>
+              <TabletRibbonIconButton
+                className="!w-8 !h-8 !rounded-lg"
+                aria-label="Diminuir tamanho da função"
+                disabled={fontSettings.funcaoPt <= MIN_CUSTOM_FONT_PT}
+                onClick={() => updateFontPt('funcaoPt', fontSettings.funcaoPt - 1)}
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </TabletRibbonIconButton>
+              <span className="font-mono text-xs text-[#F4E6C4] w-11 text-center">
+                {fontSettings.funcaoPt}pt
+              </span>
+              <TabletRibbonIconButton
+                className="!w-8 !h-8 !rounded-lg"
+                aria-label="Aumentar tamanho da função"
+                disabled={fontSettings.funcaoPt >= MAX_CUSTOM_FONT_PT}
+                onClick={() => updateFontPt('funcaoPt', fontSettings.funcaoPt + 1)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </TabletRibbonIconButton>
+            </div>
+
+            {isCustomFontSize && (
+              <TabletRibbonButton
+                onClick={() => setFontSettings({ ...DEFAULT_PRISMA_FONT_SETTINGS })}
+                icon={<RotateCcw className="w-3.5 h-3.5 text-[#83B499]" />}
+              >
+                {STANDARD_FONT_PT}pt
+              </TabletRibbonButton>
+            )}
+          </TabletRibbonGroup>
+        </TabletRibbonRow>
+      }
       sidebar={
         <div className="metal-surface lg:bg-transparent lg:border-0 lg:shadow-none rounded-xl lg:rounded-none p-4 sm:p-5 lg:p-1 space-y-5">
         {/* 1 or 2 Prismas per Page */}
