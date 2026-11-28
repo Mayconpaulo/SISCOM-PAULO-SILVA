@@ -16,15 +16,19 @@ import {
 import type { ActiveScreen } from '../registry';
 import { SISCOM_EASE, SPRING_EXPRESSIVE, SPRING_SNAPPY } from '../../shared/motion';
 import { SiscomSpinner } from '../../shared/ui';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
 import { useDemandas } from './DemandasContext';
+import { ReminderOffsetsEditor } from './ReminderOffsetsEditor';
 import {
+  DEFAULT_REMINDER_OFFSETS_MINUTES,
   DemandaPriority,
-  REMIND_BEFORE_OPTIONS,
   addDaysToDateKey,
+  deriveRemindBeforeDaysFromOffsets,
   formatDateKeyLocal,
   formatDemandaCountdown,
   getDemandaUrgency,
   getNextMondayDateKey,
+  sanitizeReminderOffsets,
 } from './demandaTypes';
 
 interface DemandasFloatingQuickAddProps {
@@ -54,11 +58,14 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
   const [dueDate, setDueDate] = useState(() => formatDateKeyLocal(new Date()));
   const [dueTime, setDueTime] = useState('');
   const [priority, setPriority] = useState<DemandaPriority>('media');
-  const [remindBeforeDays, setRemindBeforeDays] = useState<number>(3);
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>([
+    ...DEFAULT_REMINDER_OFFSETS_MINUTES,
+  ]);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
+  const isTabletPortrait = useTabletPortrait();
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
   );
@@ -132,6 +139,9 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
       return;
     }
 
+    const cleanOffsets = sanitizeReminderOffsets(reminderOffsets);
+    const derivedDays = deriveRemindBeforeDaysFromOffsets(cleanOffsets);
+
     setSaving(true);
     setErrorMsg(null);
     try {
@@ -140,11 +150,13 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
         dueDate: dueDate || todayKey,
         dueTime,
         priority,
-        remindBeforeDays,
+        remindBeforeDays: derivedDays,
+        reminderOffsetsMinutes: cleanOffsets,
       });
       setTitle('');
       setDueTime('');
       setPriority('media');
+      setReminderOffsets([...DEFAULT_REMINDER_OFFSETS_MINUTES]);
       setSavedFeedback(true);
       window.setTimeout(() => setSavedFeedback(false), 1800);
       inputRef.current?.focus();
@@ -240,7 +252,13 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
         )}
       </AnimatePresence>
 
-      <div className="no-print fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 flex flex-col items-end">
+      <div
+        className={`no-print fixed right-4 sm:right-5 z-40 flex flex-col items-end ${
+          isTabletPortrait && activeScreen !== 'home'
+            ? 'bottom-[176px]'
+            : 'bottom-4 sm:bottom-5'
+        }`}
+      >
       {/* Quick-Add Popover */}
       <AnimatePresence>
         {quickAddOpen && (
@@ -349,35 +367,34 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
                 </label>
               </div>
 
-              {/* Reminder anticipation + priority */}
-              <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                <label className="relative flex items-center">
-                  <Bell className="w-3.5 h-3.5 text-[#DFBC75] absolute left-2.5 pointer-events-none" />
-                  <select
-                    aria-label="Notificar antes do prazo"
-                    value={remindBeforeDays}
-                    onChange={(e) => setRemindBeforeDays(Number(e.target.value))}
-                    className="siscom-input !min-h-[36px] !pl-8 !pr-2 text-[11px] cursor-pointer"
-                  >
-                    {REMIND_BEFORE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        Avisar: {opt.shortLabel}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {/* Multiple reminders + priority */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#B7C2BC]">
+                    <Bell className="w-3.5 h-3.5 text-[#DFBC75]" aria-hidden="true" />
+                    <span>Notificações</span>
+                  </span>
 
-                <button
-                  type="button"
-                  onClick={() => setPriority((p) => (p === 'alta' ? 'media' : 'alta'))}
-                  className={`min-h-[36px] px-2.5 rounded-[8px] text-[11px] font-medium border transition-colors cursor-pointer whitespace-nowrap ${
-                    priority === 'alta'
-                      ? 'bg-amber-500/18 border-amber-400/50 text-amber-200'
-                      : 'bg-[#0B100E] border-white/[0.08] text-[#98A89F] hover:text-[#E4EAE6]'
-                  }`}
-                >
-                  {priority === 'alta' ? 'Prioridade alta' : 'Normal'}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setPriority((p) => (p === 'alta' ? 'media' : 'alta'))}
+                    className={`min-h-[30px] px-2.5 rounded-[8px] text-[11px] font-medium border transition-colors cursor-pointer whitespace-nowrap ${
+                      priority === 'alta'
+                        ? 'bg-amber-500/18 border-amber-400/50 text-amber-200'
+                        : 'bg-[#0B100E] border-white/[0.08] text-[#98A89F] hover:text-[#E4EAE6]'
+                    }`}
+                  >
+                    {priority === 'alta' ? 'Prioridade alta' : 'Normal'}
+                  </button>
+                </div>
+
+                <div className="max-h-[144px] overflow-y-auto pr-0.5">
+                  <ReminderOffsetsEditor
+                    offsets={reminderOffsets}
+                    onChange={setReminderOffsets}
+                    compact
+                  />
+                </div>
               </div>
 
               {/* Submit button */}

@@ -5,7 +5,7 @@
 export interface DirtyPayloadCase {
   name: string;
   actor: 'anonymous' | 'spoofed_email' | 'user' | 'admin';
-  collection: 'admins' | 'users' | 'recovery' | 'alteracao_folders' | 'alteracao_docs' | 'activity_logs';
+  collection: 'admins' | 'users' | 'recovery' | 'alteracao_folders' | 'alteracao_docs' | 'activity_logs' | 'demandas';
   op: 'get' | 'list' | 'create' | 'update' | 'delete';
   expected: 'PERMISSION_DENIED';
   payload?: Record<string, unknown>;
@@ -34,4 +34,5 @@ export const DIRTY_DOZEN_CASES: DirtyPayloadCase[] = [
   { name: 'Spoofed actorUid in activity log', actor: 'user', collection: 'activity_logs', op: 'create', expected: 'PERMISSION_DENIED', payload: { actorUid: 'other-user-uid' } },
   { name: 'Activity log update tampering', actor: 'admin', collection: 'activity_logs', op: 'update', expected: 'PERMISSION_DENIED', payload: { summary: 'tampered' } },
   { name: 'Activity log deletion attempt', actor: 'admin', collection: 'activity_logs', op: 'delete', expected: 'PERMISSION_DENIED' },
+  { name: 'Demanda oversized or invalid reminderOffsetsMinutes', actor: 'user', collection: 'demandas', op: 'create', expected: 'PERMISSION_DENIED', payload: { reminderOffsetsMinutes: [-5, 999999] } },
 ];

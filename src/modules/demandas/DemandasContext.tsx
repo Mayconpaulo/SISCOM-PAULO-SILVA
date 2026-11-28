@@ -28,7 +28,7 @@ import {
   DemandaItem,
   DemandaReminderAlert,
   UpdateDemandaPatch,
-  computePendingReminderAlert,
+  computePendingReminderAlerts,
   getCalendarDaysUntil,
   isDemandaOverdue,
 } from './demandaTypes';
@@ -143,17 +143,21 @@ export const DemandasProvider: React.FC<DemandasProviderProps> = ({ userId, chil
     const currentAlerts: DemandaReminderAlert[] = [];
 
     for (const item of list) {
-      const alert = computePendingReminderAlert(item, now);
-      if (!alert) continue;
-      currentAlerts.push(alert);
+      const alerts = computePendingReminderAlerts(item, now);
+      if (alerts.length === 0) continue;
 
-      if (!hasMilestoneBeenNotified(alert.milestoneKey)) {
-        markMilestoneNotified(alert.milestoneKey);
-        void dispatchSystemNotification(
-          `SISCOM · ${alert.headline}`,
-          `${item.title} — ${alert.detail}`,
-          alert.milestoneKey
-        );
+      // Show a single consolidated entry per demanda in the bell dropdown
+      currentAlerts.push(alerts[0]);
+
+      for (const alert of alerts) {
+        if (!hasMilestoneBeenNotified(alert.milestoneKey)) {
+          markMilestoneNotified(alert.milestoneKey);
+          void dispatchSystemNotification(
+            alert.notificationTitle,
+            alert.notificationBody,
+            alert.milestoneKey
+          );
+        }
       }
     }
 
@@ -260,7 +264,8 @@ export const DemandasProvider: React.FC<DemandasProviderProps> = ({ userId, chil
         idToken = null;
       }
     }
-    return sendTestDemandaNotification(idToken);
+    const sampleDemanda = demandasRef.current.find((d) => d.status === 'pendente') ?? null;
+    return sendTestDemandaNotification(idToken, sampleDemanda);
   }, [firebaseUser]);
 
   const addDemanda = useCallback(
@@ -272,7 +277,12 @@ export const DemandasProvider: React.FC<DemandasProviderProps> = ({ userId, chil
 
   const editDemanda = useCallback(
     async (demandaId: string, patch: UpdateDemandaPatch) => {
-      if (patch.dueDate !== undefined || patch.dueTime !== undefined || patch.remindBeforeDays !== undefined) {
+      if (
+        patch.dueDate !== undefined ||
+        patch.dueTime !== undefined ||
+        patch.remindBeforeDays !== undefined ||
+        patch.reminderOffsetsMinutes !== undefined
+      ) {
         clearMilestonesForDemanda(demandaId);
       }
       await updateDemanda(userId, demandaId, patch);

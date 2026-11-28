@@ -13,18 +13,23 @@ import {
 } from 'lucide-react';
 import { SiscomModal, SiscomSpinner } from '../../shared/ui';
 import { useDemandas } from './DemandasContext';
+import { ReminderOffsetsEditor } from './ReminderOffsetsEditor';
 import {
+  DEFAULT_REMINDER_OFFSETS_MINUTES,
   DEMANDA_PRIORITY_LABELS,
   DemandaItem,
   DemandaPriority,
-  REMIND_BEFORE_OPTIONS,
   addDaysToDateKey,
+  deriveRemindBeforeDaysFromOffsets,
   formatDateKeyLocal,
   formatDemandaCountdown,
   formatFullDueDate,
+  formatReminderOffsetShort,
   getCalendarDaysUntil,
   getDemandaUrgency,
+  getInitialOffsetsForEdit,
   isDemandaOverdue,
+  sanitizeReminderOffsets,
 } from './demandaTypes';
 
 type FilterTab = 'pendentes' | 'urgentes' | 'proximas' | 'concluidas';
@@ -60,7 +65,9 @@ export const DemandasPanelModal: React.FC = () => {
   const [dueDate, setDueDate] = useState(() => formatDateKeyLocal(new Date()));
   const [dueTime, setDueTime] = useState('');
   const [priority, setPriority] = useState<DemandaPriority>('media');
-  const [remindBeforeDays, setRemindBeforeDays] = useState<number>(3);
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>([
+    ...DEFAULT_REMINDER_OFFSETS_MINUTES,
+  ]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -74,7 +81,7 @@ export const DemandasPanelModal: React.FC = () => {
       setDueDate(editingDemanda.dueDate);
       setDueTime(editingDemanda.dueTime);
       setPriority(editingDemanda.priority);
-      setRemindBeforeDays(editingDemanda.remindBeforeDays);
+      setReminderOffsets(getInitialOffsetsForEdit(editingDemanda));
       setFormError(null);
     }
   }, [panelOpen, editingDemanda]);
@@ -86,7 +93,7 @@ export const DemandasPanelModal: React.FC = () => {
     setDueDate(formatDateKeyLocal(new Date()));
     setDueTime('');
     setPriority('media');
-    setRemindBeforeDays(3);
+    setReminderOffsets([...DEFAULT_REMINDER_OFFSETS_MINUTES]);
     setFormError(null);
   };
 
@@ -109,7 +116,7 @@ export const DemandasPanelModal: React.FC = () => {
     setDueDate(item.dueDate);
     setDueTime(item.dueTime);
     setPriority(item.priority);
-    setRemindBeforeDays(item.remindBeforeDays);
+    setReminderOffsets(getInitialOffsetsForEdit(item));
     setFormError(null);
     setFormOpen(true);
   };
@@ -122,6 +129,9 @@ export const DemandasPanelModal: React.FC = () => {
       return;
     }
 
+    const cleanOffsets = sanitizeReminderOffsets(reminderOffsets);
+    const derivedDays = deriveRemindBeforeDaysFromOffsets(cleanOffsets);
+
     setSaving(true);
     setFormError(null);
     try {
@@ -132,7 +142,8 @@ export const DemandasPanelModal: React.FC = () => {
           dueDate,
           dueTime,
           priority,
-          remindBeforeDays,
+          remindBeforeDays: derivedDays,
+          reminderOffsetsMinutes: cleanOffsets,
         });
         setNotice('Demanda atualizada.');
       } else {
@@ -142,9 +153,10 @@ export const DemandasPanelModal: React.FC = () => {
           dueDate,
           dueTime,
           priority,
-          remindBeforeDays,
+          remindBeforeDays: derivedDays,
+          reminderOffsetsMinutes: cleanOffsets,
         });
-        setNotice('Demanda criada com avisos automáticos.');
+        setNotice('Demanda criada.');
       }
       resetForm();
       setFormOpen(false);
@@ -345,36 +357,22 @@ export const DemandasPanelModal: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="siscom-field-label !text-[11px]">
-                  Lembrete
-                </label>
-                <select
-                  value={remindBeforeDays}
-                  onChange={(e) => setRemindBeforeDays(Number(e.target.value))}
-                  className="siscom-input !min-h-[40px] text-xs cursor-pointer"
-                >
-                  {REMIND_BEFORE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-1.5">
+              <label className="siscom-field-label !text-[11px]">Prioridade</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as DemandaPriority)}
+                className="siscom-input !min-h-[40px] text-xs cursor-pointer"
+              >
+                <option value="baixa">Baixa</option>
+                <option value="media">Normal</option>
+                <option value="alta">Alta</option>
+              </select>
+            </div>
 
-              <div className="space-y-1.5">
-                <label className="siscom-field-label !text-[11px]">Prioridade</label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as DemandaPriority)}
-                  className="siscom-input !min-h-[40px] text-xs cursor-pointer"
-                >
-                  <option value="baixa">Baixa</option>
-                  <option value="media">Normal</option>
-                  <option value="alta">Alta</option>
-                </select>
-              </div>
+            <div className="space-y-1.5">
+              <label className="siscom-field-label !text-[11px]">Notificações</label>
+              <ReminderOffsetsEditor offsets={reminderOffsets} onChange={setReminderOffsets} />
             </div>
 
             <div className="space-y-1.5">
@@ -522,10 +520,15 @@ export const DemandasPanelModal: React.FC = () => {
                       <span>Prioridade {DEMANDA_PRIORITY_LABELS[item.priority]}</span>
                       <span aria-hidden="true">·</span>
                       <span>
-                        Aviso{' '}
-                        {item.remindBeforeDays === 0
-                          ? 'no dia'
-                          : `${item.remindBeforeDays}d antes até o dia`}
+                        {Array.isArray(item.reminderOffsetsMinutes)
+                          ? item.reminderOffsetsMinutes.length === 0
+                            ? 'Sem avisos'
+                            : item.reminderOffsetsMinutes
+                                .map((m) => formatReminderOffsetShort(m))
+                                .join(', ')
+                          : item.remindBeforeDays === 0
+                          ? 'No dia'
+                          : `${item.remindBeforeDays}d antes`}
                       </span>
                     </div>
                   </div>

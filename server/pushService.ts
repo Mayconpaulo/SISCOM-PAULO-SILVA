@@ -20,6 +20,7 @@ export interface SyncedDemandaSnapshot {
   dueTime: string; // HH:mm or ''
   status: 'pendente' | 'concluida';
   remindBeforeDays: number;
+  reminderOffsetsMinutes?: number[];
 }
 
 interface StoredUserPushRecord {
@@ -216,6 +217,19 @@ export function validatePushSubscription(raw: unknown): PushSubscriptionPayload 
   };
 }
 
+function sanitizeServerReminderOffsets(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const unique = new Set<number>();
+  for (const val of raw) {
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      const clamped = Math.max(0, Math.min(43_200, Math.round(val)));
+      unique.add(clamped);
+      if (unique.size >= 10) break;
+    }
+  }
+  return Array.from(unique).sort((a, b) => b - a);
+}
+
 function sanitizeDemandasList(raw: unknown): SyncedDemandaSnapshot[] {
   if (!Array.isArray(raw)) return [];
   const out: SyncedDemandaSnapshot[] = [];
@@ -231,12 +245,21 @@ function sanitizeDemandasList(raw: unknown): SyncedDemandaSnapshot[] {
       typeof obj.remindBeforeDays === 'number' && Number.isFinite(obj.remindBeforeDays)
         ? Math.min(30, Math.max(0, Math.round(obj.remindBeforeDays)))
         : 0;
+    const reminderOffsetsMinutes = sanitizeServerReminderOffsets(obj.reminderOffsetsMinutes);
 
     if (!id || !title || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) continue;
     if (dueTime && !/^\d{2}:\d{2}$/.test(dueTime)) continue;
     if (status !== 'pendente') continue;
 
-    out.push({ id, title, dueDate, dueTime, status, remindBeforeDays });
+    out.push({
+      id,
+      title,
+      dueDate,
+      dueTime,
+      status,
+      remindBeforeDays,
+      ...(reminderOffsetsMinutes !== undefined ? { reminderOffsetsMinutes } : {}),
+    });
   }
   return out;
 }
@@ -335,38 +358,103 @@ function getLocalClockForOffset(utcNow: Date, tzOffsetMinutes: number) {
   };
 }
 
-function computeServerReminderAlert(
+function formatServerCountdown(daysLeft: number): string {
+  if (daysLeft > 1) return `Faltam ${daysLeft} dias`;
+  if (daysLeft === 1) return 'Falta 1 dia';
+  if (daysLeft === 0) return 'É hoje';
+  const abs = Math.abs(daysLeft);
+  return abs === 1 ? 'Atrasada há 1 dia' : `Atrasada há ${abs} dias`;
+}
+
+function formatServerTimeSuffix(dueTime: string): string {
+  const tm = dueTime ? /^(\d{2}):(\d{2})$/.exec(dueTime.trim()) : null;
+  if (!tm) return '';
+  return tm[2] === '00' ? `, às ${tm[1]}h` : `, às ${tm[1]}h${tm[2]}`;
+}
+
+function formatServerNotificationBody(dueDate: string, dueTime: string, daysLeft: number): string {
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDate);
+  const fullDate = dm ? `${dm[3]}/${dm[2]}/${dm[1]}` : dueDate;
+  const countdown = formatServerCountdown(daysLeft);
+  const timeSuffix = formatServerTimeSuffix(dueTime);
+  return `Prazo: ${countdown} – ${fullDate}${timeSuffix}`;
+}
+
+function computeServerReminderAlerts(
   item: SyncedDemandaSnapshot,
   utcNow: Date,
   tzOffsetMinutes: number
-): { milestoneKey: string; headline: string; detail: string } | null {
-  if (item.status !== 'pendente') return null;
+): { milestoneKey: string; title: string; body: string }[] {
+  if (item.status !== 'pendente') return [];
 
   const clock = getLocalClockForOffset(utcNow, tzOffsetMinutes);
   const todayKey = `${clock.year}-${String(clock.month + 1).padStart(2, '0')}-${String(clock.day).padStart(2, '0')}`;
   const todayStartUtcMs = Date.UTC(clock.year, clock.month, clock.day, 0, 0, 0, 0);
 
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(item.dueDate);
-  if (!dm) return null;
+  if (!dm) return [];
   const dy = Number(dm[1]);
   const dmo = Number(dm[2]) - 1;
   const dd = Number(dm[3]);
   const dueStartUtcMs = Date.UTC(dy, dmo, dd, 0, 0, 0, 0);
   const daysLeft = Math.round((dueStartUtcMs - todayStartUtcMs) / 86_400_000);
-  const shortDate = `${dm[3]}/${dm[2]}`;
-
-  if (daysLeft > item.remindBeforeDays) return null;
 
   const tm = item.dueTime ? /^(\d{2}):(\d{2})$/.exec(item.dueTime) : null;
-  const hasTime = Boolean(tm);
+  const title = item.title.trim() || 'Demanda';
+  const body = formatServerNotificationBody(item.dueDate, item.dueTime, daysLeft);
+
+  if (Array.isArray(item.reminderOffsetsMinutes)) {
+    const offsets = sanitizeServerReminderOffsets(item.reminderOffsetsMinutes) || [];
+    if (offsets.length === 0) return [];
+
+    if (daysLeft < 0) {
+      return [
+        {
+          milestoneKey: `${item.id}::overdue::${todayKey}`,
+          title,
+          body,
+        },
+      ];
+    }
+
+    const alerts: { milestoneKey: string; title: string; body: string }[] = [];
+    const dueExactLocalMs = tm
+      ? Date.UTC(dy, dmo, dd, Number(tm[1]), Number(tm[2]), 0, 0)
+      : Date.UTC(dy, dmo, dd, 23, 59, 59, 999);
+    const msUntilDue = dueExactLocalMs - clock.localMs;
+
+    for (const offsetMin of offsets) {
+      let shouldFire = false;
+      if (tm) {
+        shouldFire = msUntilDue <= offsetMin * 60_000;
+      } else if (offsetMin >= 1440) {
+        const offsetDays = Math.round(offsetMin / 1440);
+        shouldFire = daysLeft <= offsetDays;
+      } else {
+        shouldFire = daysLeft <= 0;
+      }
+
+      if (shouldFire) {
+        alerts.push({
+          milestoneKey: `${item.id}::rem-${offsetMin}::${item.dueDate}::${item.dueTime || 'allday'}`,
+          title,
+          body,
+        });
+      }
+    }
+    return alerts;
+  }
+
+  if (daysLeft > item.remindBeforeDays) return [];
 
   if (daysLeft < 0) {
-    const abs = Math.abs(daysLeft);
-    return {
-      milestoneKey: `${item.id}::overdue::${todayKey}`,
-      headline: abs === 1 ? 'Demanda atrasada (1 dia)' : `Demanda atrasada (${abs} dias)`,
-      detail: `Prazo era ${shortDate}${hasTime ? ` às ${item.dueTime}` : ''}`,
-    };
+    return [
+      {
+        milestoneKey: `${item.id}::overdue::${todayKey}`,
+        title,
+        body,
+      },
+    ];
   }
 
   if (daysLeft === 0) {
@@ -374,45 +462,57 @@ function computeServerReminderAlert(
       const dueExactLocalMs = Date.UTC(dy, dmo, dd, Number(tm[1]), Number(tm[2]), 0, 0);
       const minsLeft = Math.round((dueExactLocalMs - clock.localMs) / 60_000);
       if (minsLeft <= 0) {
-        return {
-          milestoneKey: `${item.id}::due-now::${todayKey}::${item.dueTime}`,
-          headline: 'Prazo atingido',
-          detail: `Venceu hoje às ${item.dueTime}`,
-        };
+        return [
+          {
+            milestoneKey: `${item.id}::due-now::${todayKey}::${item.dueTime}`,
+            title,
+            body,
+          },
+        ];
       }
       if (minsLeft <= 120) {
-        return {
-          milestoneKey: `${item.id}::due-2h::${todayKey}::${item.dueTime}`,
-          headline: minsLeft <= 60 ? `Faltam ${minsLeft} min` : 'Prazo em menos de 2 horas',
-          detail: `Vence hoje às ${item.dueTime}`,
-        };
+        return [
+          {
+            milestoneKey: `${item.id}::due-2h::${todayKey}::${item.dueTime}`,
+            title,
+            body,
+          },
+        ];
       }
-      return {
-        milestoneKey: `${item.id}::due-today::${todayKey}`,
-        headline: 'Vence hoje',
-        detail: `Prazo hoje às ${item.dueTime}`,
-      };
+      return [
+        {
+          milestoneKey: `${item.id}::due-today::${todayKey}`,
+          title,
+          body,
+        },
+      ];
     }
-    return {
-      milestoneKey: `${item.id}::due-today::${todayKey}`,
-      headline: 'Vence hoje',
-      detail: `Prazo para hoje (${shortDate})`,
-    };
+    return [
+      {
+        milestoneKey: `${item.id}::due-today::${todayKey}`,
+        title,
+        body,
+      },
+    ];
   }
 
   if (daysLeft === 1) {
-    return {
-      milestoneKey: `${item.id}::before-1d::${item.dueDate}`,
-      headline: 'Vence amanhã',
-      detail: `Prazo amanhã (${shortDate})${hasTime ? ` às ${item.dueTime}` : ''}`,
-    };
+    return [
+      {
+        milestoneKey: `${item.id}::before-1d::${item.dueDate}`,
+        title,
+        body,
+      },
+    ];
   }
 
-  return {
-    milestoneKey: `${item.id}::before-${daysLeft}d::${item.dueDate}`,
-    headline: `Faltam ${daysLeft} dias`,
-    detail: `Prazo em ${shortDate}${hasTime ? ` às ${item.dueTime}` : ''}`,
-  };
+  return [
+    {
+      milestoneKey: `${item.id}::before-${daysLeft}d::${item.dueDate}`,
+      title,
+      body,
+    },
+  ];
 }
 
 async function sendWebPushToSubscriptions(
@@ -472,9 +572,27 @@ export async function sendTestPushForUser(uid: string): Promise<{
     };
   }
 
+  const tzOffset = userRecord.tzOffsetMinutes ?? 180;
+  const clock = getLocalClockForOffset(new Date(), tzOffset);
+  const todayIso = `${clock.year}-${String(clock.month + 1).padStart(2, '0')}-${String(clock.day).padStart(2, '0')}`;
+  const sampleItem = userRecord.demandas[0];
+  let testTitle = 'Reunião de pauta';
+  let testBody = formatServerNotificationBody(todayIso, '09:00', 0);
+
+  if (sampleItem) {
+    const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(sampleItem.dueDate);
+    if (dm) {
+      const todayStartUtcMs = Date.UTC(clock.year, clock.month, clock.day, 0, 0, 0, 0);
+      const dueStartUtcMs = Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), 0, 0, 0, 0);
+      const daysLeft = Math.round((dueStartUtcMs - todayStartUtcMs) / 86_400_000);
+      testTitle = sampleItem.title.trim() || testTitle;
+      testBody = formatServerNotificationBody(sampleItem.dueDate, sampleItem.dueTime, daysLeft);
+    }
+  }
+
   const { sent, expiredEndpoints } = await sendWebPushToSubscriptions(userRecord.subscriptions, {
-    title: 'SISCOM · Notificações em segundo plano',
-    body: 'Tudo certo! Você receberá alertas de demandas mesmo com o aplicativo fechado.',
+    title: testTitle,
+    body: testBody,
     tag: 'siscom-push-test',
     url: '/?openDemandas=1',
   });
@@ -511,23 +629,24 @@ export async function runPushReminderSweep(): Promise<{
 
     const expiredSet = new Set<string>();
     for (const item of record.demandas) {
-      const alert = computeServerReminderAlert(item, now, record.tzOffsetMinutes ?? 180);
-      if (!alert) continue;
-      if (record.notifiedMap[alert.milestoneKey]) continue;
+      const alerts = computeServerReminderAlerts(item, now, record.tzOffsetMinutes ?? 180);
+      for (const alert of alerts) {
+        if (record.notifiedMap[alert.milestoneKey]) continue;
 
-      const { sent, expiredEndpoints } = await sendWebPushToSubscriptions(record.subscriptions, {
-        title: `SISCOM · ${alert.headline}`,
-        body: `${item.title} — ${alert.detail}`,
-        tag: alert.milestoneKey,
-        url: '/?openDemandas=1',
-        demandaId: item.id,
-      });
+        const { sent, expiredEndpoints } = await sendWebPushToSubscriptions(record.subscriptions, {
+          title: alert.title,
+          body: alert.body,
+          tag: alert.milestoneKey,
+          url: '/?openDemandas=1',
+          demandaId: item.id,
+        });
 
-      for (const ep of expiredEndpoints) expiredSet.add(ep);
-      if (sent > 0) {
-        record.notifiedMap[alert.milestoneKey] = nowMs;
-        sentNotifications += sent;
-        dirty = true;
+        for (const ep of expiredEndpoints) expiredSet.add(ep);
+        if (sent > 0) {
+          record.notifiedMap[alert.milestoneKey] = nowMs;
+          sentNotifications += sent;
+          dirty = true;
+        }
       }
     }
 

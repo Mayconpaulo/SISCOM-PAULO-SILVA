@@ -187,21 +187,20 @@ export const DemandasNotificationBell: React.FC = () => {
                         </div>
 
                         <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-[#EEF2EF] leading-snug break-words">
+                            {alert.notificationTitle}
+                          </p>
                           <p
-                            className={`text-[11px] font-semibold uppercase tracking-wide ${
+                            className={`text-[11px] mt-0.5 ${
                               isOverdue
                                 ? 'text-red-300'
                                 : isToday
                                   ? 'text-[#E5C17B]'
-                                  : 'text-[#9FD0B4]'
+                                  : 'text-[#95A49B]'
                             }`}
                           >
-                            {alert.headline}
+                            {alert.notificationBody}
                           </p>
-                          <p className="text-xs font-medium text-[#EEF2EF] leading-snug mt-0.5 break-words">
-                            {alert.demanda.title}
-                          </p>
-                          <p className="text-[11px] text-[#95A49B] mt-0.5">{alert.detail}</p>
                         </div>
                       </div>
 

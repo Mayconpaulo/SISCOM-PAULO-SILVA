@@ -36,6 +36,7 @@ import {
   SISCOM_EASE,
 } from '../shared/motion';
 import { SiscomAlert } from '../shared/ui';
+import { useTabletPortrait } from '../shared/useTabletPortrait';
 
 const BATTALION_CREST_SRC = '/assets/aistudio/373305_b7abfd86.png';
 
@@ -84,6 +85,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIdx, setHighlightedIdx] = useState(0);
   const prefersReducedMotion = useReducedMotion();
+  const isTabletPortrait = useTabletPortrait();
 
   // Scroll-driven subtle depth zoom on the preserved operational military backdrop
   const { scrollY } = useScroll();
@@ -193,14 +195,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         transition={{ duration: 0.2, ease: SISCOM_EASE }}
         className="no-print siscom-liquid-bar sticky top-0 z-20 w-full border-b border-white/[0.09]"
       >
-        <div className="w-full max-w-[1340px] mx-auto px-4 sm:px-6 lg:px-8 h-[58px] sm:h-[64px] flex items-center justify-between gap-2 sm:gap-4">
+        <div
+          className={`w-full max-w-[1340px] mx-auto flex items-center justify-between gap-2 ${
+            isTabletPortrait
+              ? 'px-4 h-[54px]'
+              : 'px-4 sm:px-6 lg:px-8 h-[58px] sm:h-[64px] sm:gap-4'
+          }`}
+        >
           {/* Left: Institutional identity & crests */}
           <div className="flex items-center gap-2 sm:gap-3.5 min-w-0">
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
               <motion.div
                 layoutId="siscom-crest"
                 transition={CREST_LAYOUT_TRANSITION}
-                className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center shrink-0"
+                className={`${
+                  isTabletPortrait ? 'w-8 h-8' : 'w-8 h-8 sm:w-10 sm:h-10'
+                } flex items-center justify-center shrink-0`}
               >
                 <motion.img
                   src="/assets/logo_arma_comunicacoes.png"
@@ -217,11 +227,19 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 <motion.h1
                   layoutId="siscom-wordmark"
                   transition={CREST_LAYOUT_TRANSITION}
-                  className="metallic-wordmark font-display text-[17px] sm:text-[21px] font-extrabold tracking-[0.16em] uppercase"
+                  className={`metallic-wordmark font-display font-extrabold tracking-[0.16em] uppercase ${
+                    isTabletPortrait ? 'text-[17px]' : 'text-[17px] sm:text-[21px]'
+                  }`}
                 >
                   SISCOM
                 </motion.h1>
-                <span className="text-[10px] sm:text-[11px] text-[#AEBEB5] tracking-[0.01em] mt-0.5 truncate max-w-[132px] sm:max-w-none">
+                <span
+                  className={`text-[#AEBEB5] tracking-[0.01em] mt-0.5 truncate ${
+                    isTabletPortrait
+                      ? 'text-[10px]'
+                      : 'text-[10px] sm:text-[11px] max-w-[132px] sm:max-w-none'
+                  }`}
+                >
                   Seção de Comunicação Social
                 </span>
               </div>
@@ -236,16 +254,20 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <img
                 src={BATTALION_CREST_SRC}
                 alt="Brasão do 1º Batalhão de Infantaria Mecanizado (Escola)"
-                className="h-7 sm:h-9 w-auto object-contain shrink-0 select-none"
+                className={`${
+                  isTabletPortrait ? 'h-7' : 'h-7 sm:h-9'
+                } w-auto object-contain shrink-0 select-none`}
               />
-              <div className="hidden lg:flex flex-col leading-tight min-w-0">
-                <span className="text-xs font-medium text-[#E8EEEA] truncate">
-                  1º Batalhão de Infantaria Mecanizado (Escola)
-                </span>
-                <span className="text-[11px] text-[#90A097] truncate">
-                  Regimento Sampaio
-                </span>
-              </div>
+              {!isTabletPortrait && (
+                <div className="hidden lg:flex flex-col leading-tight min-w-0">
+                  <span className="text-xs font-medium text-[#E8EEEA] truncate">
+                    1º Batalhão de Infantaria Mecanizado (Escola)
+                  </span>
+                  <span className="text-[11px] text-[#90A097] truncate">
+                    Regimento Sampaio
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -254,10 +276,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <DemandasNotificationBell />
             <PWAInstallButton compact />
 
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.07] text-xs text-[#CFDAD3] whitespace-nowrap">
-              <User className="w-3.5 h-3.5 text-[#D8B268] shrink-0" aria-hidden="true" />
-              <span className="max-w-[148px] truncate font-medium">{account.displayName}</span>
-            </div>
+            {!isTabletPortrait && (
+              <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.07] text-xs text-[#CFDAD3] whitespace-nowrap">
+                <User className="w-3.5 h-3.5 text-[#D8B268] shrink-0" aria-hidden="true" />
+                <span className="max-w-[148px] truncate font-medium">{account.displayName}</span>
+              </div>
+            )}
 
             {account.role === 'admin' && (
               <button
@@ -298,9 +322,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       </motion.header>
 
       {/* Main Content */}
-      <main className="relative z-10 flex-1 w-full max-w-[1340px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-10 pb-8 sm:pb-12 flex flex-col gap-6 sm:gap-8">
+      <main
+        className={`relative z-10 flex-1 w-full mx-auto flex flex-col ${
+          isTabletPortrait
+            ? 'max-w-[780px] px-5 pt-4 pb-4 gap-4 justify-between'
+            : 'max-w-[1340px] px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 lg:pt-10 pb-8 sm:pb-12 gap-6 sm:gap-8'
+        }`}
+      >
         {/* Greeting + Modern Command Search */}
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-8">
+        <div
+          className={`flex flex-col ${
+            isTabletPortrait
+              ? 'gap-3'
+              : 'md:flex-row md:items-end md:justify-between gap-4 md:gap-8'
+          }`}
+        >
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -312,7 +348,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 {todayLabel}
               </p>
             )}
-            <h2 className="font-display text-[25px] sm:text-[29px] lg:text-[34px] font-bold tracking-[-0.025em] leading-[1.15] text-[#F3F7F4]">
+            <h2
+              className={`font-display font-bold tracking-[-0.025em] leading-[1.15] text-[#F3F7F4] ${
+                isTabletPortrait
+                  ? 'text-[24px]'
+                  : 'text-[25px] sm:text-[29px] lg:text-[34px]'
+              }`}
+            >
               {greeting},{' '}
               <span className="text-[#E7C580]">{account.displayName}</span>
             </h2>
@@ -322,7 +364,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, delay: 0.04, ease: SISCOM_EASE }}
-            className="w-full md:w-[368px] lg:w-[420px] shrink-0"
+            className={
+              isTabletPortrait ? 'w-full' : 'w-full md:w-[368px] lg:w-[420px] shrink-0'
+            }
           >
             <CommandSearch
               value={searchQuery}
@@ -366,7 +410,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-4.5">
+            <div
+              className={
+                isTabletPortrait
+                  ? 'grid grid-cols-2 gap-3'
+                  : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-4.5'
+              }
+            >
               <AnimatePresence mode="popLayout" initial={false}>
                 {filteredCards.map((card, idx) => {
                   const isHighlighted = Boolean(normalizedQuery) && idx === highlightedIdx;
@@ -398,16 +448,26 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       <motion.div
                         layoutId={`module-icon-${card.id}`}
                         transition={MODULE_LOCKUP_TRANSITION}
-                        className="relative z-10 siscom-icon-vessel w-12 h-12 sm:w-[54px] sm:h-[54px] lg:w-14 lg:h-14 rounded-2xl shrink-0 flex items-center justify-center text-[#DFBC75] group-hover:text-[#F5D896]"
+                        className={`relative z-10 siscom-icon-vessel rounded-2xl shrink-0 flex items-center justify-center text-[#DFBC75] group-hover:text-[#F5D896] ${
+                          isTabletPortrait
+                            ? 'w-11 h-11'
+                            : 'w-12 h-12 sm:w-[54px] sm:h-[54px] lg:w-14 lg:h-14'
+                        }`}
                       >
-                        {card.renderIcon('w-7 h-7 sm:w-[30px] sm:h-[30px]')}
+                        {card.renderIcon(
+                          isTabletPortrait ? 'w-6 h-6' : 'w-7 h-7 sm:w-[30px] sm:h-[30px]'
+                        )}
                       </motion.div>
 
                       <div className="relative z-10 w-full min-w-0 px-1">
                         <motion.span
                           layoutId={`module-title-${card.id}`}
                           transition={MODULE_LOCKUP_TRANSITION}
-                          className="block font-display text-[15px] sm:text-[16.5px] lg:text-[17.5px] font-semibold tracking-[-0.01em] text-[#F2F6F3] group-hover:text-[#FAF0D7] transition-colors duration-150 leading-snug text-center"
+                          className={`block font-display font-semibold tracking-[-0.01em] text-[#F2F6F3] group-hover:text-[#FAF0D7] transition-colors duration-150 leading-snug text-center ${
+                            isTabletPortrait
+                              ? 'text-[15px]'
+                              : 'text-[15px] sm:text-[16.5px] lg:text-[17.5px]'
+                          }`}
                         >
                           {card.title}
                         </motion.span>
@@ -415,8 +475,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     </>
                   );
 
-                  const cardClasses =
-                    'p-4 sm:p-5 lg:p-6 flex flex-col items-center justify-center text-center gap-3 sm:gap-3.5 min-h-[124px] sm:min-h-[138px] lg:min-h-[148px]';
+                  const cardClasses = isTabletPortrait
+                    ? 'p-3.5 flex flex-col items-center justify-center text-center gap-2.5 min-h-[108px]'
+                    : 'p-4 sm:p-5 lg:p-6 flex flex-col items-center justify-center text-center gap-3 sm:gap-3.5 min-h-[124px] sm:min-h-[138px] lg:min-h-[148px]';
 
                   if (card.externalUrl) {
                     return (
@@ -482,11 +543,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         {/* Quiet Secondary Operational Strip: Agenda & Demandas */}
         <section
           aria-label="Agenda e Demandas"
-          className="pt-5 sm:pt-6 border-t border-white/[0.08]"
+          className={`${isTabletPortrait ? 'pt-3.5' : 'pt-5 sm:pt-6'} border-t border-white/[0.08]`}
         >
           <div
-            className={`grid grid-cols-1 gap-4 lg:gap-4.5 items-stretch ${
-              hasAgendaAccess ? 'md:grid-cols-2' : ''
+            className={`grid grid-cols-1 items-stretch ${
+              isTabletPortrait
+                ? 'gap-3'
+                : `gap-4 lg:gap-4.5 ${hasAgendaAccess ? 'md:grid-cols-2' : ''}`
             }`}
           >
             {hasAgendaAccess && (
@@ -504,7 +567,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       {/* Minimalist Institutional Glass Footer */}
       <footer className="no-print siscom-liquid-bar relative z-10 mt-auto border-t border-white/[0.09]">
-        <div className="w-full max-w-[1340px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-24 md:py-3.5 flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-[#95A49B]">
+        <div
+          className={`w-full max-w-[1340px] mx-auto flex items-center justify-between gap-2 text-xs text-[#95A49B] ${
+            isTabletPortrait
+              ? 'px-5 py-2.5 pr-20 flex-row'
+              : 'px-4 sm:px-6 lg:px-8 pt-4 pb-24 md:py-3.5 flex-col md:flex-row'
+          }`}
+        >
           <div className="flex items-center gap-2.5">
             <img
               src={BATTALION_CREST_SRC}

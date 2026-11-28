@@ -33,6 +33,7 @@ import {
 } from './shared/motion';
 import { OperationalBackdrop } from './shared/OperationalBackdrop';
 import { SiscomSpinner } from './shared/ui';
+import { useTabletPortrait } from './shared/useTabletPortrait';
 
 type ViewStage = 'boot' | 'login' | 'onboarding' | 'home' | 'module';
 
@@ -75,6 +76,7 @@ function WorkspaceShell() {
   const [greeting, setGreeting] = useState<string>(() => getTimeGreeting());
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
   const [vaultHydratedUid, setVaultHydratedUid] = useState<string | null>(null);
+  const isTabletPortrait = useTabletPortrait();
 
   // Track if the user came directly from Login (to spin the crest only on subsequent logins -> Home)
   const wasOnLoginRef = useRef(false);
@@ -323,8 +325,15 @@ function WorkspaceShell() {
   return (
     <DemandasProvider userId={account.uid}>
     <div
+      data-tablet-portrait={isTabletPortrait ? 'true' : undefined}
       className={`workspace-shell-root min-h-screen bg-[#080B09] text-[#E4EAE6] flex flex-col relative selection:bg-[#2D5A43]/55 selection:text-[#F4E6C4] ${
-        activeScreen !== 'home' ? 'lg:h-screen lg:overflow-hidden' : ''
+        activeScreen !== 'home'
+          ? isTabletPortrait
+            ? 'h-[100dvh] overflow-hidden'
+            : 'lg:h-screen lg:overflow-hidden'
+          : isTabletPortrait
+          ? 'min-h-[100dvh]'
+          : ''
       }`}
     >
       {/* Persistent Operational Backdrop for all internal module views */}
@@ -410,7 +419,9 @@ function WorkspaceShell() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.22, ease: SISCOM_EASE }}
-            className="workspace-split-container relative z-10 flex-1 flex flex-col min-h-0 lg:overflow-hidden"
+            className={`workspace-split-container relative z-10 flex-1 flex flex-col min-h-0 ${
+              isTabletPortrait ? 'overflow-hidden' : 'lg:overflow-hidden'
+            }`}
           >
             <ErrorBoundary
               key={`${activeScreen}-${moduleResetTick}`}

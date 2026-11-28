@@ -6,6 +6,10 @@ const SW_DEMANDAS_DB = 'siscom_sw_demandas_v1';
 const SW_DEMANDAS_STORE = 'state';
 const SW_DEMANDAS_KEY = 'current';
 const SW_MAX_RECORD_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const SW_NOTIFICATION_ICON = '/notification-icon-192x192.png';
+const SW_NOTIFICATION_BADGE = '/notification-badge-96x96.png';
+const SW_MAX_REMINDER_OFFSETS = 10;
+const SW_MAX_REMINDER_OFFSET_MINUTES = 43200;
 
 function openSwDemandasDb() {
   return new Promise((resolve, reject) => {
@@ -62,10 +66,48 @@ function formatDateKeyLocalSw(date) {
   return `${y}-${m}-${d}`;
 }
 
-function formatShortDueDateSw(dueDate) {
+function formatFullDateBrSw(dueDate) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDate || '');
   if (!match) return dueDate || '';
-  return `${match[3]}/${match[2]}`;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function formatTimeSuffixSw(dueTime) {
+  const tm = dueTime ? /^(\d{2}):(\d{2})$/.exec(String(dueTime).trim()) : null;
+  if (!tm) return '';
+  return tm[2] === '00' ? `, às ${tm[1]}h` : `, às ${tm[1]}h${tm[2]}`;
+}
+
+function formatCountdownSw(daysLeft) {
+  if (daysLeft > 1) return `Faltam ${daysLeft} dias`;
+  if (daysLeft === 1) return 'Falta 1 dia';
+  if (daysLeft === 0) return 'É hoje';
+  const abs = Math.abs(daysLeft);
+  return abs === 1 ? 'Atrasada há 1 dia' : `Atrasada há ${abs} dias`;
+}
+
+function formatNotificationPayloadSw(item, daysLeft) {
+  const title = (item && item.title ? String(item.title).trim() : '') || 'Demanda';
+  const countdown = formatCountdownSw(daysLeft);
+  const dateBr = formatFullDateBrSw(item.dueDate);
+  const timeSuffix = formatTimeSuffixSw(item.dueTime);
+  return {
+    title,
+    body: `Prazo: ${countdown} – ${dateBr}${timeSuffix}`,
+  };
+}
+
+function sanitizeReminderOffsetsSw(raw) {
+  if (!Array.isArray(raw)) return [];
+  const unique = new Set();
+  for (const val of raw) {
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      const clamped = Math.max(0, Math.min(SW_MAX_REMINDER_OFFSET_MINUTES, Math.round(val)));
+      unique.add(clamped);
+      if (unique.size >= SW_MAX_REMINDER_OFFSETS) break;
+    }
+  }
+  return Array.from(unique).sort((a, b) => b - a);
 }
 
 function parseDueDatePartsSw(dueDate, dueTime) {
@@ -93,68 +135,119 @@ function parseDueDatePartsSw(dueDate, dueTime) {
   };
 }
 
-function computeReminderAlertSw(item, now) {
-  if (!item || item.status !== 'pendente' || !item.dueDate) return null;
+function computeReminderAlertsSw(item, now) {
+  if (!item || item.status !== 'pendente' || !item.dueDate) return [];
   const todayKey = formatDateKeyLocalSw(now);
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
   const { dateOnly, exactDateTime, hasTime } = parseDueDatePartsSw(item.dueDate, item.dueTime);
   const daysLeft = Math.round((dateOnly.getTime() - todayStart.getTime()) / 86400000);
-  const remindBefore = typeof item.remindBeforeDays === 'number' ? item.remindBeforeDays : 0;
+  const formatted = formatNotificationPayloadSw(item, daysLeft);
 
-  if (daysLeft > remindBefore) return null;
+  if (Array.isArray(item.reminderOffsetsMinutes)) {
+    const offsets = sanitizeReminderOffsetsSw(item.reminderOffsetsMinutes);
+    if (offsets.length === 0) return [];
+
+    if (daysLeft < 0) {
+      return [
+        {
+          milestoneKey: `${item.id}::overdue::${todayKey}`,
+          title: formatted.title,
+          body: formatted.body,
+        },
+      ];
+    }
+
+    const alerts = [];
+    const msUntilDue = exactDateTime.getTime() - now.getTime();
+    for (const offsetMin of offsets) {
+      let shouldFire = false;
+      if (hasTime) {
+        shouldFire = msUntilDue <= offsetMin * 60000;
+      } else if (offsetMin >= 1440) {
+        const offsetDays = Math.round(offsetMin / 1440);
+        shouldFire = daysLeft <= offsetDays;
+      } else {
+        shouldFire = daysLeft <= 0;
+      }
+      if (shouldFire) {
+        alerts.push({
+          milestoneKey: `${item.id}::rem-${offsetMin}::${item.dueDate}::${item.dueTime || 'allday'}`,
+          title: formatted.title,
+          body: formatted.body,
+        });
+      }
+    }
+    return alerts;
+  }
+
+  const remindBefore = typeof item.remindBeforeDays === 'number' ? item.remindBeforeDays : 0;
+  if (daysLeft > remindBefore) return [];
 
   if (daysLeft < 0) {
-    const abs = Math.abs(daysLeft);
-    return {
-      milestoneKey: `${item.id}::overdue::${todayKey}`,
-      headline: abs === 1 ? 'Demanda atrasada (1 dia)' : `Demanda atrasada (${abs} dias)`,
-      detail: `Prazo era ${formatShortDueDateSw(item.dueDate)}${hasTime ? ` às ${item.dueTime}` : ''}`,
-    };
+    return [
+      {
+        milestoneKey: `${item.id}::overdue::${todayKey}`,
+        title: formatted.title,
+        body: formatted.body,
+      },
+    ];
   }
 
   if (daysLeft === 0) {
     if (hasTime) {
       const minsLeft = Math.round((exactDateTime.getTime() - now.getTime()) / 60000);
       if (minsLeft <= 0) {
-        return {
-          milestoneKey: `${item.id}::due-now::${todayKey}::${item.dueTime}`,
-          headline: 'Prazo atingido',
-          detail: `Venceu hoje às ${item.dueTime}`,
-        };
+        return [
+          {
+            milestoneKey: `${item.id}::due-now::${todayKey}::${item.dueTime}`,
+            title: formatted.title,
+            body: formatted.body,
+          },
+        ];
       }
       if (minsLeft <= 120) {
-        return {
-          milestoneKey: `${item.id}::due-2h::${todayKey}::${item.dueTime}`,
-          headline: minsLeft <= 60 ? `Faltam ${minsLeft} min` : 'Prazo em menos de 2 horas',
-          detail: `Vence hoje às ${item.dueTime}`,
-        };
+        return [
+          {
+            milestoneKey: `${item.id}::due-2h::${todayKey}::${item.dueTime}`,
+            title: formatted.title,
+            body: formatted.body,
+          },
+        ];
       }
-      return {
-        milestoneKey: `${item.id}::due-today::${todayKey}`,
-        headline: 'Vence hoje',
-        detail: `Prazo hoje às ${item.dueTime}`,
-      };
+      return [
+        {
+          milestoneKey: `${item.id}::due-today::${todayKey}`,
+          title: formatted.title,
+          body: formatted.body,
+        },
+      ];
     }
-    return {
-      milestoneKey: `${item.id}::due-today::${todayKey}`,
-      headline: 'Vence hoje',
-      detail: `Prazo para hoje (${formatShortDueDateSw(item.dueDate)})`,
-    };
+    return [
+      {
+        milestoneKey: `${item.id}::due-today::${todayKey}`,
+        title: formatted.title,
+        body: formatted.body,
+      },
+    ];
   }
 
   if (daysLeft === 1) {
-    return {
-      milestoneKey: `${item.id}::before-1d::${item.dueDate}`,
-      headline: 'Vence amanhã',
-      detail: `Prazo amanhã (${formatShortDueDateSw(item.dueDate)})${hasTime ? ` às ${item.dueTime}` : ''}`,
-    };
+    return [
+      {
+        milestoneKey: `${item.id}::before-1d::${item.dueDate}`,
+        title: formatted.title,
+        body: formatted.body,
+      },
+    ];
   }
 
-  return {
-    milestoneKey: `${item.id}::before-${daysLeft}d::${item.dueDate}`,
-    headline: `Faltam ${daysLeft} dias`,
-    detail: `Prazo em ${formatShortDueDateSw(item.dueDate)}${hasTime ? ` às ${item.dueTime}` : ''}`,
-  };
+  return [
+    {
+      milestoneKey: `${item.id}::before-${daysLeft}d::${item.dueDate}`,
+      title: formatted.title,
+      body: formatted.body,
+    },
+  ];
 }
 
 async function evaluatePendingDemandasInSw() {
@@ -173,26 +266,27 @@ async function evaluatePendingDemandasInSw() {
 
   let changed = false;
   for (const item of state.demandas) {
-    const alert = computeReminderAlertSw(item, now);
-    if (!alert) continue;
-    if (notifiedMap[alert.milestoneKey]) continue;
+    const alerts = computeReminderAlertsSw(item, now);
+    for (const alert of alerts) {
+      if (notifiedMap[alert.milestoneKey]) continue;
 
-    notifiedMap[alert.milestoneKey] = nowMs;
-    changed = true;
+      notifiedMap[alert.milestoneKey] = nowMs;
+      changed = true;
 
-    try {
-      await self.registration.showNotification(`SISCOM · ${alert.headline}`, {
-        body: `${item.title} — ${alert.detail}`,
-        tag: alert.milestoneKey,
-        icon: '/pwa-192x192.png',
-        badge: '/pwa-192x192.png',
-        data: {
-          url: '/?openDemandas=1',
-          demandaId: item.id,
-        },
-      });
-    } catch {
-      // ignore showNotification failures when permission revoked
+      try {
+        await self.registration.showNotification(alert.title, {
+          body: alert.body,
+          tag: alert.milestoneKey,
+          icon: SW_NOTIFICATION_ICON,
+          badge: SW_NOTIFICATION_BADGE,
+          data: {
+            url: '/?openDemandas=1',
+            demandaId: item.id,
+          },
+        });
+      } catch {
+        // ignore showNotification failures when permission revoked
+      }
     }
   }
 
@@ -303,8 +397,8 @@ self.addEventListener('activate', (event) => {
 // Receive Web Push notifications even when SISCOM is completely closed
 self.addEventListener('push', (event) => {
   let payload = {
-    title: 'SISCOM · Notificação',
-    body: 'Você tem uma demanda ou lembrete pendente no SISCOM.',
+    title: 'Demanda',
+    body: 'Prazo pendente no SISCOM',
     tag: 'siscom-push',
     url: '/?openDemandas=1',
     demandaId: '',
@@ -338,8 +432,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
-      icon: '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
+      icon: SW_NOTIFICATION_ICON,
+      badge: SW_NOTIFICATION_BADGE,
       data: {
         url: payload.url,
         demandaId: payload.demandaId,

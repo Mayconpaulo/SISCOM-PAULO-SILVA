@@ -1,8 +1,15 @@
-import type { DemandaItem } from './demandaTypes';
+import {
+  type DemandaItem,
+  formatDateKeyLocal,
+  formatDemandaNotificationPayload,
+} from './demandaTypes';
 
 const NOTIFIED_STORAGE_KEY = 'siscom_demandas_notified_v1';
 const SEEN_BELL_STORAGE_KEY = 'siscom_demandas_bell_seen_v1';
 const MAX_RECORD_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+export const SISCOM_NOTIFICATION_ICON = '/notification-icon-192x192.png';
+export const SISCOM_NOTIFICATION_BADGE = '/notification-badge-96x96.png';
 
 export type BrowserNotificationPermission = NotificationPermission | 'unsupported';
 export type BackgroundPushStatus = 'active' | 'sw-only' | 'inactive' | 'unsupported';
@@ -127,15 +134,8 @@ async function getReadyServiceWorkerRegistration(): Promise<ServiceWorkerRegistr
   }
 }
 
-export async function syncDemandasToServiceWorker(
-  userId: string,
-  demandas: DemandaItem[]
-): Promise<void> {
-  const reg = await getReadyServiceWorkerRegistration();
-  const target = reg?.active || navigator.serviceWorker?.controller;
-  if (!target) return;
-
-  const compact = demandas
+function toCompactPendingDemandas(demandas: DemandaItem[]) {
+  return demandas
     .filter((d) => d.status === 'pendente')
     .slice(0, 120)
     .map((d) => ({
@@ -145,7 +145,21 @@ export async function syncDemandasToServiceWorker(
       dueTime: d.dueTime,
       status: d.status,
       remindBeforeDays: d.remindBeforeDays,
+      ...(Array.isArray(d.reminderOffsetsMinutes)
+        ? { reminderOffsetsMinutes: d.reminderOffsetsMinutes }
+        : {}),
     }));
+}
+
+export async function syncDemandasToServiceWorker(
+  userId: string,
+  demandas: DemandaItem[]
+): Promise<void> {
+  const reg = await getReadyServiceWorkerRegistration();
+  const target = reg?.active || navigator.serviceWorker?.controller;
+  if (!target) return;
+
+  const compact = toCompactPendingDemandas(demandas);
 
   try {
     target.postMessage({
@@ -232,17 +246,7 @@ export async function syncBackgroundPushAndDemandas(params: {
     }
   }
 
-  const pendingCompact = params.demandas
-    .filter((d) => d.status === 'pendente')
-    .slice(0, 120)
-    .map((d) => ({
-      id: d.id,
-      title: d.title,
-      dueDate: d.dueDate,
-      dueTime: d.dueTime,
-      status: d.status,
-      remindBeforeDays: d.remindBeforeDays,
-    }));
+  const pendingCompact = toCompactPendingDemandas(params.demandas);
 
   if (subscriptionJson) {
     try {
@@ -282,8 +286,8 @@ export async function dispatchSystemNotification(
   const options: NotificationOptions = {
     body,
     tag,
-    icon: '/pwa-192x192.png',
-    badge: '/pwa-192x192.png',
+    icon: SISCOM_NOTIFICATION_ICON,
+    badge: SISCOM_NOTIFICATION_BADGE,
     data: { url: '/?openDemandas=1' },
   };
 
@@ -305,7 +309,10 @@ export async function dispatchSystemNotification(
   }
 }
 
-export async function sendTestDemandaNotification(idToken?: string | null): Promise<boolean> {
+export async function sendTestDemandaNotification(
+  idToken?: string | null,
+  sampleDemanda?: Pick<DemandaItem, 'title' | 'dueDate' | 'dueTime'> | null
+): Promise<boolean> {
   if (idToken) {
     try {
       const resp = await fetch('/api/push/test', {
@@ -322,9 +329,16 @@ export async function sendTestDemandaNotification(idToken?: string | null): Prom
     }
   }
 
+  const demoItem = sampleDemanda ?? {
+    title: 'Reunião de pauta',
+    dueDate: formatDateKeyLocal(new Date()),
+    dueTime: '09:00',
+  };
+  const formatted = formatDemandaNotificationPayload(demoItem, new Date());
+
   return dispatchSystemNotification(
-    'SISCOM · Lembretes de Demandas',
-    'Notificações ativas. Você será avisado antes de cada prazo até o dia limite.',
+    formatted.title,
+    formatted.body,
     'siscom-demandas-test'
   );
 }

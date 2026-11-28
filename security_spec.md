@@ -11,6 +11,7 @@
 8. As subcoleções pessoais `/users/{userId}/alteracao_folders/{folderId}` e `/users/{userId}/alteracao_docs/{docId}` são estritamente privadas ao próprio titular autenticado e ativo com acesso ao módulo Alteração (`isOwner(userId)`), com `ownerUid` imutável, carimbos `request.time`, limites de tamanho em strings/listas e bloqueio de auto-parentesco em pastas (`parentId != folderId`).
 9. As coleções `/agenda_events/{eventId}`, `/agenda_audit/{logId}` e `/agenda_config/google_calendar` exigem usuário autenticado, ativo e com acesso ao módulo Agenda (`role == 'admin'` ou `permAgenda == true`), validação estrita de esquema e limites de tamanho, imutabilidade de autoria/criação, registros de auditoria somente-leitura após criação e proibição absoluta de armazenar tokens OAuth no Firestore.
 10. A coleção `/activity_logs/{logId}` registra ações imutáveis (`update`/`delete` proibidos) com `actorUid == request.auth.uid` e `createdAt == request.time`, criação restrita a contas ativas e leitura (`get`/`list`) restrita exclusivamente a contas administradoras (`isAdmin()`).
+11. A subcoleção `/users/{userId}/demandas/{demandaId}` é estritamente privada ao titular autenticado e ativo, aceitando opcionalmente `reminderOffsetsMinutes` como lista limitada a no máximo 10 inteiros válidos entre `0` e `43200` (até 30 dias).
 
 ## 2. "Dirty Dozen" — Payloads Maliciosos Testados
 1. **Unauthenticated User Read**: `get(/users/uid1)` sem `request.auth` -> `PERMISSION_DENIED`.
@@ -40,6 +41,7 @@
 25. **Spoofed Activity Log Actor**: Usuário tentando gravar `/activity_logs/{logId}` com `actorUid != request.auth.uid` -> `PERMISSION_DENIED`.
 26. **Activity Log Tampering/Deletion**: Qualquer conta (mesmo admin) tentando atualizar ou excluir um registro em `/activity_logs/{logId}` -> `PERMISSION_DENIED`.
 27. **Activity Log Shadow Field / Client Timestamp**: Tentativa de enviar campo extra ou `createdAt != request.time` em `/activity_logs/{logId}` -> `PERMISSION_DENIED`.
+28. **Demanda Oversized / Invalid Reminder Offsets**: Usuário enviando `reminderOffsetsMinutes` com mais de 10 itens, valores negativos ou acima de `43200` -> `PERMISSION_DENIED`.
 
 
 

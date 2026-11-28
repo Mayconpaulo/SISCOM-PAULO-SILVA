@@ -850,6 +850,17 @@
           "maximum": 30,
           "description": "Quantos dias antes iniciar notificações progressivas até o dia limite"
         },
+        "reminderOffsetsMinutes": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 10,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 43200
+          },
+          "description": "Lista opcional de múltiplos avisos em minutos antes do prazo (até 10 avisos, máximo 30 dias)"
+        },
         "completedAt": {
           "type": "string",
           "minLength": 0,

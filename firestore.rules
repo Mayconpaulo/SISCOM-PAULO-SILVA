@@ -355,6 +355,25 @@ service cloud.firestore {
         && header.periodo is string && header.periodo.size() <= 160;
     }
 
+    function isValidReminderOffsetValue(val) {
+      return val is int && val >= 0 && val <= 43200;
+    }
+
+    function isValidReminderOffsets(offsets) {
+      return offsets is list
+        && offsets.size() <= 10
+        && (offsets.size() <= 0 || isValidReminderOffsetValue(offsets[0]))
+        && (offsets.size() <= 1 || isValidReminderOffsetValue(offsets[1]))
+        && (offsets.size() <= 2 || isValidReminderOffsetValue(offsets[2]))
+        && (offsets.size() <= 3 || isValidReminderOffsetValue(offsets[3]))
+        && (offsets.size() <= 4 || isValidReminderOffsetValue(offsets[4]))
+        && (offsets.size() <= 5 || isValidReminderOffsetValue(offsets[5]))
+        && (offsets.size() <= 6 || isValidReminderOffsetValue(offsets[6]))
+        && (offsets.size() <= 7 || isValidReminderOffsetValue(offsets[7]))
+        && (offsets.size() <= 8 || isValidReminderOffsetValue(offsets[8]))
+        && (offsets.size() <= 9 || isValidReminderOffsetValue(offsets[9]));
+    }
+
     function isValidDemandaItem(data, userId, demandaId) {
       return data.keys().hasAll([
           'id',
@@ -380,6 +399,7 @@ service cloud.firestore {
           'priority',
           'status',
           'remindBeforeDays',
+          'reminderOffsetsMinutes',
           'completedAt',
           'createdAt',
           'updatedAt'
@@ -395,6 +415,7 @@ service cloud.firestore {
         && data.priority in ['baixa', 'media', 'alta']
         && data.status in ['pendente', 'concluida']
         && data.remindBeforeDays is int && data.remindBeforeDays >= 0 && data.remindBeforeDays <= 30
+        && (!('reminderOffsetsMinutes' in data) || isValidReminderOffsets(data.reminderOffsetsMinutes))
         && data.completedAt is string && data.completedAt.size() <= 40
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -1123,6 +1144,7 @@ service cloud.firestore {
             'priority',
             'status',
             'remindBeforeDays',
+            'reminderOffsetsMinutes',
             'completedAt',
             'updatedAt'
           ]);

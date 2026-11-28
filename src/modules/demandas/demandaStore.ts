@@ -18,9 +18,11 @@ import {
   DemandaPriority,
   UpdateDemandaPatch,
   addDaysToDateKey,
+  deriveRemindBeforeDaysFromOffsets,
   formatDateKeyLocal,
   getCalendarDaysUntil,
   parseDueDateParts,
+  sanitizeReminderOffsets,
   sortDemandasForDisplay,
 } from './demandaTypes';
 
@@ -76,6 +78,9 @@ export function subscribeUserDemandas(
     (snap) => {
       const list: DemandaItem[] = snap.docs.map((d) => {
         const raw = d.data() as Partial<DemandaItem>;
+        const reminderOffsetsMinutes = Array.isArray(raw.reminderOffsetsMinutes)
+          ? sanitizeReminderOffsets(raw.reminderOffsetsMinutes)
+          : undefined;
         return {
           id: raw.id || d.id,
           ownerUid: raw.ownerUid || userId,
@@ -87,6 +92,7 @@ export function subscribeUserDemandas(
           status: raw.status === 'concluida' ? 'concluida' : 'pendente',
           remindBeforeDays:
             typeof raw.remindBeforeDays === 'number' ? raw.remindBeforeDays : 3,
+          ...(reminderOffsetsMinutes !== undefined ? { reminderOffsetsMinutes } : {}),
           completedAt: raw.completedAt || '',
           createdAt: raw.createdAt,
           updatedAt: raw.updatedAt,
@@ -114,7 +120,14 @@ export async function createDemanda(
   }
 
   const id = generateDemandaId();
-  const payload = {
+  const hasOffsets = Array.isArray(input.reminderOffsetsMinutes);
+  const cleanOffsets = hasOffsets ? sanitizeReminderOffsets(input.reminderOffsetsMinutes) : undefined;
+  const remindBeforeDays =
+    cleanOffsets !== undefined
+      ? deriveRemindBeforeDaysFromOffsets(cleanOffsets)
+      : sanitizeRemindDays(input.remindBeforeDays);
+
+  const payload: Record<string, unknown> = {
     id,
     ownerUid: userId,
     title,
@@ -123,11 +136,15 @@ export async function createDemanda(
     dueTime: sanitizeDueTime(input.dueTime),
     priority: sanitizePriority(input.priority),
     status: 'pendente' as const,
-    remindBeforeDays: sanitizeRemindDays(input.remindBeforeDays),
+    remindBeforeDays,
     completedAt: '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+
+  if (cleanOffsets !== undefined) {
+    payload.reminderOffsetsMinutes = cleanOffsets;
+  }
 
   try {
     await setDoc(doc(db, 'users', userId, 'demandas', id), payload);
@@ -135,7 +152,7 @@ export async function createDemanda(
       module: 'demandas',
       action: 'create_demanda',
       summary: `Criou demanda: ${title}`,
-      detail: `Prazo: ${payload.dueDate}`,
+      detail: `Prazo: ${String(payload.dueDate)}`,
     });
     return id;
   } catch (err) {
@@ -174,7 +191,11 @@ export async function updateDemanda(
   if (patch.status !== undefined) {
     updateData.status = patch.status === 'concluida' ? 'concluida' : 'pendente';
   }
-  if (patch.remindBeforeDays !== undefined) {
+  if (patch.reminderOffsetsMinutes !== undefined) {
+    const cleanOffsets = sanitizeReminderOffsets(patch.reminderOffsetsMinutes);
+    updateData.reminderOffsetsMinutes = cleanOffsets;
+    updateData.remindBeforeDays = deriveRemindBeforeDaysFromOffsets(cleanOffsets);
+  } else if (patch.remindBeforeDays !== undefined) {
     updateData.remindBeforeDays = sanitizeRemindDays(patch.remindBeforeDays);
   }
   if (patch.completedAt !== undefined) {
