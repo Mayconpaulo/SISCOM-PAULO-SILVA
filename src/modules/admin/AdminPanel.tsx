@@ -501,14 +501,14 @@ export function AdminPanel() {
     tabletDrawer === 'own'
       ? {
           title: isGoogleAdminSession ? 'Criar / Configurar Login Admin' : 'Meu Login Admin',
-          anchor: 'bottom',
+          position: 'top',
           onClose: () => setTabletDrawer(null),
           content: ownAdminFormContent,
         }
       : tabletDrawer === 'create'
         ? {
             title: 'Criar Novo Login',
-            anchor: 'bottom',
+            position: 'top',
             onClose: () => setTabletDrawer(null),
             content: createUserFormContent,
           }
@@ -517,9 +517,9 @@ export function AdminPanel() {
   return (
     <WorkspaceSplitLayout
       sidebarWidthClass="lg:w-[400px] xl:w-[435px]"
-      tabletSingleBarPosition="bottom"
+      tabletSingleBarPosition="top"
       tabletDrawer={activeTabletDrawer}
-      tabletBottomBar={
+      tabletTopBar={
         <TabletRibbonRow>
           <TabletRibbonGroup>
             <TabletRibbonButton

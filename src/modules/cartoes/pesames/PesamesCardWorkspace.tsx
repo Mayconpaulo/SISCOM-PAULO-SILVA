@@ -850,12 +850,12 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
         </div>
       }
     >
-      <div className="w-full flex flex-col items-center">
-        <div className="w-full max-w-[520px]">
-          <PinchZoomSheetFrame
-            maxWidthClass="max-w-[520px]"
-            className="rounded-xl shadow-2xl border border-white/10 bg-black"
-          >
+      <div className="w-full min-h-full flex flex-col items-center">
+        <PinchZoomSheetFrame
+          maxWidthClass="max-w-[520px]"
+          sheetAspectRatio={PESAMES_W_PX / PESAMES_H_PX}
+          className="rounded-xl shadow-2xl border border-white/10 bg-black"
+        >
             <svg
               viewBox={`0 0 ${PESAMES_W_PX} ${PESAMES_H_PX}`}
               className="w-full h-auto bg-black block select-none"
@@ -973,8 +973,7 @@ export const PesamesCardWorkspace: React.FC<PesamesCardWorkspaceProps> = ({
                 );
               })}
             </svg>
-          </PinchZoomSheetFrame>
-        </div>
+        </PinchZoomSheetFrame>
       </div>
     </WorkspaceSplitLayout>
     </>

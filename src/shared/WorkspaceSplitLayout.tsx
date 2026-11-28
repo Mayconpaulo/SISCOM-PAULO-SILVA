@@ -1,8 +1,23 @@
-import React, { useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { SISCOM_EASE } from './motion';
 import { useTabletPortrait } from './useTabletPortrait';
+
+export interface TabletCanvasBounds {
+  width: number;
+  height: number;
+}
+
+const TabletCanvasBoundsContext = createContext<TabletCanvasBounds | null>(null);
+
+/**
+ * Returns the live inner pixel dimensions of the center canvas pane between
+ * the top and bottom bars when in Tablet Portrait mode, or null otherwise.
+ */
+export function useTabletCanvasBounds(): TabletCanvasBounds | null {
+  return useContext(TabletCanvasBoundsContext);
+}
 
 export interface TabletWorkspaceDrawer {
   /** Which bar the floating panel anchors to */
@@ -28,11 +43,11 @@ export interface WorkspaceSplitLayoutProps {
   children: React.ReactNode;
   /** Optional right panel: text formatting, Word-style controls, typography, page zoom */
   rightSidebar?: React.ReactNode;
-  /** Ergonomic single-row horizontal top bar rendered in Tablet Portrait */
+  /** Ergonomic horizontal top bar rendered in Tablet Portrait */
   tabletTopBar?: React.ReactNode;
-  /** Ergonomic single-row horizontal bottom bar rendered in Tablet Portrait */
+  /** Ergonomic horizontal bottom bar rendered in Tablet Portrait */
   tabletBottomBar?: React.ReactNode;
-  /** When only one bar exists in Tablet Portrait, choose whether it docks at bottom (default) or top */
+  /** When only one bar exists in Tablet Portrait, choose whether it docks at top (default) or bottom */
   tabletSingleBarPosition?: 'bottom' | 'top';
   /** Optional floating drawer anchored below the top bar or above the bottom bar in Tablet Portrait */
   tabletDrawer?: TabletWorkspaceDrawer | null;
@@ -46,13 +61,16 @@ export interface WorkspaceSplitLayoutProps {
   contentRef?: React.Ref<HTMLDivElement>;
 }
 
+const TABLET_CANVAS_PAD_PX = 16; // px-2 (8px left + 8px right) & py-2 (8px top + 8px bottom)
+
 /**
  * Unified adaptive studio workspace:
  * - Desktop / Tablet Landscape: 3-column fixed left sidebar | center canvas | right sidebar
  * - Tablet Portrait (600px–1366px portrait):
- *     • Slim, single-axis horizontal static bars (top and/or bottom) with zero vertical scroll traps.
+ *     • Spacious static horizontal bars (top and/or bottom) with clean breathing room and natural wrapping.
+ *     • Center A4 / preview canvas auto-maximizes to fill all available space between the bars at 100% zoom.
  *     • Complex forms & lists open inside anchored floating glass sheets without shifting the canvas.
- *     • When only one bar exists, docks at the bottom by default, or top when tabletSingleBarPosition="top".
+ *     • When only one bar exists, docks at the top by default.
  * - Phone (< 600px): single-column stacked flow.
  */
 export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
@@ -61,7 +79,7 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
   rightSidebar,
   tabletTopBar,
   tabletBottomBar,
-  tabletSingleBarPosition = 'bottom',
+  tabletSingleBarPosition = 'top',
   tabletDrawer = null,
   sidebarWidthClass = 'lg:w-[300px] xl:w-[332px]',
   rightSidebarWidthClass = 'lg:w-[264px] xl:w-[292px]',
@@ -69,6 +87,22 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
   contentRef,
 }) => {
   const isTabletPortrait = useTabletPortrait();
+  const rootRef = useRef<HTMLElement | null>(null);
+  const paneElRef = useRef<HTMLDivElement | null>(null);
+  const bottomBarRef = useRef<HTMLElement | null>(null);
+  const [tabletBounds, setTabletBounds] = useState<TabletCanvasBounds | null>(null);
+
+  const setMergedContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      paneElRef.current = node;
+      if (typeof contentRef === 'function') {
+        contentRef(node);
+      } else if (contentRef && 'current' in contentRef) {
+        (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      }
+    },
+    [contentRef]
+  );
 
   useEffect(() => {
     if (!isTabletPortrait || !tabletDrawer) return;
@@ -81,28 +115,93 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isTabletPortrait, tabletDrawer]);
 
-  if (isTabletPortrait) {
-    const hasCustomBars = Boolean(tabletTopBar || tabletBottomBar);
-    let topContent: React.ReactNode = null;
-    let bottomContent: React.ReactNode = null;
+  const hasCustomBars = Boolean(tabletTopBar || tabletBottomBar);
+  let topContent: React.ReactNode = null;
+  let bottomContent: React.ReactNode = null;
 
-    if (hasCustomBars) {
-      topContent = tabletTopBar ?? null;
-      bottomContent = tabletBottomBar ?? null;
-    } else if (rightSidebar) {
-      topContent = sidebar;
-      bottomContent = rightSidebar;
-    } else if (tabletSingleBarPosition === 'top') {
-      topContent = sidebar;
-    } else {
-      bottomContent = sidebar;
+  if (hasCustomBars) {
+    topContent = tabletTopBar ?? null;
+    bottomContent = tabletBottomBar ?? null;
+  } else if (rightSidebar) {
+    topContent = sidebar;
+    bottomContent = rightSidebar;
+  } else if (tabletSingleBarPosition === 'bottom') {
+    bottomContent = sidebar;
+  } else {
+    topContent = sidebar;
+  }
+
+  const hasTop = Boolean(topContent);
+  const hasBottom = Boolean(bottomContent);
+
+  // Measure center canvas bounds between the top and bottom bars in Tablet Portrait
+  useEffect(() => {
+    if (!isTabletPortrait) {
+      setTabletBounds(null);
+      return;
+    }
+    const pane = paneElRef.current;
+    if (!pane) return;
+
+    const measure = () => {
+      const w = Math.max(0, Math.floor(pane.clientWidth - TABLET_CANVAS_PAD_PX));
+      const h = Math.max(0, Math.floor(pane.clientHeight - TABLET_CANVAS_PAD_PX));
+      if (w > 0 && h > 0) {
+        setTabletBounds((prev) => (prev && prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+      }
+    };
+
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(pane);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isTabletPortrait, hasTop, hasBottom]);
+
+  // Publish live bottom bar height so the global floating FAB never overlaps a 1- or 2-row bottom bar
+  useEffect(() => {
+    if (!isTabletPortrait || typeof document === 'undefined') {
+      return;
     }
 
-    const hasTop = Boolean(topContent);
-    const hasBottom = Boolean(bottomContent);
+    const syncBottomOffset = () => {
+      const root = rootRef.current;
+      // Ignore hidden keep-alive layouts (e.g. inactive tab inside Alterações)
+      if (root && root.offsetParent === null) return;
+      const bar = bottomBarRef.current;
+      const h = hasBottom && bar ? Math.ceil(bar.getBoundingClientRect().height) : 0;
+      document.documentElement.style.setProperty('--siscom-tablet-bottom-bar-h', `${h}px`);
+    };
 
+    syncBottomOffset();
+    const bar = bottomBarRef.current;
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(syncBottomOffset);
+      if (bar) ro.observe(bar);
+      if (rootRef.current) ro.observe(rootRef.current);
+    }
+    window.addEventListener('resize', syncBottomOffset);
+
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', syncBottomOffset);
+      const root = rootRef.current;
+      if (!root || root.offsetParent !== null) {
+        document.documentElement.style.setProperty('--siscom-tablet-bottom-bar-h', '0px');
+      }
+    };
+  }, [isTabletPortrait, hasBottom]);
+
+  if (isTabletPortrait) {
     return (
-      <main className="workspace-split-container siscom-tablet-portrait-workspace relative flex-1 w-full flex flex-col h-full min-h-0 overflow-hidden print-wrapper">
+      <main
+        ref={rootRef}
+        className="workspace-split-container siscom-tablet-portrait-workspace relative flex-1 w-full flex flex-col h-full min-h-0 overflow-hidden print-wrapper"
+      >
         {/* Top Static Horizontal Bar */}
         {hasTop && (
           <aside className="no-print siscom-tablet-bar siscom-tablet-bar-top shrink-0 w-full border-b border-white/[0.11]">
@@ -110,19 +209,21 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
           </aside>
         )}
 
-        {/* Center Independent Scroll/Zoom Sheet Canvas */}
+        {/* Center Independent Scroll/Zoom Sheet Canvas — Full Remaining Area for A4 */}
         <section className="workspace-split-container relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden print-wrapper">
           <div
-            ref={contentRef}
-            className={`workspace-scroll-pane flex-1 min-h-0 overflow-auto overscroll-contain px-4 py-4 print-wrapper ${contentClassName}`}
+            ref={setMergedContentRef}
+            className={`workspace-scroll-pane flex-1 min-h-0 overflow-auto overscroll-contain px-2 py-2 print-wrapper ${contentClassName}`}
           >
-            {children}
+            <TabletCanvasBoundsContext.Provider value={tabletBounds}>
+              {children}
+            </TabletCanvasBoundsContext.Provider>
           </div>
 
-          {/* Anchored Floating Glass Drawer (never clipped by bar horizontal scroll) */}
+          {/* Anchored Floating Glass Drawer */}
           <AnimatePresence>
             {tabletDrawer && (() => {
-              const drawerPos = tabletDrawer.position ?? tabletDrawer.anchor ?? 'bottom';
+              const drawerPos = tabletDrawer.position ?? tabletDrawer.anchor ?? 'top';
               const drawerActions = tabletDrawer.headerActions ?? tabletDrawer.headerAction;
               return (
                 <>
@@ -150,7 +251,7 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
                       y: drawerPos === 'top' ? -10 : 10,
                     }}
                     transition={{ duration: 0.18, ease: SISCOM_EASE }}
-                    className={`no-print absolute left-3 right-3 z-30 metal-elevated rounded-2xl border border-[#C9A961]/32 flex flex-col overflow-hidden max-h-[72%] ${
+                    className={`no-print absolute left-3 right-3 z-30 metal-elevated rounded-2xl border border-[#C9A961]/32 flex flex-col overflow-hidden max-h-[76%] ${
                       drawerPos === 'top' ? 'top-2.5' : 'bottom-2.5'
                     }`}
                   >
@@ -182,7 +283,10 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
 
         {/* Bottom Static Horizontal Bar */}
         {hasBottom && (
-          <aside className="no-print siscom-tablet-bar siscom-tablet-bar-bottom shrink-0 w-full border-t border-white/[0.11]">
+          <aside
+            ref={bottomBarRef}
+            className="no-print siscom-tablet-bar siscom-tablet-bar-bottom shrink-0 w-full border-t border-white/[0.11]"
+          >
             {bottomContent}
           </aside>
         )}
@@ -202,10 +306,12 @@ export const WorkspaceSplitLayout: React.FC<WorkspaceSplitLayoutProps> = ({
       {/* Center Full-Height Document / Preview Canvas (Nothing Above, Nothing Below) */}
       <section className="workspace-split-container flex-1 min-w-0 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden print-wrapper order-3 lg:order-2">
         <div
-          ref={contentRef}
+          ref={setMergedContentRef}
           className={`workspace-scroll-pane flex-1 min-h-0 lg:overflow-y-auto lg:overscroll-contain px-3.5 sm:px-5 py-4 sm:py-5 pb-24 lg:pb-8 print-wrapper ${contentClassName}`}
         >
-          {children}
+          <TabletCanvasBoundsContext.Provider value={null}>
+            {children}
+          </TabletCanvasBoundsContext.Provider>
         </div>
       </section>
 

@@ -35,9 +35,11 @@ import { extractCrachaDocumentData } from './documentoFileParser';
 import { getSecureVaultItem, setSecureVaultItem } from '../../core/privacy/privacyVault';
 import { fadeSlideVariants, UI_TRANSITION } from '../../shared/motion';
 import {
+  useTabletCanvasBounds,
   WorkspaceSplitLayout,
   type TabletWorkspaceDrawer,
 } from '../../shared/WorkspaceSplitLayout';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
 import {
   TabletRibbonButton,
   TabletRibbonDivider,
@@ -126,19 +128,93 @@ function loadVaultDocuments(): StoredTableDocument[] {
   }
 }
 
+const LANDSCAPE_A4_W_PX = (LANDSCAPE_A4_W_MM / 25.4) * 96;
+const LANDSCAPE_A4_H_PX = (LANDSCAPE_A4_H_MM / 25.4) * 96;
+
+const LandscapeA4FitStage: React.FC<{
+  zoom: number;
+  padYMm: number;
+  padXMm: number;
+  fontFamily: string;
+  children: React.ReactNode;
+}> = ({ zoom, padYMm, padXMm, fontFamily, children }) => {
+  const tabletBounds = useTabletCanvasBounds();
+
+  if (tabletBounds && tabletBounds.width > 0 && tabletBounds.height > 0) {
+    const fitScale = Math.max(
+      0.22,
+      Math.min(
+        (tabletBounds.width - 4) / LANDSCAPE_A4_W_PX,
+        (tabletBounds.height - 4) / LANDSCAPE_A4_H_PX
+      )
+    );
+    const effectiveScale = fitScale * (zoom / 100);
+    const boxW = Math.round(LANDSCAPE_A4_W_PX * effectiveScale);
+    const boxH = Math.round(LANDSCAPE_A4_H_PX * effectiveScale);
+
+    return (
+      <div className="w-full min-h-full overflow-auto flex items-start justify-center print-wrapper">
+        <div
+          style={{ width: `${boxW}px`, height: `${boxH}px` }}
+          className="print-zoom-reset relative overflow-hidden shrink-0 my-auto"
+        >
+          <div
+            style={{
+              width: `${LANDSCAPE_A4_W_MM}mm`,
+              height: `${LANDSCAPE_A4_H_MM}mm`,
+              padding: `${padYMm}mm ${padXMm}mm`,
+              transform: `scale(${effectiveScale})`,
+              transformOrigin: 'top left',
+              fontFamily: `"${fontFamily}", Arial, sans-serif`,
+            }}
+            className="print-a4-landscape bg-white text-black shadow-2xl border border-white/15 box-border flex flex-col justify-between shrink-0"
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full overflow-x-auto pb-4 flex justify-center print-wrapper">
+      <div
+        style={{
+          width: `${LANDSCAPE_A4_W_MM}mm`,
+          height: `${LANDSCAPE_A4_H_MM}mm`,
+          padding: `${padYMm}mm ${padXMm}mm`,
+          transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
+          transformOrigin: 'top center',
+          fontFamily: `"${fontFamily}", Arial, sans-serif`,
+        }}
+        className="print-a4-landscape bg-white text-black shadow-2xl border border-white/15 box-border flex flex-col justify-between shrink-0"
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 export interface DocumentosVaultProps {
   externalDownloadSignal?: number;
 }
 
 export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownloadSignal }) => {
+  const isTabletPortrait = useTabletPortrait();
   const [documents, setDocuments] = useState<StoredTableDocument[]>(() => loadVaultDocuments());
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [zoom, setZoom] = useState<number>(85);
+  const [zoom, setZoom] = useState<number>(() => (isTabletPortrait ? 100 : 85));
   const [exporting, setExporting] = useState<'pdf' | 'word' | 'csv' | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [tabletDrawer, setTabletDrawer] = useState<'colunas' | 'textos' | null>(null);
+
+  useEffect(() => {
+    if (isTabletPortrait) {
+      setZoom(100);
+    }
+  }, [isTabletPortrait]);
 
   const toggleTabletDrawer = (key: 'colunas' | 'textos') => {
     setTabletDrawer((prev) => (prev === key ? null : key));
@@ -1379,18 +1455,12 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
         }
       >
         {/* Live A4 Landscape Sheet (297mm x 210mm) */}
-        <div className="w-full overflow-x-auto pb-4 flex justify-center print-wrapper">
-          <div
-            style={{
-              width: `${LANDSCAPE_A4_W_MM}mm`,
-              height: `${LANDSCAPE_A4_H_MM}mm`,
-              padding: `${metrics.padYMm}mm ${metrics.padXMm}mm`,
-              transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
-              transformOrigin: 'top center',
-              fontFamily: `"${activeDoc.fontFamily}", Arial, sans-serif`,
-            }}
-            className="print-a4-landscape bg-white text-black shadow-2xl border border-white/15 box-border flex flex-col justify-between shrink-0"
-          >
+        <LandscapeA4FitStage
+          zoom={zoom}
+          padYMm={metrics.padYMm}
+          padXMm={metrics.padXMm}
+          fontFamily={activeDoc.fontFamily}
+        >
             {/* Title */}
             <div
               style={{ minHeight: `${metrics.titleHMm}mm` }}
@@ -1515,8 +1585,7 @@ export const DocumentosVault: React.FC<DocumentosVaultProps> = ({ externalDownlo
                 )}
               </div>
             </div>
-          </div>
-        </div>
+        </LandscapeA4FitStage>
       </WorkspaceSplitLayout>
     </>
   );

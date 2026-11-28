@@ -1,10 +1,15 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus } from 'lucide-react';
+import { useTabletCanvasBounds } from './WorkspaceSplitLayout';
 
 interface PinchZoomSheetFrameProps {
   children: React.ReactNode;
   maxWidthClass?: string;
   className?: string;
+  /** Natural width/height aspect ratio of the sheet (defaults to A4 portrait 210/297) */
+  sheetAspectRatio?: number;
+  /** Optional vertical pixels reserved for page header labels above the sheet */
+  reserveHeight?: number;
 }
 
 interface PinchState {
@@ -37,7 +42,10 @@ export const PinchZoomSheetFrame: React.FC<PinchZoomSheetFrameProps> = ({
   children,
   maxWidthClass = 'max-w-[620px]',
   className = '',
+  sheetAspectRatio = 210 / 297,
+  reserveHeight = 0,
 }) => {
+  const tabletBounds = useTabletCanvasBounds();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [baseWidth, setBaseWidth] = useState<number>(0);
@@ -241,8 +249,33 @@ export const PinchZoomSheetFrame: React.FC<PinchZoomSheetFrameProps> = ({
     setZoom(snapped);
   };
 
+  const tabletFitWidth =
+    tabletBounds && tabletBounds.width > 0 && tabletBounds.height > 0
+      ? Math.max(
+          220,
+          Math.floor(
+            Math.min(
+              tabletBounds.width,
+              Math.max(180, tabletBounds.height - reserveHeight) * sheetAspectRatio
+            )
+          )
+        )
+      : null;
+
+  const zoomedMaxHeight =
+    isZoomed && tabletBounds && tabletBounds.height > 0
+      ? `${Math.max(260, tabletBounds.height - reserveHeight - 44)}px`
+      : isZoomed
+        ? '76dvh'
+        : undefined;
+
   return (
-    <div className={`w-full ${maxWidthClass} mx-auto relative print-zoom-reset print-wrapper`}>
+    <div
+      style={tabletFitWidth ? { width: `${tabletFitWidth}px`, maxWidth: '100%' } : undefined}
+      className={`${
+        tabletFitWidth ? 'my-auto' : `w-full ${maxWidthClass}`
+      } mx-auto relative print-zoom-reset print-wrapper`}
+    >
       {isZoomed && (
         <div className="no-print mb-2 flex items-center justify-between gap-2 rounded-xl siscom-liquid-panel px-2.5 py-1.5 text-xs text-[#E8E4D8]">
           <span className="font-mono text-[#E5C17B]">{Math.round(zoom * 100)}%</span>
@@ -280,7 +313,7 @@ export const PinchZoomSheetFrame: React.FC<PinchZoomSheetFrameProps> = ({
         style={{
           touchAction: 'pan-x pan-y',
           WebkitOverflowScrolling: 'touch',
-          maxHeight: isZoomed ? '76dvh' : undefined,
+          maxHeight: zoomedMaxHeight,
         }}
         className={`w-full print-zoom-reset print-wrapper ${
           isZoomed ? 'overflow-auto' : 'overflow-hidden'

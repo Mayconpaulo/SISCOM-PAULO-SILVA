@@ -1196,14 +1196,14 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
     tabletDrawer === 'militar'
       ? {
           title: 'Dados do Militar',
-          anchor: 'bottom',
+          position: 'top',
           onClose: () => setTabletDrawer(null),
           content: militaryFieldsContent,
         }
       : tabletDrawer === 'boletins'
         ? {
             title: `Boletins (${queuedFiles.length})`,
-            anchor: 'bottom',
+            position: 'top',
             onClose: () => setTabletDrawer(null),
             headerAction:
               queuedFiles.length > 0 && !isSearching ? (
@@ -1232,9 +1232,9 @@ export const BiSmartSearchView: React.FC<BiSmartSearchViewProps> = ({ onSendToEd
 
       <WorkspaceSplitLayout
         sidebarWidthClass="lg:w-[340px] xl:w-[370px]"
-        tabletSingleBarPosition="bottom"
+        tabletSingleBarPosition="top"
         tabletDrawer={activeTabletDrawer}
-        tabletBottomBar={
+        tabletTopBar={
           <TabletRibbonRow>
             <TabletRibbonGroup>
               <TabletRibbonButton

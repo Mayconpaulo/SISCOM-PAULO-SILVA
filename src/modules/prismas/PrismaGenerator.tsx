@@ -946,7 +946,7 @@ export const PrismaGenerator: React.FC<PrismaGeneratorProps> = ({ externalDownlo
         </div>
       }
     >
-      <div className="w-full flex flex-col items-center print-wrapper">
+      <div className="w-full min-h-full flex flex-col items-center print-wrapper">
         <PinchZoomSheetFrame
           maxWidthClass="max-w-[620px]"
           className="rounded-lg border border-white/15 shadow-2xl bg-white"

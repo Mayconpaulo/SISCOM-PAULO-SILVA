@@ -66,6 +66,7 @@ import {
 import { BiSmartSearchSendPayload, BiSmartSearchView } from './BiSmartSearchView';
 import { inferPortugueseContinuacaoArticle } from '../../shared/portugueseGender';
 import { WorkspaceSplitLayout } from '../../shared/WorkspaceSplitLayout';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
 import {
   TabletRibbonButton,
   TabletRibbonDivider,
@@ -484,7 +485,9 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   >(null);
   const [zoom, setZoom] = useState<number>(100);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
+  const [viewportHeight, setViewportHeight] = useState<number>(0);
   const [pinchZoom, setPinchZoom] = useState<number>(1);
+  const isTabletPortrait = useTabletPortrait();
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
@@ -535,8 +538,14 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   pagesHtmlRef.current = pagesHtml;
   fontStyleRef.current = { fontFamily, fontSizePt, lineHeight };
 
-  const fitScale =
-    viewportWidth > 0 ? Math.min(1, Math.max(0.22, (viewportWidth - 4) / A4_WIDTH_PX)) : 1;
+  const fitScale = (() => {
+    if (isTabletPortrait && viewportWidth > 0 && viewportHeight > 0) {
+      const availW = Math.max(200, viewportWidth - 4);
+      const availH = Math.max(240, viewportHeight - 28);
+      return Math.max(0.22, Math.min(availW / A4_WIDTH_PX, availH / A4_HEIGHT_PX));
+    }
+    return viewportWidth > 0 ? Math.min(1, Math.max(0.22, (viewportWidth - 4) / A4_WIDTH_PX)) : 1;
+  })();
   const baseScale = fitScale * (zoom / 100);
   const totalScale = baseScale * pinchZoom;
 
@@ -568,22 +577,28 @@ export const AlteracaoGenerator: React.FC<AlteracaoGeneratorProps> = ({ external
   useEffect(() => {
     const el = pagesViewportRef.current;
     if (!el) return;
+    const scrollPane = el.closest('.workspace-scroll-pane') as HTMLElement | null;
 
-    const updateWidth = () => {
+    const updateBounds = () => {
       const w = el.clientWidth;
       if (w > 0) setViewportWidth(w);
+      if (scrollPane) {
+        const h = Math.max(0, scrollPane.clientHeight - 16);
+        if (h > 0) setViewportHeight(h);
+      }
     };
 
-    updateWidth();
+    updateBounds();
     if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(updateWidth);
+      const ro = new ResizeObserver(updateBounds);
       ro.observe(el);
+      if (scrollPane) ro.observe(scrollPane);
       return () => ro.disconnect();
     }
 
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
+    window.addEventListener('resize', updateBounds);
+    return () => window.removeEventListener('resize', updateBounds);
+  }, [isTabletPortrait, alteracaoMode]);
 
   useLayoutEffect(() => {
     const pending = pendingAnchorRef.current;

@@ -253,10 +253,18 @@ export const DemandasFloatingQuickAdd: React.FC<DemandasFloatingQuickAddProps> =
       </AnimatePresence>
 
       <div
+        style={
+          isTabletPortrait
+            ? {
+                bottom:
+                  activeScreen === 'home'
+                    ? '16px'
+                    : 'calc(var(--siscom-tablet-bottom-bar-h, 0px) + 14px)',
+              }
+            : undefined
+        }
         className={`no-print fixed right-4 sm:right-5 z-40 flex flex-col items-end ${
-          isTabletPortrait && activeScreen !== 'home' && activeScreen !== 'agenda'
-            ? 'bottom-[72px]'
-            : 'bottom-4 sm:bottom-5'
+          isTabletPortrait ? '' : 'bottom-4 sm:bottom-5'
         }`}
       >
       {/* Quick-Add Popover */}

@@ -28,6 +28,7 @@ import {
   WorkspaceSplitLayout,
   type TabletWorkspaceDrawer,
 } from '../../shared/WorkspaceSplitLayout';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
 import {
   TabletRibbonButton,
   TabletRibbonDivider,
@@ -237,6 +238,7 @@ const WEEK_WINDOW_SIZE = 6;
 export const RelatorioGenerator: React.FC = () => {
   const { account } = useAuth();
   const userId = account?.uid || null;
+  const isTabletPortrait = useTabletPortrait();
 
   const [state, setState] = useState<StoredRelatorioState>(() => loadInitialRelatorioState());
   const stateRef = useRef<StoredRelatorioState>(state);
@@ -890,7 +892,8 @@ export const RelatorioGenerator: React.FC = () => {
     }
   };
 
-  const sheetScale = Math.min(1, Math.max(0.28, hostWidthPx / A4_PX_W));
+  const maxSheetScale = isTabletPortrait ? 2.5 : 1;
+  const sheetScale = Math.min(maxSheetScale, Math.max(0.28, hostWidthPx / A4_PX_W));
   const scaledHeightPx = Math.round(A4_PX_H * sheetScale);
 
   const vtr = activeDoc.vtrDisponibilidade;
@@ -2254,12 +2257,11 @@ export const RelatorioGenerator: React.FC = () => {
         </div>
       }
     >
-      <div className="w-full flex flex-col items-center print-wrapper">
-        <div className="w-full max-w-[740px]">
-          <PinchZoomSheetFrame
-            maxWidthClass="max-w-[740px]"
-            className="rounded-xl shadow-2xl border border-white/10 bg-white"
-          >
+      <div className="w-full min-h-full flex flex-col items-center print-wrapper">
+        <PinchZoomSheetFrame
+          maxWidthClass="max-w-[740px]"
+          className="rounded-xl shadow-2xl border border-white/10 bg-white"
+        >
             <div
               ref={sheetHostRef}
               style={{ height: `${scaledHeightPx}px` }}
@@ -2673,8 +2675,7 @@ export const RelatorioGenerator: React.FC = () => {
                 </table>
               </div>
             </div>
-          </PinchZoomSheetFrame>
-        </div>
+        </PinchZoomSheetFrame>
       </div>
     </WorkspaceSplitLayout>
   );

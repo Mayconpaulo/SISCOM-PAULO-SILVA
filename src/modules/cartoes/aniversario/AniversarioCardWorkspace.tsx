@@ -1643,12 +1643,12 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
         </div>
       }
     >
-      <div className="w-full flex flex-col items-center">
-        <div className="w-full max-w-[820px]">
-          <PinchZoomSheetFrame
-            maxWidthClass="max-w-[820px]"
-            className="rounded-xl shadow-2xl border border-white/10 bg-white"
-          >
+      <div className="w-full min-h-full flex flex-col items-center">
+        <PinchZoomSheetFrame
+          maxWidthClass="max-w-[820px]"
+          sheetAspectRatio={ANIV_W_PX / ANIV_H_PX}
+          className="rounded-xl shadow-2xl border border-white/10 bg-white"
+        >
             <svg
               viewBox={`0 0 ${ANIV_W_PX} ${ANIV_H_PX}`}
               className="w-full h-auto bg-white block select-none"
@@ -1791,8 +1791,7 @@ export const AniversarioCardWorkspace: React.FC<AniversarioWorkspaceProps> = ({
                 Comandante do 1º Batalhão de Infantaria Mecanizado (Escola)
               </text>
             </svg>
-          </PinchZoomSheetFrame>
-        </div>
+        </PinchZoomSheetFrame>
       </div>
     </WorkspaceSplitLayout>
     </>

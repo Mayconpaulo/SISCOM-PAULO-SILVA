@@ -1065,12 +1065,11 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
         </div>
       }
     >
-      <div className="w-full flex flex-col items-center print-wrapper">
-        <div className="w-full max-w-[680px]">
-          <PinchZoomSheetFrame
-            maxWidthClass="max-w-[680px]"
-            className="rounded-xl shadow-2xl border border-white/10 bg-white"
-          >
+      <div className="w-full min-h-full flex flex-col items-center print-wrapper">
+        <PinchZoomSheetFrame
+          maxWidthClass="max-w-[680px]"
+          className="rounded-xl shadow-2xl border border-white/10 bg-white"
+        >
               <svg
                 viewBox={`0 0 ${A4_W_MM} ${A4_H_MM}`}
                 className="print-a4-sheet w-full h-auto bg-white block select-none"
@@ -1141,8 +1140,7 @@ export const BoasVindasWorkspace: React.FC<BoasVindasWorkspaceProps> = ({
                   ))}
                 </g>
               </svg>
-          </PinchZoomSheetFrame>
-        </div>
+        </PinchZoomSheetFrame>
       </div>
     </WorkspaceSplitLayout>
   );

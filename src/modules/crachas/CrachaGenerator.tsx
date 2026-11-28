@@ -55,6 +55,7 @@ import {
   WorkspaceSplitLayout,
   type TabletWorkspaceDrawer,
 } from '../../shared/WorkspaceSplitLayout';
+import { useTabletPortrait } from '../../shared/useTabletPortrait';
 import {
   TabletRibbonButton,
   TabletRibbonDivider,
@@ -860,6 +861,7 @@ export interface CrachaGeneratorProps {
 }
 
 export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownloadSignal }) => {
+  const isTabletPortrait = useTabletPortrait();
   const initial = useMemo(() => loadInitialState(), []);
   const [activeMode, setActiveMode] = useState<CrachaMode>(initial.activeMode);
   const [configs, setConfigs] = useState<Record<CrachaMode, CrachaConfig>>(initial.configs);
@@ -2833,7 +2835,9 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             ref={(el) => {
               sheetRefs.current[pageIndex] = el;
             }}
-            className="print-page-item w-full max-w-[620px] space-y-1.5"
+            className={`print-page-item w-full ${
+              isTabletPortrait ? '' : 'max-w-[620px]'
+            } space-y-1.5`}
           >
             {layout.pages.length > 1 && (
               <div className="no-print flex items-center justify-between text-[11px] text-[#98A89F] px-0.5">
@@ -2843,6 +2847,7 @@ export const CrachaGenerator: React.FC<CrachaGeneratorProps> = ({ externalDownlo
             )}
             <PinchZoomSheetFrame
               maxWidthClass="max-w-[620px]"
+              reserveHeight={layout.pages.length > 1 ? 26 : 0}
               className="rounded-lg border border-white/15 shadow-2xl bg-white"
             >
               <div className="w-full bg-white print-wrapper">
